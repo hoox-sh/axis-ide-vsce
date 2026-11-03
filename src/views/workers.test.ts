@@ -125,7 +125,8 @@ mock.module('vscode', () => {
       activeColorTheme: { kind: ColorThemeKind.Dark },
       createTreeView: (id: string) => {
         const bag = globalThis as { __workersTreeViews?: string[] };
-        (bag.__workersTreeViews ??= []).push(id);
+        if (!bag.__workersTreeViews) bag.__workersTreeViews = [];
+        bag.__workersTreeViews.push(id);
         return { dispose() {} };
       },
       registerWebviewViewProvider: () => ({ dispose() {} }),

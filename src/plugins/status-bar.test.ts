@@ -277,7 +277,6 @@ mock.module('vscode', () => ({
   LanguageModelToolResult,
   MarkdownString,
   McpStdioServerDefinition,
-  QuickPickItemKind,
   get TreeItem() {
     return vscodeApi.TreeItem;
   },
@@ -515,7 +514,11 @@ describe('registerPluginsStatusBar', () => {
     );
     expect(ok).toBe(true);
     expect(item?.text).toBe('$(plug) okx·server');
-    expect((item?.tooltip as MarkdownString).value).toContain('okx-rest');
+    const tip = item?.tooltip;
+    expect(tip).toBeInstanceOf(MarkdownString);
+    if (tip instanceof MarkdownString) {
+      expect(tip.value).toContain('okx-rest');
+    }
   });
 
   test('flash refresh shows check then reverts after 1.2s', async () => {
