@@ -311,7 +311,7 @@ suite('AXIS IDE Extension Structure', () => {
     }
 
     const sideViews = pkg.contributes?.views?.axis ?? [];
-    const sideIds = sideViews.map((v) => v.id);
+    const sideIds: string[] = sideViews.map((v) => v.id);
     assert.deepStrictEqual(
       sideIds,
       [...EXPECTED_ACTIVITY_VIEWS],
@@ -337,7 +337,7 @@ suite('AXIS IDE Extension Structure', () => {
       assert.ok(!/animat/i.test(viewSvg), `${icon} must not animate`);
     }
     for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
-      assert.ok(!sideIds.includes(id), `split plugin TreeView ${id} must be gone`);
+      assert.ok(!(sideIds as string[]).includes(id), `split plugin TreeView ${id} must be gone`);
     }
 
     const activation = pkg.activationEvents ?? [];

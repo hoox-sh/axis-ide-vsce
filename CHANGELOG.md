@@ -15,6 +15,11 @@ with its commit history preserved.
 - Dependabot, issue templates, PR template, CODEOWNERS, security and
   contribution docs.
 
+### Fixed
+
+- Electron `compile-tests` type error where `assert.deepStrictEqual` narrowed
+  the activity-view id list and rejected forbidden plugin view ids.
+
 ### Changed
 
 - Repository / bugs / QnA links now point at `hoox-sh/axis-ide-vsce`.
