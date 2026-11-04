@@ -27,7 +27,8 @@ with its commit history preserved.
 
 - Repository / bugs / QnA links now point at `hoox-sh/axis-ide-vsce`.
 - Build and test commands no longer use monorepo `--cwd packages/…` paths.
-- `.vscodeignore` excludes repo-only docs, `pack/`, and CI files from the VSIX.
+- `.vscodeignore` excludes repo-only docs, `pack/`, CI files, and internal
+  contributes fragments from the VSIX.
 
 ## [0.1.0] — 2026-11-04
 
