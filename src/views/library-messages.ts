@@ -17,11 +17,25 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Library studio messages (`axis.library`). Pure — no vscode import.
- * Cards never include Pine `code`. parseLibraryWebMessage never throws.
+ * Library studio cards + `studio.*` wire helpers (`axis.library`).
+ * Pure — no vscode import.
+ *
+ * Wire mapping from the old flat protocol:
+ * - `{ type: 'library.init' | 'library.state', cards, catalogError }` became
+ *   `studio.init` / `studio.set` carrying `{ view: 'library', data: { cards,
+ *   catalogError } }` — the old payload fields preserved verbatim as `data`.
+ * - `{ type: 'library.ready' }` became `studio.ready` `{ view: 'library' }`.
+ * - `{ type: 'library.apply' | 'library.copy', id }` became `studio.action`
+ *   `{ view: 'library', action, args: { id } }` — the old `id` field moved
+ *   into `args` verbatim.
+ *
+ * Cards never include Pine `code`. Every parse never throws.
  */
 
 import type { BuiltinCatalogEntry } from '../host/builtins';
+
+/** `view` value for every Library studio envelope — exactly `'library'`. */
+export const LIBRARY_STUDIO_VIEW = 'library';
 
 export type LibraryKind = 'indicator' | 'strategy';
 
@@ -39,14 +53,11 @@ export type LibraryCard = {
   tags: readonly string[];
 };
 
-export type LibraryHostToWeb =
-  | { type: 'library.init'; cards: LibraryCard[]; catalogError: string }
-  | { type: 'library.state'; cards: LibraryCard[]; catalogError: string };
-
-export type LibraryWebToHost =
-  | { type: 'library.ready' }
-  | { type: 'library.apply'; id: string }
-  | { type: 'library.copy'; id: string };
+/** `studio.init` / `studio.set` `data` — the old `library.init` payload verbatim. */
+export type LibraryStudioData = {
+  cards: LibraryCard[];
+  catalogError: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -133,48 +144,47 @@ function catalogErrorText(catalogError: unknown): string {
   return typeof catalogError === 'string' ? catalogError : '';
 }
 
-/** Host → web snapshot. `library.state` refreshes the same card payload as init. */
-export function toLibraryHostMessage(
-  type: 'library.init' | 'library.state',
+/**
+ * Host → web `studio.init` / `studio.set` data — the exact `{ cards,
+ * catalogError }` payload the old `library.init` / `library.state` messages
+ * carried, preserved verbatim. Never throws.
+ */
+export function toLibraryStudioData(
   scripts: readonly BuiltinCatalogEntry[],
   catalogError?: unknown,
-): LibraryHostToWeb {
-  const cards = toLibraryCards(scripts);
-  const error = catalogErrorText(catalogError);
-  if (type === 'library.state') {
-    return { type: 'library.state', cards, catalogError: error };
-  }
-  return { type: 'library.init', cards, catalogError: error };
+): LibraryStudioData {
+  return {
+    cards: toLibraryCards(scripts),
+    catalogError: catalogErrorText(catalogError),
+  };
 }
 
-function readType(raw: Record<string, unknown>): string {
+/**
+ * Old `library.apply` / `library.copy` validation, moved into `args`: the id
+ * must be a trimmed non-empty string. Missing / invalid args return null
+ * exactly like the old parser returned nothing. Never throws.
+ */
+export function parseLibraryActionArgs(args: unknown): string | null {
+  if (!isRecord(args)) return null;
+  let value: unknown;
   try {
-    return typeof raw.type === 'string' ? raw.type : '';
-  } catch {
-    return '';
-  }
-}
-
-function readId(raw: Record<string, unknown>): string | null {
-  try {
-    const value = raw.id;
-    if (typeof value !== 'string') return null;
-    const id = value.trim();
-    return id ? id : null;
+    value = args.id;
   } catch {
     return null;
   }
+  if (typeof value !== 'string') return null;
+  const id = value.trim();
+  return id ? id : null;
 }
 
-/** Decode a webview → host message. Hostile input returns null. Never throws. */
-export function parseLibraryWebMessage(raw: unknown): LibraryWebToHost | null {
-  if (!isRecord(raw)) return null;
-  const type = readType(raw);
-  if (type === 'library.ready') return { type: 'library.ready' };
-  if (type === 'library.apply' || type === 'library.copy') {
-    const id = readId(raw);
-    if (!id) return null;
-    return { type, id };
-  }
-  return null;
+/**
+ * Trusted studio DOM for the shell body (the exact markup the old
+ * `library-html.ts` builder emitted between `<body>` and the script tag;
+ * the webview JS depends on those ids/classes).
+ */
+export function buildLibraryBody(): string {
+  return `<div id="library-live" class="library-live" role="status" aria-live="polite" aria-atomic="true"></div>
+  <div id="library-root" class="library-root" data-axis-library-host="1">
+    <p class="library-boot">Loading builtin scripts…</p>
+  </div>`;
 }

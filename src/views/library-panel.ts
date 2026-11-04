@@ -16,18 +16,18 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Sidebar WebviewView for the builtin Library studio (`axis.library`) — a
+ * thin shim on the generic studio provider (enhancement plan §5 Phase 2).
+ *
+ * Wire change (old flat → `studio.*`): `library.ready` → `studio.ready` (the
+ * provider acks with `studio.init` carrying `{ cards, catalogError }`);
+ * `library.apply` / `library.copy` → `studio.action` with `{ id }` in `args`.
+ * Cards still never include Pine source.
+ */
+
 import { existsSync } from 'node:fs';
-import {
-  type ExtensionContext,
-  Uri,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
-  commands,
-  env,
-  window,
-  workspace,
-} from 'vscode';
+import { ColorThemeKind, Uri, window, type ExtensionContext, commands, env, workspace } from 'vscode';
 import {
   APPLY_BUILTIN_COMMAND,
   APPLY_BUILTIN_LOAD_FAILED_PREFIX,
@@ -39,103 +39,93 @@ import {
   loadBuiltinCatalog,
 } from '../host/builtins';
 import { LIBRARY_VIEW_ID } from './library';
-import { libraryStudioHtml } from './library-html';
-import { parseLibraryWebMessage, toLibraryHostMessage } from './library-messages';
+import {
+  LIBRARY_STUDIO_VIEW,
+  buildLibraryBody,
+  parseLibraryActionArgs,
+  toLibraryStudioData,
+} from './library-messages';
+import { registerStudioView, StudioViewProvider, type StudioProviderDeps } from './studio-provider';
+import type { StudioRegistration } from './studio-registry';
 
 const NONCE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
 function createNonce(): string {
   let text = '';
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < 32; i += 1) {
     text += NONCE_ALPHABET.charAt(Math.floor(Math.random() * NONCE_ALPHABET.length));
   }
   return text;
 }
 
-function libraryAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'library', file);
+function themeBodyClass(kind: ColorThemeKind): string {
+  switch (kind) {
+    case ColorThemeKind.Light:
+      return 'vscode-light';
+    case ColorThemeKind.HighContrast:
+      return 'vscode-high-contrast';
+    case ColorThemeKind.HighContrastLight:
+      return 'vscode-high-contrast-light';
+    default:
+      return 'vscode-dark';
+  }
 }
 
-function getLibraryHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = libraryAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
+function currentThemeBodyClass(): string {
   try {
-    jsPath = mainJs.fsPath;
+    return themeBodyClass(window.activeColorTheme.kind);
   } catch {
-    jsPath = '';
+    return 'vscode-dark';
   }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS library webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
-    );
-  }
-  const script = webview.asWebviewUri(libraryAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = libraryAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return libraryStudioHtml({
-    cspSource: webview.cspSource,
-    nonce: createNonce(),
-    scriptUri: scriptStr,
-    cssUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-  });
 }
 
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** Assemble the injected VS Code surface the generic provider needs. */
+function studioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+    createNonce,
+  };
 }
 
 /**
- * Sidebar WebviewViewProvider for the builtin Library studio (`axis.library`).
- * Posts `library.init` (cards only — no Pine source) on `library.ready`.
+ * Sidebar WebviewView host for the builtin Library studio (`axis.library`)
+ * on the generic provider. Posts `studio.init` (cards only — no Pine
+ * source) in the `studio.ready` handshake.
  */
-export class LibraryWebviewViewProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+export class LibraryWebviewViewProvider {
+  private provider: StudioViewProvider | undefined;
   private scripts: BuiltinCatalogEntry[] = [];
   private catalogError = '';
 
-  constructor(private readonly context: ExtensionContext) {}
+  constructor(private readonly context: ExtensionContext) {
+    this.provider = registerStudioView(
+      this.registration(),
+      studioDeps(context),
+      window,
+      context,
+    );
+  }
 
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'library'),
-        ],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        void this.onMessage(webview, raw);
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getLibraryHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+  private registration(): StudioRegistration {
+    return {
+      id: LIBRARY_STUDIO_VIEW,
+      title: 'Library',
+      viewId: LIBRARY_VIEW_ID,
+      retainContextWhenHidden: true,
+      buildBody: buildLibraryBody,
+      actions: {
+        apply: (args) => this.applyFromArgs(args),
+        copy: (args) => this.copyFromArgs(args),
+      },
+      restore: () => {
+        this.loadCatalog();
+        return toLibraryStudioData(this.scripts, this.catalogError);
+      },
+    };
   }
 
   private loadCatalog(): void {
@@ -151,17 +141,6 @@ export class LibraryWebviewViewProvider implements WebviewViewProvider {
     } catch (e) {
       this.scripts = [];
       this.catalogError = e instanceof Error ? e.message : String(e);
-    }
-  }
-
-  private postInit(webview: Webview): void {
-    this.loadCatalog();
-    try {
-      void webview.postMessage(
-        toLibraryHostMessage('library.init', this.scripts, this.catalogError),
-      );
-    } catch {
-      // disposing
     }
   }
 
@@ -195,7 +174,7 @@ export class LibraryWebviewViewProvider implements WebviewViewProvider {
       const result = await runApplyBuiltin({
         scripts: [entry],
         ui: {
-          async showQuickPick(items) {
+          async showQuickPick(items, _options) {
             return items.find((item) => item.builtin.id === entry.id) ?? items[0];
           },
           async openUntitledPine(code, languageId) {
@@ -226,44 +205,27 @@ export class LibraryWebviewViewProvider implements WebviewViewProvider {
     }
   }
 
-  private async onMessage(webview: Webview, raw: unknown): Promise<void> {
-    try {
-      const msg = parseLibraryWebMessage(raw);
-      if (!msg) return;
-      if (msg.type === 'library.ready') {
-        this.postInit(webview);
-        return;
+  private applyFromArgs(args: unknown): void {
+    const id = parseLibraryActionArgs(args);
+    if (!id) return;
+    void this.applyId(id);
+  }
+
+  private copyFromArgs(args: unknown): void {
+    const id = parseLibraryActionArgs(args);
+    if (!id) return;
+    // clipboard optional — the webview already flashed "Copied"
+    void (async () => {
+      try {
+        await env.clipboard.writeText(id);
+      } catch {
+        // ignore
       }
-      if (msg.type === 'library.copy') {
-        try {
-          await env.clipboard.writeText(msg.id);
-        } catch {
-          // clipboard optional — the webview already flashed "Copied"
-        }
-        return;
-      }
-      if (msg.type === 'library.apply') {
-        await this.applyId(msg.id);
-      }
-    } catch {
-      // never throw into the webview host
-    }
+    })();
   }
 }
 
 /** Register the Library studio on view id `axis.library` (replaces the tree view). */
 export function registerLibraryStudio(context: ExtensionContext): void {
-  const provider = new LibraryWebviewViewProvider(context);
-  try {
-    const disp = window.registerWebviewViewProvider(LIBRARY_VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    });
-    try {
-      context.subscriptions.push(disp);
-    } catch {
-      // subscriptions unavailable
-    }
-  } catch {
-    // uncontributed view id / test host
-  }
+  new LibraryWebviewViewProvider(context);
 }

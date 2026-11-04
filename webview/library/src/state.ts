@@ -18,7 +18,7 @@
 
 /**
  * Library studio reducer. Search is client-side over title, shorttitle, id, tags, and category.
- * Pine source is never stored.
+ * Pine source is never stored. Host decode lives in ./protocol (studio.* wire).
  */
 
 export const COPY_FLASH_MS = 1200;
@@ -100,75 +100,6 @@ export function readPersistedLibraryUi(raw: unknown): PersistedLibraryUi | null 
     kind: isKindFilter(kindRaw) ? kindRaw : 'all',
     category,
   };
-}
-
-function cardFromUnknown(raw: unknown): LibraryCard | null {
-  if (!isRecord(raw)) return null;
-  const id = readString(raw, 'id').trim();
-  if (!id) return null;
-  let tags: string[] = [];
-  try {
-    const value = raw.tags;
-    if (Array.isArray(value)) {
-      tags = value.filter((item): item is string => typeof item === 'string' && item.length > 0);
-    }
-  } catch {
-    tags = [];
-  }
-  let kind: LibraryKind = 'indicator';
-  try {
-    if (raw.kind === 'strategy') kind = 'strategy';
-  } catch {
-    kind = 'indicator';
-  }
-  let overlay = false;
-  try {
-    overlay = raw.overlay === true;
-  } catch {
-    overlay = false;
-  }
-  return {
-    id,
-    title: readString(raw, 'title').trim() || id,
-    shorttitle: readString(raw, 'shorttitle').trim() || id,
-    description: readString(raw, 'description'),
-    category: readString(raw, 'category'),
-    categoryLabel: readString(raw, 'categoryLabel'),
-    kind,
-    overlay,
-    covers: readString(raw, 'covers'),
-    tags,
-  };
-}
-
-export function decodeHostMessage(raw: unknown): { cards: LibraryCard[]; catalogError: string } | null {
-  if (!isRecord(raw)) return null;
-  let type = '';
-  try {
-    type = typeof raw.type === 'string' ? raw.type : '';
-  } catch {
-    return null;
-  }
-  if (type !== 'library.init' && type !== 'library.state') return null;
-  let catalogError = '';
-  try {
-    catalogError = typeof raw.catalogError === 'string' ? raw.catalogError : '';
-  } catch {
-    catalogError = '';
-  }
-  const cards: LibraryCard[] = [];
-  try {
-    const list = raw.cards;
-    if (Array.isArray(list)) {
-      for (const item of list) {
-        const card = cardFromUnknown(item);
-        if (card) cards.push(card);
-      }
-    }
-  } catch {
-    return { cards: [], catalogError };
-  }
-  return { cards, catalogError };
 }
 
 export function applyCatalog(

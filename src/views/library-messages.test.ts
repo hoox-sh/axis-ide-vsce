@@ -18,12 +18,18 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { BuiltinCatalogEntry } from '../host/builtins';
+import { encode, VIEW_TO_HOST } from '../protocol';
+import { buildStudioHtml, htmlHasInlineScript } from './studio-html';
 import {
-  parseLibraryWebMessage,
+  LIBRARY_STUDIO_VIEW,
+  buildLibraryBody,
+  parseLibraryActionArgs,
   toLibraryCards,
-  toLibraryHostMessage,
+  toLibraryStudioData,
   type LibraryCard,
 } from './library-messages';
+
+const CSP_SOURCE = 'https://csp.example.vscode-webview.test';
 
 function entry(partial: Partial<BuiltinCatalogEntry> & { id: string }): BuiltinCatalogEntry {
   return {
@@ -188,77 +194,101 @@ describe('toLibraryCards', () => {
   });
 });
 
-describe('toLibraryHostMessage', () => {
-  test('init and state carry cards without code', () => {
+describe('toLibraryStudioData', () => {
+  test('init and set data carry cards without code (old library.init payload verbatim)', () => {
     const scripts = [entry({ id: 'ema', title: 'AXIS EMA', code: 'PINE_BODY' })];
-    const init = toLibraryHostMessage('library.init', scripts, 'disk missing');
-    expect(init).toEqual({
-      type: 'library.init',
+    const data = toLibraryStudioData(scripts, 'disk missing');
+    expect(data).toEqual({
       cards: [expect.objectContaining({ id: 'ema', title: 'AXIS EMA' })],
       catalogError: 'disk missing',
     });
-    expect(JSON.stringify(init)).not.toContain('PINE_BODY');
-    const state = toLibraryHostMessage('library.state', scripts, '');
-    expect(state.type).toBe('library.state');
-    expect(state.catalogError).toBe('');
-    expect(state.cards[0]?.id).toBe('ema');
-    expect(toLibraryHostMessage('library.init', scripts, 3 as never).catalogError).toBe('');
-    expect(toLibraryHostMessage('library.state', scripts).catalogError).toBe('');
+    expect(JSON.stringify(data)).not.toContain('PINE_BODY');
+    expect(toLibraryStudioData(scripts, '').catalogError).toBe('');
+    expect(toLibraryStudioData(scripts, 3 as never).catalogError).toBe('');
+    expect(toLibraryStudioData(scripts).catalogError).toBe('');
+    expect(toLibraryStudioData(null as never)).toEqual({ cards: [], catalogError: '' });
   });
 });
 
-describe('parseLibraryWebMessage', () => {
-  test('ready, apply, and copy', () => {
-    expect(parseLibraryWebMessage({ type: 'library.ready' })).toEqual({ type: 'library.ready' });
-    expect(parseLibraryWebMessage({ type: 'library.ready', id: 'ignored', code: 'x' })).toEqual({
-      type: 'library.ready',
-    });
-    expect(parseLibraryWebMessage({ type: 'library.apply', id: '  sma  ' })).toEqual({
-      type: 'library.apply',
-      id: 'sma',
-    });
-    expect(parseLibraryWebMessage({ type: 'library.copy', id: 'ema' })).toEqual({
-      type: 'library.copy',
-      id: 'ema',
-    });
+describe('parseLibraryActionArgs', () => {
+  test('old library.apply / library.copy id validation, moved into args', () => {
+    expect(parseLibraryActionArgs({ id: '  sma  ' })).toBe('sma');
+    expect(parseLibraryActionArgs({ id: 'ema' })).toBe('ema');
+    // ready carried no id and is not an action arg shape
+    expect(parseLibraryActionArgs(undefined)).toBeNull();
+    expect(parseLibraryActionArgs(null)).toBeNull();
+    expect(parseLibraryActionArgs([])).toBeNull();
+    expect(parseLibraryActionArgs('sma')).toBeNull();
+    expect(parseLibraryActionArgs(1)).toBeNull();
+    expect(parseLibraryActionArgs({})).toBeNull();
+    expect(parseLibraryActionArgs({ cards: [] })).toBeNull();
+    expect(parseLibraryActionArgs({ id: '' })).toBeNull();
+    expect(parseLibraryActionArgs({ id: '   ' })).toBeNull();
+    expect(parseLibraryActionArgs({ id: 4 })).toBeNull();
+    expect(parseLibraryActionArgs({ id: { id: 'sma' } })).toBeNull();
   });
 
-  test('rejects hostile and incomplete payloads', () => {
-    expect(parseLibraryWebMessage(null)).toBeNull();
-    expect(parseLibraryWebMessage(undefined)).toBeNull();
-    expect(parseLibraryWebMessage([])).toBeNull();
-    expect(parseLibraryWebMessage('library.ready')).toBeNull();
-    expect(parseLibraryWebMessage(1)).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'library.init', cards: [] })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'nope' })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 1 })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'library.apply' })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'library.apply', id: '' })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'library.apply', id: '   ' })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'library.copy', id: 4 })).toBeNull();
-    expect(parseLibraryWebMessage({ type: 'library.copy', id: { id: 'sma' } })).toBeNull();
+  test('never throws on hostile args getters', () => {
     expect(
-      parseLibraryWebMessage({
-        get type(): string {
-          throw new Error('type');
-        },
-      }),
-    ).toBeNull();
-    expect(
-      parseLibraryWebMessage({
-        type: 'library.apply',
+      parseLibraryActionArgs({
         get id(): string {
           throw new Error('id');
         },
       }),
     ).toBeNull();
-    expect(
-      parseLibraryWebMessage({
-        type: 'library.copy',
-        get id(): string {
-          throw new Error('id');
-        },
-      }),
-    ).toBeNull();
+  });
+
+  test('old library.apply / library.copy ride studio.action with the id in args', () => {
+    const apply = encode(VIEW_TO_HOST.StudioAction, {
+      view: LIBRARY_STUDIO_VIEW,
+      action: 'apply',
+      args: { id: 'sma' },
+    });
+    expect(parseLibraryActionArgs(apply.payload.args)).toBe('sma');
+    const copy = encode(VIEW_TO_HOST.StudioAction, {
+      view: LIBRARY_STUDIO_VIEW,
+      action: 'copy',
+      args: { id: 'ema' },
+    });
+    expect(parseLibraryActionArgs(copy.payload.args)).toBe('ema');
+  });
+});
+
+describe('buildLibraryBody', () => {
+  test('carries the live region and the mount the webview JS depends on', () => {
+    const body = buildLibraryBody();
+    expect(body).toContain('id="library-root"');
+    expect(body).toContain('data-axis-library-host="1"');
+    expect(body).toContain('id="library-live"');
+    expect(body).toContain('aria-live="polite"');
+    expect(body).toContain('aria-atomic="true"');
+    expect(body).toContain('Loading builtin scripts');
+    expect(htmlHasInlineScript(body)).toBe(false);
+  });
+
+  test('feeds the generic shell: nonce on script-src, plugins style-src', () => {
+    const nonce = 'Abc123';
+    const html = buildStudioHtml({
+      cspSource: CSP_SOURCE,
+      nonce,
+      scriptUri: `${CSP_SOURCE}/main.js`,
+      styleUri: `${CSP_SOURCE}/main.css`,
+      bodyClass: 'vscode-dark',
+      bodyHtml: buildLibraryBody(),
+    });
+    // re-homed from library-html.test.ts (library kept its nonce shell)
+    expect(html).toContain(`script-src 'nonce-${nonce}' ${CSP_SOURCE}`);
+    expect(html).not.toContain("script-src 'unsafe-inline'");
+    expect(html).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
+    expect(html).not.toContain(`style-src 'nonce-${nonce}'`);
+    expect(html).toContain("connect-src 'none'");
+    expect(html).toContain("default-src 'none'");
+    expect(html).toContain("base-uri 'none'");
+    expect(html).toContain("form-action 'none'");
+    expect(html).toContain(`img-src ${CSP_SOURCE} data: blob:`);
+    expect(html).toContain(`nonce="${nonce}" src="${CSP_SOURCE}/main.js"`);
+    expect(html).toContain('id="library-root"');
+    expect(html).toContain('id="library-live"');
+    expect(htmlHasInlineScript(html)).toBe(false);
   });
 });

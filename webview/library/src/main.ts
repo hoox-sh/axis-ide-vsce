@@ -17,17 +17,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Library studio: library.ready → library.init.
- * Card click copies the id (1.2s "Copied"). Apply posts library.apply.
+ * AXIS Library studio on the shared runtime + studio.* protocol:
+ * studio.ready → studio.init / studio.set carrying `{ cards, catalogError }`.
+ * Card click copies the id (1.2s "Copied"). Apply posts studio.action apply.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { copyText } from '@axis-shared/clipboard';
+import { createStudio } from '@axis-shared/studio';
 import { libraryViewHtml } from './render';
+import {
+  LIBRARY_VIEW,
+  decodeLibrarySet,
+  encodeLibraryApply,
+  encodeLibraryCopy,
+  encodeLibraryReady,
+} from './protocol';
 import {
   COPY_FLASH_MS,
   applyCatalog,
   clearFilters,
-  decodeHostMessage,
   initialLibraryState,
   isKindFilter,
   readPersistedLibraryUi,
@@ -37,16 +49,10 @@ import {
   type LibraryViewState,
 } from './state';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: LIBRARY_VIEW });
 
-declare function acquireVsCodeApi(): VsCodeApi;
-
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
 let state: LibraryViewState = initialLibraryState();
 let root: HTMLElement | null = null;
 
@@ -88,9 +94,8 @@ function ensureLive(): HTMLElement {
 }
 
 function persist(): void {
-  if (!apiRef || disposed) return;
   try {
-    apiRef.setState({
+    studio.setState({
       query: state.query,
       kind: state.kind,
       category: state.category,
@@ -116,7 +121,7 @@ function captureFocus(): FocusRestore {
 }
 
 function restoreFocus(focus: FocusRestore): void {
-  if (!focus || !root || disposed) return;
+  if (!focus || !root) return;
   let el: Element | null = null;
   try {
     if (focus.type === 'search') {
@@ -157,7 +162,7 @@ function restoreFlashes(): void {
 }
 
 function paint(): void {
-  if (disposed || !root) return;
+  if (!root) return;
   const focus = captureFocus();
   root.innerHTML = libraryViewHtml(state);
   restoreFlashes();
@@ -188,7 +193,7 @@ function flashCopied(id: string): void {
   const live = ensureLive();
   live.textContent = '';
   window.requestAnimationFrame(() => {
-    if (!disposed) live.textContent = 'Copied';
+    live.textContent = 'Copied';
   });
   if (copyFlashId && copyFlashId !== id) cardEl(copyFlashId)?.classList.remove('is-copied');
   copyFlashId = id;
@@ -198,7 +203,7 @@ function flashCopied(id: string): void {
     copyFlashTimer = null;
     const prev = copyFlashId;
     copyFlashId = null;
-    if (!disposed && prev) cardEl(prev)?.classList.remove('is-copied');
+    if (prev) cardEl(prev)?.classList.remove('is-copied');
     const region = document.getElementById('library-live');
     if (region && region.textContent === 'Copied') region.textContent = '';
   }, COPY_FLASH_MS);
@@ -213,66 +218,24 @@ function flashApply(id: string): void {
     applyFlashTimer = null;
     const prev = applyFlashId;
     applyFlashId = null;
-    if (!disposed && prev) applyButton(prev)?.classList.remove('is-sent');
+    if (prev) applyButton(prev)?.classList.remove('is-sent');
   }, COPY_FLASH_MS);
-}
-
-function post(message: unknown): void {
-  if (disposed || !apiRef) return;
-  try {
-    apiRef.postMessage(message);
-  } catch {
-    // host may be gone
-  }
 }
 
 function copyId(id: string): void {
   const text = id.trim();
   if (!text) return;
-  const fallbackCopy = (): void => {
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.setAttribute('readonly', '');
-      ta.style.position = 'fixed';
-      ta.style.left = '-9999px';
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      ta.remove();
-    } catch {
-      // clipboard unavailable
-    }
-  };
-  try {
-    const clip = navigator.clipboard;
-    if (clip && typeof clip.writeText === 'function') {
-      void clip.writeText(text).catch(() => {
-        fallbackCopy();
-      });
-    } else {
-      fallbackCopy();
-    }
-  } catch {
-    fallbackCopy();
-  }
-  post({ type: 'library.copy', id: text });
+  // Local copy first (same fallback ladder as before); the host copy is the backup.
+  void copyText(text);
+  studio.post(encodeLibraryCopy(text));
   flashCopied(text);
 }
 
 function postApply(id: string): void {
   const text = id.trim();
   if (!text) return;
-  post({ type: 'library.apply', id: text });
+  studio.post(encodeLibraryApply(text));
   flashApply(text);
-}
-
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeHostMessage(event.data);
-  if (!decoded) return;
-  state = applyCatalog(state, decoded.cards, decoded.catalogError);
-  paint();
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -290,7 +253,6 @@ function focusSearch(): void {
 }
 
 function onClick(event: Event): void {
-  if (disposed) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   const kindBtn = target.closest('[data-kind-filter]');
@@ -331,7 +293,6 @@ function onClick(event: Event): void {
 }
 
 function onInput(event: Event): void {
-  if (disposed) return;
   const target = event.target;
   if (!(target instanceof HTMLInputElement)) return;
   if (target.id !== 'library-search') return;
@@ -341,7 +302,6 @@ function onInput(event: Event): void {
 }
 
 function onGlobalKey(event: KeyboardEvent): void {
-  if (disposed) return;
   if ((event.key === 'f' || event.key === 'F') && (event.ctrlKey || event.metaKey) && !event.altKey) {
     event.preventDefault();
     focusSearch();
@@ -370,7 +330,6 @@ function moveRadio(current: HTMLElement, key: string): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (disposed) return;
   const target = event.target;
   if (!(target instanceof HTMLElement) || !root?.contains(target)) return;
   if (target.getAttribute('role') === 'radio') {
@@ -394,23 +353,15 @@ function onKeyDown(event: KeyboardEvent): void {
 }
 
 function main(): void {
-  let api: VsCodeApi;
-  try {
-    api = acquireVsCodeApi();
-  } catch {
-    root = ensureRoot();
-    root.textContent = 'Library studio could not reach the AXIS host.';
-    return;
-  }
-  apiRef = api;
-  try {
-    state = initialLibraryState(readPersistedLibraryUi(api.getState()));
-  } catch {
-    state = initialLibraryState();
-  }
+  state = initialLibraryState(readPersistedLibraryUi(studio.getState()));
   root = ensureRoot();
   ensureLive();
-  window.addEventListener('message', onHostMessage);
+  studio.onMessage((message) => {
+    const decoded = decodeLibrarySet(message);
+    if (!decoded) return;
+    state = applyCatalog(state, decoded.cards, decoded.catalogError);
+    paint();
+  });
   window.addEventListener('keydown', onGlobalKey);
   root.addEventListener('click', onClick);
   root.addEventListener('input', onInput);
@@ -418,8 +369,6 @@ function main(): void {
   window.addEventListener(
     'pagehide',
     () => {
-      disposed = true;
-      apiRef = null;
       root = null;
       copyFlashId = null;
       applyFlashId = null;
@@ -431,7 +380,7 @@ function main(): void {
     { once: true },
   );
   paint();
-  post({ type: 'library.ready' });
+  studio.post(encodeLibraryReady());
 }
 
 main();
