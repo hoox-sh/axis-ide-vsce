@@ -41,6 +41,17 @@ with its commit history preserved.
   `StudioMessageRouter` (decode → route by view/action, errors logged and
   dropped), and a `StudioRegistration` registry — all pure-host with 100%
   line coverage.
+- Phase 2 studio rollout: every remaining panel/activity studio now runs on
+  the generic `studio.*` protocol and the shared `buildStudioHtml()` shell —
+  symbols, watchlist, alerts, library, layers, logs, scripts, workers, and
+  plugins on the host side, with each `webview/<studio>/` bundle migrated to
+  `createStudio()` and the `@axis-shared` runtime. Old per-studio HTML
+  builders (`*-html.ts` bodies) collapsed into `buildBody()` markup and the
+  flat `*.ready` / `*.set` / `*.action` messages became `studio.ready` /
+  `studio.init` / `studio.set` / `studio.action` with the old payload fields
+  preserved verbatim (`data` / `args`). Behavior and visuals are unchanged;
+  `StudioMessageRouter` now accepts async action handlers (rejections logged
+  and dropped), and asset-root failures degrade to a safe fallback shell.
 
 ### Fixed
 
