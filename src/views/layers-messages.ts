@@ -17,9 +17,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Layers studio snapshot + webview→host messages.
- * Pure: do not import `layers.ts` (it imports vscode) or the chart editor.
- * Section order matches `LAYER_SECTION_ORDER` in `layers.ts`.
+ * Layers studio snapshot + shell body on `axis.webview.v1` `studio.*`
+ * envelopes. Pure: do not import `layers.ts` (it imports vscode) or the
+ * chart editor. Section order matches `LAYER_SECTION_ORDER` in `layers.ts`.
+ *
+ * Wire mapping from the old flat protocol: `{ type: 'layers.set', snapshot }`
+ * became `studio.set` / `studio.init` carrying `{ view: 'layers', data }`
+ * where `data` is the exact snapshot object (fields verbatim);
+ * `{ type: 'layers.ready' }` became `studio.ready`; `{ type:
+ * 'layers.openChart' }` became `studio.action` with action `openChart`
+ * (no args — the old message carried none either).
  */
 
 /** PWA / tree order: Scripts → Panes → Overlays → On-chain → Drawings. */
@@ -84,14 +91,14 @@ export type LayersSnapshot = {
   ];
 };
 
-export type LayersWebToHost =
-  | { type: 'layers.ready' }
-  | { type: 'layers.openChart' };
+/** `view` value for every Layers studio envelope — exactly `'layers'`. */
+export const LAYERS_STUDIO_VIEW = 'layers';
 
-export type LayersSetMessage = {
-  type: 'layers.set';
-  snapshot: LayersSnapshot;
-};
+/**
+ * `action` name the Layers webview posts to open a chart (the old flat
+ * `layers.openChart` message, now `studio.action` with no args).
+ */
+export const LAYERS_ACTION_OPEN_CHART = 'openChart';
 
 /** What the panel passes in. `doc` is ignored unless `chartOpen` is true. */
 export type LayersSnapshotInput = {
@@ -363,16 +370,19 @@ export function buildLayersSnapshot(input: unknown): LayersSnapshot {
   return assemble(true, doc);
 }
 
-/** Webview → host. Unknown shapes return null. Never throws. */
-export function parseLayersWebMessage(raw: unknown): LayersWebToHost | null {
-  if (!isPlainObject(raw)) return null;
-  const type = readOwn(raw, 'type');
-  if (type === 'layers.ready') return { type: 'layers.ready' };
-  if (type === 'layers.openChart') return { type: 'layers.openChart' };
-  return null;
-}
-
-/** Host → webview envelope. Snapshot is passed through unchanged. */
-export function encodeLayersSet(snapshot: LayersSnapshot): LayersSetMessage {
-  return { type: 'layers.set', snapshot };
+/**
+ * Trusted studio DOM for the shell body (the exact markup the old
+ * `layers-html.ts` builder emitted between `<body>` and the script tag;
+ * the webview JS depends on those ids/classes).
+ */
+export function buildLayersBody(): string {
+  return `<div id="layers-root" class="layers-root" data-axis-layers-host="1">
+    <header class="layers-header">
+      <h1 id="layers-title" class="layers-title">Layers</h1>
+      <p id="layers-summary" class="layers-summary">0 items · no chart open</p>
+      <button type="button" id="layers-open-chart" class="layers-open">Open chart</button>
+    </header>
+    <p id="layers-live" class="layers-live" aria-live="polite" aria-atomic="true"></p>
+    <div id="layers-sections" class="layers-sections"></div>
+  </div>`;
 }

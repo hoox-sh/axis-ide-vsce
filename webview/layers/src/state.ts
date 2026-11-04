@@ -18,6 +18,8 @@
 
 /**
  * Layers view-model. Section order and empty copy match `layers-messages.ts`.
+ * Host decode lives in ./protocol (studio.* wire); `coerceSnapshot` is the
+ * shared data validator.
  */
 
 export const LAYER_TITLES = [
@@ -170,13 +172,4 @@ function coerceSnapshot(raw: unknown): LayersViewState | null {
   return { chartOpen, total, source, sections };
 }
 
-/** Host `{ type: 'layers.set', snapshot }`. Never throws. */
-export function viewFromHostMessage(raw: unknown): LayersViewState | null {
-  try {
-    if (!isPlainObject(raw)) return null;
-    if (raw.type !== 'layers.set') return null;
-    return coerceSnapshot(raw.snapshot);
-  } catch {
-    return null;
-  }
-}
+export { coerceSnapshot };

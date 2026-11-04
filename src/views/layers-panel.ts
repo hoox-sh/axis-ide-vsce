@@ -16,6 +16,22 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Sidebar WebviewView for Layers (`axis.layers`) — a thin shim on the
+ * generic studio provider (enhancement plan §5 Phase 2).
+ *
+ * Wire change (old flat → `studio.*`): `layers.ready` → `studio.ready`;
+ * `layers.openChart` → `studio.action` (action `openChart`, no args);
+ * `layers.set` → `studio.set` carrying the snapshot verbatim as `data`.
+ *
+ * Handshake trace (identical timing to the old panel): resolve builds the
+ * shell but posts nothing; the webview's `studio.ready` acks with a
+ * data-less `studio.init` (which the webview ignores), and the entry's
+ * `restore()` kicks the same epoch-guarded async chart read the old
+ * `layers.ready` handler ran — the first snapshot arrives as `studio.set`
+ * exactly when it used to arrive as `layers.set`.
+ */
+
 import { existsSync } from 'node:fs';
 import { TextDecoder } from 'node:util';
 import {
@@ -26,9 +42,6 @@ import {
   type ExtensionContext,
   type Tab,
   type TextDocument,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
   commands,
   window,
   workspace,
@@ -36,21 +49,15 @@ import {
 import { CHART_VIEW_TYPE, parseChartDocument } from '../editors/chart-document';
 import { getChartLiveDoc, mergeChartDoc, subscribeChartLiveDoc } from '../editors/chart-live-doc';
 import { LAYERS_VIEW_ID } from './layers';
-import { buildLayersWebviewHtml } from './layers-html';
 import {
+  LAYERS_ACTION_OPEN_CHART,
+  LAYERS_STUDIO_VIEW,
+  buildLayersBody,
   buildLayersSnapshot,
-  encodeLayersSet,
-  parseLayersWebMessage,
   type LayersSnapshotInput,
 } from './layers-messages';
-
-const OPTIONAL_DOC_KEYS = [
-  'panes',
-  'overlays',
-  'onChain',
-  'onchain',
-  'on-chain',
-] as const;
+import { registerStudioView, StudioViewProvider, type StudioProviderDeps } from './studio-provider';
+import type { StudioRegistration } from './studio-registry';
 
 function themeBodyClass(kind: ColorThemeKind): string {
   switch (kind) {
@@ -73,9 +80,24 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function layersAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'layers', file);
+/** Assemble the injected VS Code surface the generic provider needs. */
+function studioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+  };
 }
+
+const OPTIONAL_DOC_KEYS = [
+  'panes',
+  'overlays',
+  'onChain',
+  'onchain',
+  'on-chain',
+] as const;
 
 function isAxisJsonName(name: string): boolean {
   return /\.axis\.json$/i.test(name);
@@ -252,105 +274,59 @@ async function readLayersInput(): Promise<LayersSnapshotInput> {
   }
 }
 
-function getLayersHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = layersAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS layers webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
-    );
-  }
-  const script = webview.asWebviewUri(layersAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = layersAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildLayersWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
-}
-
 /**
- * Sidebar WebviewView for Layers (`axis.layers`).
- * Posts `layers.set` on ready and when the active editor or an open chart changes.
+ * Sidebar WebviewView host for Layers (`axis.layers`) on the generic
+ * provider. Posts `studio.set` when the active editor or an open chart
+ * changes, and on the `studio.ready` handshake.
  */
-export class LayersStudioProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+export class LayersStudioProvider {
+  private provider: StudioViewProvider | undefined;
   private epoch = 0;
 
-  constructor(private readonly context: ExtensionContext) {}
+  constructor(context: ExtensionContext) {
+    this.provider = registerStudioView(
+      this.registration(),
+      studioDeps(context),
+      window,
+      context,
+    );
+  }
 
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'layers'),
-        ],
-      };
-      webview.onDidReceiveMessage((raw) => {
-        this.onMessage(raw);
-      });
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-      try {
-        webview.html = getLayersHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+  /** True when the host accepted the `axis.layers` contribution. */
+  registered(): boolean {
+    return this.provider !== undefined;
+  }
+
+  private registration(): StudioRegistration {
+    return {
+      id: LAYERS_STUDIO_VIEW,
+      title: 'Layers',
+      viewId: LAYERS_VIEW_ID,
+      retainContextWhenHidden: true,
+      buildBody: buildLayersBody,
+      actions: {
+        [LAYERS_ACTION_OPEN_CHART]: () => {
+          try {
+            void commands.executeCommand('axis.openChart');
+          } catch {
+            // command missing in this host
+          }
+        },
+      },
+      restore: () => {
+        // The old panel had no resolve-time post: its first snapshot was
+        // pushed by the ready handler's async chart read. Keep that timing —
+        // the data-less studio.init ack is ignored by the webview and the
+        // async read posts studio.set exactly when layers.set used to land.
+        void this.refreshSoon();
+        return undefined;
+      },
+    };
   }
 
   /** Push a fresh snapshot if the view is resolved. */
   refresh(): void {
     void this.refreshSoon();
-  }
-
-  private onMessage(raw: unknown): void {
-    try {
-      const msg = parseLayersWebMessage(raw);
-      if (!msg) return;
-      if (msg.type === 'layers.ready') {
-        this.refresh();
-        return;
-      }
-      try {
-        void commands.executeCommand('axis.openChart');
-      } catch {
-        // command missing in this host
-      }
-    } catch {
-      // never throw into the webview host
-    }
   }
 
   private async refreshSoon(): Promise<void> {
@@ -362,17 +338,7 @@ export class LayersStudioProvider implements WebviewViewProvider {
       input = { chartOpen: false };
     }
     if (token !== this.epoch) return;
-    this.postSnapshot(input);
-  }
-
-  private postSnapshot(input: LayersSnapshotInput): void {
-    try {
-      const webview = this.view?.webview;
-      if (!webview) return;
-      void webview.postMessage(encodeLayersSet(buildLayersSnapshot(input)));
-    } catch {
-      // disposing
-    }
+    this.provider?.postStudioSet(buildLayersSnapshot(input));
   }
 }
 
@@ -412,10 +378,9 @@ function subscribe(context: ExtensionContext, provider: LayersStudioProvider): v
 export function registerLayersStudio(context: ExtensionContext): LayersStudioProvider | undefined {
   try {
     const provider = new LayersStudioProvider(context);
-    const disp = window.registerWebviewViewProvider(LAYERS_VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    });
-    context.subscriptions.push(disp);
+    // registerStudioView never throws; it returns undefined when the host
+    // refuses the contribution. The old panel returned undefined there.
+    if (!provider.registered()) return undefined;
     subscribe(context, provider);
     return provider;
   } catch {

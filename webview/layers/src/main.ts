@@ -17,60 +17,36 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Layers webview: layers.ready → layers.set.
- * Open chart posts `{ type: 'layers.openChart' }`.
+ * AXIS Layers webview on the shared runtime + studio.* protocol:
+ * studio.ready → studio.init (data-less) / studio.set carrying the snapshot.
+ * Open chart posts studio.action `openChart` (old `layers.openChart`).
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
 import { paintLayers, queryLayersDom } from './render';
-import { initialLayersView, viewFromHostMessage } from './state';
+import { decodeLayersSet, encodeLayersOpenChart, encodeLayersReady } from './protocol';
+import { initialLayersView } from './state';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
-
-let disposed = false;
-
-function post(api: VsCodeApi, message: { type: string }): void {
-  if (disposed) return;
-  try {
-    api.postMessage(message);
-  } catch {
-    // host may be gone
-  }
-}
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: 'layers' });
 
 function main(): void {
-  let api: VsCodeApi | null = null;
-  try {
-    api = acquireVsCodeApi();
-  } catch {
-    api = null;
-  }
   const dom = queryLayersDom(document);
   paintLayers(dom, initialLayersView(), false);
   dom.open?.addEventListener('click', () => {
-    if (!api) return;
-    post(api, { type: 'layers.openChart' });
+    studio.post(encodeLayersOpenChart());
   });
-  window.addEventListener('message', (event: MessageEvent) => {
-    if (disposed) return;
-    const next = viewFromHostMessage(event.data);
+  studio.onMessage((message) => {
+    const next = decodeLayersSet(message);
     if (!next) return;
     paintLayers(dom, next, true);
   });
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
-  if (api) post(api, { type: 'layers.ready' });
+  studio.post(encodeLayersReady());
 }
 
 main();

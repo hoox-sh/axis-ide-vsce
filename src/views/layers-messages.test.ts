@@ -17,18 +17,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { encode, HOST_TO_VIEW, VIEW_TO_HOST } from '../protocol';
+import { buildStudioHtml, htmlHasInlineScript } from './studio-html';
 import {
   LAYER_SECTION_EMPTY,
   LAYER_SECTION_ROLES,
   LAYER_SECTION_TITLES,
+  LAYERS_ACTION_OPEN_CHART,
   LAYERS_SOURCE_CLOSED,
   LAYERS_SOURCE_OPEN,
+  LAYERS_STUDIO_VIEW,
+  buildLayersBody,
   buildLayersSnapshot,
-  encodeLayersSet,
-  parseLayersWebMessage,
   type LayersSection,
   type LayersSnapshot,
 } from './layers-messages';
+
+const CSP_SOURCE = 'https://csp.example.vscode-webview.test';
 
 function section(snapshot: LayersSnapshot, title: string): LayersSection {
   const found = snapshot.sections.find((item) => item.title === title);
@@ -45,36 +50,72 @@ function lengthProxy(length: unknown, values: unknown[] = []): unknown[] {
   });
 }
 
-describe('parseLayersWebMessage', () => {
-  test('accepts ready and openChart only', () => {
-    expect(parseLayersWebMessage(null)).toBeNull();
-    expect(parseLayersWebMessage(undefined)).toBeNull();
-    expect(parseLayersWebMessage(1)).toBeNull();
-    expect(parseLayersWebMessage('layers.ready')).toBeNull();
-    expect(parseLayersWebMessage([])).toBeNull();
-    expect(parseLayersWebMessage({})).toBeNull();
-    expect(parseLayersWebMessage({ type: 1 })).toBeNull();
-    expect(parseLayersWebMessage({ type: '' })).toBeNull();
-    expect(parseLayersWebMessage({ type: 'layers.set' })).toBeNull();
-    expect(parseLayersWebMessage({ type: 'layers.ready', extra: 1 })).toEqual({
-      type: 'layers.ready',
-    });
-    expect(parseLayersWebMessage({ type: 'layers.openChart' })).toEqual({
-      type: 'layers.openChart',
-    });
+describe('layers studio wire', () => {
+  test('view id and the frozen openChart action name', () => {
+    expect(LAYERS_STUDIO_VIEW).toBe('layers');
+    expect(LAYERS_ACTION_OPEN_CHART).toBe('openChart');
   });
 
-  test('never throws on a hostile type getter or revoked proxy', () => {
-    expect(
-      parseLayersWebMessage({
-        get type(): string {
-          throw new Error('type');
-        },
-      }),
-    ).toBeNull();
-    const revoked = Proxy.revocable({}, {});
-    revoked.revoke();
-    expect(parseLayersWebMessage(revoked.proxy)).toBeNull();
+  test('the old layers.openChart rides studio.action with no args', () => {
+    const envelope = encode(VIEW_TO_HOST.StudioAction, {
+      view: LAYERS_STUDIO_VIEW,
+      action: LAYERS_ACTION_OPEN_CHART,
+    });
+    expect(envelope.payload.view).toBe('layers');
+    expect(envelope.payload.action).toBe('openChart');
+    expect(envelope.payload.args).toBeUndefined();
+  });
+
+  test('the old layers.set snapshot rides studio.set / studio.init data verbatim', () => {
+    const snapshot = buildLayersSnapshot({ chartOpen: true, doc: { scripts: ['sma'] } });
+    const set = encode(HOST_TO_VIEW.StudioSet, {
+      view: LAYERS_STUDIO_VIEW,
+      data: snapshot,
+    });
+    expect(set.payload.data).toBe(snapshot);
+    const init = encode(HOST_TO_VIEW.StudioInit, {
+      view: LAYERS_STUDIO_VIEW,
+      data: snapshot,
+    });
+    expect(init.payload.data).toBe(snapshot);
+  });
+});
+
+describe('buildLayersBody', () => {
+  test('carries every id/class the webview JS depends on', () => {
+    const body = buildLayersBody();
+    expect(body).toContain('id="layers-root"');
+    expect(body).toContain('data-axis-layers-host="1"');
+    expect(body).toContain('id="layers-summary"');
+    expect(body).toContain('no chart open');
+    expect(body).toContain('id="layers-open-chart"');
+    expect(body).toContain('Open chart');
+    expect(body).toContain('aria-live="polite"');
+    expect(body).toContain('id="layers-sections"');
+    expect(htmlHasInlineScript(body)).toBe(false);
+  });
+
+  test('feeds the generic shell: cspSource scripts, connect-src none, theme class', () => {
+    const html = buildStudioHtml({
+      cspSource: CSP_SOURCE,
+      scriptUri: `${CSP_SOURCE}/main.js`,
+      styleUri: `${CSP_SOURCE}/main.css`,
+      bodyClass: 'vscode-dark',
+      bodyHtml: buildLayersBody(),
+    });
+    // re-homed from layers-html.test.ts (nonce-free builder → nonce-free shell)
+    expect(html).toContain(`script-src ${CSP_SOURCE}`);
+    expect(html).not.toContain("script-src 'unsafe-inline'");
+    expect(html).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
+    expect(html).toContain(`img-src ${CSP_SOURCE} data: blob:`);
+    expect(html).toContain("connect-src 'none'");
+    expect(html).toContain("default-src 'none'");
+    expect(html).toContain("base-uri 'none'");
+    expect(html).toContain("form-action 'none'");
+    expect(html).toContain('id="layers-root"');
+    expect(html).toContain('class="vscode-dark"');
+    expect(html).not.toContain('nonce=');
+    expect(htmlHasInlineScript(html)).toBe(false);
   });
 });
 
@@ -485,14 +526,5 @@ describe('buildLayersSnapshot', () => {
     expect(snapshot.total).toBe(7);
     expect(snapshot.chartOpen).toBe(true);
     expect(snapshot.source).toBe('from the open chart');
-  });
-});
-
-describe('encodeLayersSet', () => {
-  test('wraps the snapshot without copying it', () => {
-    const snapshot = buildLayersSnapshot({ chartOpen: true, doc: { scripts: ['sma'] } });
-    const message = encodeLayersSet(snapshot);
-    expect(message.type).toBe('layers.set');
-    expect(message.snapshot).toBe(snapshot);
   });
 });
