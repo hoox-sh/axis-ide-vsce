@@ -27,6 +27,14 @@ with its commit history preserved.
   `studio.action`) so every studio can share one codec, one error-code
   table, and one 100%-covered test suite. Additive only — existing
   `chart.*` / `results.*` / `host.*` branches are untouched.
+- Colors studio migrated end-to-end onto the shared runtime and the
+  `studio.*` protocol (pilot for the webview consolidation): the webview
+  side runs on `createStudio()` + shared DOM/filter helpers and inlines
+  the `--axis-*` design system; the host side encodes/decodes through the
+  single codec bridge (`webview/shared/studio-protocol.ts`). Wire format
+  is now `studio.init`/`studio.set`/`studio.ready`/`studio.action` with
+  the old payload shapes preserved verbatim; behavior and visuals are
+  unchanged.
 
 ### Fixed
 

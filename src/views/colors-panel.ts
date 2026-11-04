@@ -32,16 +32,16 @@ import {
   type WebviewView,
   type WebviewViewProvider,
 } from 'vscode';
+import { logProtocolReject } from '../host/logger';
 import { getColorsHtml } from './colors-html';
 import {
-  colorsSetMessage,
-  isColorsReady,
-  isColorsRefresh,
+  encodeColorsInit,
+  encodeColorsSet,
+  handleColorsWebviewMessage,
   isPineEditorLanguage,
-  parseColorsCopy,
-  parseColorsReveal,
   pineSourceLabel,
   scanColors,
+  type ColorHit,
 } from './colors-messages';
 
 export const COLORS_VIEW_ID = 'axis.colors';
@@ -122,7 +122,8 @@ function fallbackHtml(error: unknown): string {
 
 /**
  * Bottom-panel Colors view (`axis.colors`).
- * Scans the active Pine editor and posts local `colors.set`.
+ * Scans the active Pine editor and posts `studio.init` on resolve, then
+ * `studio.set` on ready / editor changes / refresh actions.
  */
 export class ColorsPanelProvider implements WebviewViewProvider {
   private view: WebviewView | undefined;
@@ -140,18 +141,22 @@ export class ColorsPanelProvider implements WebviewViewProvider {
 
       webview.onDidReceiveMessage((raw) => {
         try {
-          if (isColorsReady(raw) || isColorsRefresh(raw)) {
+          const handle = handleColorsWebviewMessage(raw);
+          if (handle.kind === 'reject') {
+            logProtocolReject(handle.error, 'colors');
+            return;
+          }
+          if (handle.kind === 'ready' || handle.kind === 'refresh') {
             this.refresh();
             return;
           }
-          const copy = parseColorsCopy(raw);
-          if (copy) {
-            void this.copyText(copy.text);
+          if (handle.kind === 'reveal') {
+            this.revealLine(handle.line);
             return;
           }
-          const reveal = parseColorsReveal(raw);
-          if (!reveal) return;
-          this.revealLine(reveal.line);
+          if (handle.kind === 'copy') {
+            void this.copyText(handle.text);
+          }
         } catch {
           // untrusted message / disposing
         }
@@ -171,9 +176,36 @@ export class ColorsPanelProvider implements WebviewViewProvider {
         }
       }
 
-      this.refresh();
+      this.postInit();
     } catch {
       // never throw from resolve
+    }
+  }
+
+  /** Scan the active editor (empty colors when it is not Pine). */
+  private scanActive(): { colors: ColorHit[]; sourceLabel: string } {
+    const editor = window.activeTextEditor;
+    const pine =
+      editor && isPineEditorLanguage(editor.document.languageId) ? editor : undefined;
+    const source = pine ? pine.document.getText() : '';
+    const sourceLabel = pine
+      ? pineSourceLabel(pine.document.fileName || pine.document.uri.fsPath)
+      : 'No Pine editor';
+    return { colors: scanColors(source), sourceLabel };
+  }
+
+  /**
+   * Post the first-load scan as `studio.init` (the old panel posted a flat
+   * `colors.set` at resolve time).
+   */
+  private postInit(): void {
+    const view = this.view;
+    if (!view) return;
+    try {
+      const { colors, sourceLabel } = this.scanActive();
+      void view.webview.postMessage(encodeColorsInit(colors, sourceLabel));
+    } catch {
+      // disposing or unreadable document
     }
   }
 
@@ -182,14 +214,8 @@ export class ColorsPanelProvider implements WebviewViewProvider {
     const view = this.view;
     if (!view) return;
     try {
-      const editor = window.activeTextEditor;
-      const pine =
-        editor && isPineEditorLanguage(editor.document.languageId) ? editor : undefined;
-      const source = pine ? pine.document.getText() : '';
-      const sourceLabel = pine
-        ? pineSourceLabel(pine.document.fileName || pine.document.uri.fsPath)
-        : 'No Pine editor';
-      void view.webview.postMessage(colorsSetMessage(scanColors(source), sourceLabel));
+      const { colors, sourceLabel } = this.scanActive();
+      void view.webview.postMessage(encodeColorsSet(colors, sourceLabel));
     } catch {
       // disposing or unreadable document
     }

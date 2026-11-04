@@ -17,12 +17,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Colors webview. Host posts colors.set. Primary click / Enter reveals;
- * Copy / Shift-click copies raw. Chips and search filter client-side.
+ * AXIS Colors studio webview on the shared runtime + studio.* protocol.
+ * Host posts studio.init / studio.set with data `{ colors, sourceLabel }`.
+ * Primary click / Enter reveals; Copy / Shift-click copies via host action;
+ * chips and search filter client-side through the shared filter machine.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
+import { setHidden, setText } from '@axis-shared/dom';
+import { createFilter } from '@axis-shared/state';
 import {
+  COLORS_VIEW,
+  COLOR_KIND_FILTERS,
   colorKindOf,
   decodeColorsSet,
   encodeColorsCopy,
@@ -30,50 +40,37 @@ import {
   encodeColorsRefresh,
   encodeColorsReveal,
   isSafeSwatch,
-  type ColorKindFilter,
   type ColorRow,
 } from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: COLORS_VIEW });
 
-declare function acquireVsCodeApi(): VsCodeApi;
-
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
 let colors: ColorRow[] = [];
 let sourceLabel = '';
-let query = '';
-let kind: ColorKindFilter = 'all';
 let activeIndex = 0;
 
-function post(message: unknown): void {
-  if (disposed || !apiRef) return;
-  try {
-    apiRef.postMessage(message);
-  } catch {
-    // host may be gone
-  }
-}
-
-function setText(id: string, text: string): void {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
-}
+// Shared filter machine. In-memory only (no persistKey / api) to keep the
+// pre-migration behavior: query + kind start empty on every webview load.
+const colorFilter = createFilter({
+  chips: COLOR_KIND_FILTERS,
+  initial: { query: '', filter: 'all' },
+  onChange: () => {
+    activeIndex = 0;
+    render();
+  },
+});
 
 function countLabel(count: number): string {
   return String(count);
 }
 
 function visibleColors(): ColorRow[] {
-  const q = query.trim().toLowerCase();
+  const kind = colorFilter.get().filter;
   return colors.filter((hit) => {
     if (kind !== 'all' && colorKindOf(hit.raw) !== kind) return false;
-    if (!q) return true;
-    return hit.raw.toLowerCase().includes(q);
+    return colorFilter.matches(hit.raw);
   });
 }
 
@@ -157,7 +154,6 @@ function syncActive(rows: ColorRow[]): void {
 }
 
 function render(): void {
-  if (disposed) return;
   const rows = visibleColors();
   setText('colors-count', countLabel(rows.length));
   const source = document.getElementById('colors-source');
@@ -165,13 +161,10 @@ function render(): void {
     source.textContent = sourceLabel;
     source.setAttribute('title', sourceLabel);
   }
-  const empty = document.getElementById('colors-empty');
-  const list = document.getElementById('colors-list');
   const message = emptyMessage(rows.length);
-  if (empty) {
-    empty.hidden = message.length === 0;
-    if (message) empty.textContent = message;
-  }
+  setHidden('colors-empty', message.length === 0);
+  if (message) setText('colors-empty', message);
+  const list = document.getElementById('colors-list');
   if (!(list instanceof HTMLUListElement)) return;
   list.hidden = rows.length === 0;
   list.replaceChildren();
@@ -183,7 +176,8 @@ function render(): void {
 
   const chips = document.querySelectorAll<HTMLButtonElement>('button.colors-chip[data-kind]');
   chips.forEach((chip) => {
-    chip.setAttribute('aria-pressed', chip.getAttribute('data-kind') === kind ? 'true' : 'false');
+    const value = chip.getAttribute('data-kind') ?? '';
+    chip.setAttribute('aria-pressed', colorFilter.isActive(value) ? 'true' : 'false');
   });
 }
 
@@ -191,16 +185,15 @@ function revealAt(index: number): void {
   const rows = visibleColors();
   const hit = rows[index];
   if (!hit) return;
-  post(encodeColorsReveal(hit.line));
+  studio.post(encodeColorsReveal(hit.line));
 }
 
 function copyRaw(text: string): void {
   if (!text) return;
-  post(encodeColorsCopy(text));
+  studio.post(encodeColorsCopy(text));
 }
 
 function onListClick(event: MouseEvent): void {
-  if (disposed) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   const copyBtn = target.closest('button.colors-copy');
@@ -219,11 +212,10 @@ function onListClick(event: MouseEvent): void {
   }
   const line = Number(button.dataset.line);
   if (!Number.isInteger(line) || line < 1) return;
-  post(encodeColorsReveal(line));
+  studio.post(encodeColorsReveal(line));
 }
 
 function onListKeydown(event: KeyboardEvent): void {
-  if (disposed) return;
   const rows = visibleColors();
   if (rows.length === 0) return;
   if (event.key === 'ArrowDown') {
@@ -250,34 +242,20 @@ function onListKeydown(event: KeyboardEvent): void {
   }
 }
 
-function kindFrom(value: string | null): ColorKindFilter | null {
-  if (value === 'all' || value === 'hex' || value === 'named' || value === 'rgb-new') return value;
-  return null;
-}
-
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeColorsSet(event.data);
-  if (!decoded) return;
-  colors = decoded.colors;
-  sourceLabel = decoded.sourceLabel;
+function onHostMessage(message: unknown): void {
+  const state = decodeColorsSet(message);
+  if (!state) return;
+  colors = state.colors;
+  sourceLabel = state.sourceLabel;
   activeIndex = 0;
   render();
 }
 
 function main(): void {
-  try {
-    apiRef = acquireVsCodeApi();
-  } catch {
-    apiRef = null;
-  }
-
   const search = document.getElementById('colors-search');
   if (search instanceof HTMLInputElement) {
     search.addEventListener('input', () => {
-      query = search.value;
-      activeIndex = 0;
-      render();
+      colorFilter.setQuery(search.value);
     });
   }
 
@@ -286,15 +264,11 @@ function main(): void {
     const target = event.target;
     if (!(target instanceof Element)) return;
     const chip = target.closest('button[data-kind]');
-    const next = kindFrom(chip?.getAttribute('data-kind') ?? null);
-    if (!next) return;
-    kind = next;
-    activeIndex = 0;
-    render();
+    colorFilter.setFilter(chip?.getAttribute('data-kind') ?? '');
   });
 
   document.getElementById('colors-refresh')?.addEventListener('click', () => {
-    post(encodeColorsRefresh());
+    studio.post(encodeColorsRefresh());
   });
 
   const list = document.getElementById('colors-list');
@@ -303,16 +277,9 @@ function main(): void {
     list.addEventListener('keydown', onListKeydown);
   }
 
-  window.addEventListener('message', onHostMessage);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
+  studio.onMessage(onHostMessage);
   render();
-  post(encodeColorsReady());
+  studio.post(encodeColorsReady());
 }
 
 main();

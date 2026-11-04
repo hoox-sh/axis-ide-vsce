@@ -18,19 +18,28 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  HOST_TO_VIEW,
+  PROTOCOL_ERROR_CODES,
+  PROTOCOL_VERSION,
+  VIEW_TO_HOST,
+  decode,
+  encode,
+} from '../protocol';
+import {
+  COLORS_STUDIO_VIEW,
   MAX_COLORS_COPY_TEXT,
   NAMED_COLOR_SWATCH,
   PINE_EDITOR_LANGUAGE_IDS,
   colorKind,
-  colorsSetMessage,
-  isColorsReady,
-  isColorsRefresh,
+  colorsStudioData,
+  encodeColorsInit,
+  encodeColorsSet,
+  handleColorsWebviewMessage,
   isPineEditorLanguage,
-  parseColorsCopy,
-  parseColorsReveal,
   pineSourceLabel,
   scanColors,
   type ColorHit,
+  type ColorsStudioData,
 } from './colors-messages';
 
 describe('pine editor language and labels', () => {
@@ -59,60 +68,136 @@ describe('pine editor language and labels', () => {
   });
 });
 
-describe('colors messages', () => {
-  test('colors.set copies hits and does not share the array', () => {
+describe('colors studio envelopes', () => {
+  test('colorsStudioData copies hits and does not share the array', () => {
     const hits: ColorHit[] = [{ line: 2, column: 3, raw: '#fff', swatch: '#fff' }];
-    const msg = colorsSetMessage(hits, 'a.pyne');
-    expect(msg).toEqual({
-      type: 'colors.set',
+    const data = colorsStudioData(hits, 'a.pyne');
+    expect(data).toEqual({
       colors: [{ line: 2, column: 3, raw: '#fff', swatch: '#fff' }],
       sourceLabel: 'a.pyne',
     });
     hits[0]!.raw = 'mutated';
-    expect(msg.colors[0]!.raw).toBe('#fff');
-    expect(colorsSetMessage([], 'No Pine editor')).toEqual({
-      type: 'colors.set',
+    expect(data.colors[0]!.raw).toBe('#fff');
+    expect(colorsStudioData([], 'No Pine editor')).toEqual({
       colors: [],
       sourceLabel: 'No Pine editor',
     });
   });
 
-  test('colors.ready, refresh, reveal, and copy parse without throwing', () => {
-    expect(isColorsReady({ type: 'colors.ready' })).toBe(true);
-    expect(isColorsReady({ type: 'colors.reveal', line: 1 })).toBe(false);
-    expect(isColorsReady(null)).toBe(false);
-    expect(isColorsReady([])).toBe(false);
-    expect(isColorsReady('colors.ready')).toBe(false);
-    expect(isColorsRefresh({ type: 'colors.refresh' })).toBe(true);
-    expect(isColorsRefresh({ type: 'colors.ready' })).toBe(false);
-    expect(isColorsRefresh(null)).toBe(false);
-    expect(isColorsRefresh([])).toBe(false);
-    expect(parseColorsReveal({ type: 'colors.reveal', line: 4 })).toEqual({
-      type: 'colors.reveal',
-      line: 4,
+  test('studio.init / studio.set carry the old colors.set payload verbatim', () => {
+    const hits: ColorHit[] = [{ line: 2, column: 3, raw: '#fff', swatch: '#fff' }];
+    const set = encodeColorsSet(hits, 'a.pyne');
+    expect(set.v).toBe(PROTOCOL_VERSION);
+    expect(set.type).toBe(HOST_TO_VIEW.StudioSet);
+    expect(set.ts).toBeTypeOf('number');
+    expect(set.payload).toEqual({
+      view: COLORS_STUDIO_VIEW,
+      data: {
+        colors: [{ line: 2, column: 3, raw: '#fff', swatch: '#fff' }],
+        sourceLabel: 'a.pyne',
+      },
     });
-    expect(parseColorsReveal({ type: 'colors.reveal', line: 4, extra: true })).toEqual({
-      type: 'colors.reveal',
-      line: 4,
+    // rows are copied — mutating the input never leaks into the envelope
+    hits[0]!.raw = 'mutated';
+    expect((set.payload.data as ColorsStudioData).colors[0]!.raw).toBe('#fff');
+
+    const init = encodeColorsInit([], 'No Pine editor');
+    expect(init.v).toBe(PROTOCOL_VERSION);
+    expect(init.type).toBe(HOST_TO_VIEW.StudioInit);
+    expect(init.payload).toEqual({
+      view: COLORS_STUDIO_VIEW,
+      data: { colors: [], sourceLabel: 'No Pine editor' },
     });
-    expect(parseColorsReveal({ type: 'colors.reveal', line: 0 })).toBeNull();
-    expect(parseColorsReveal({ type: 'colors.reveal', line: -2 })).toBeNull();
-    expect(parseColorsReveal({ type: 'colors.reveal', line: 1.5 })).toBeNull();
-    expect(parseColorsReveal({ type: 'colors.reveal', line: '2' })).toBeNull();
-    expect(parseColorsReveal({ type: 'colors.reveal' })).toBeNull();
-    expect(parseColorsReveal({ type: 'colors.set', line: 1 })).toBeNull();
-    expect(parseColorsReveal(null)).toBeNull();
-    expect(parseColorsReveal([])).toBeNull();
-    expect(parseColorsReveal(undefined)).toBeNull();
-    expect(parseColorsCopy({ type: 'colors.copy', text: '#fff' })).toEqual({
-      type: 'colors.copy',
-      text: '#fff',
-    });
-    expect(parseColorsCopy({ type: 'colors.copy', text: '' })).toBeNull();
-    expect(parseColorsCopy({ type: 'colors.copy', text: 'x'.repeat(MAX_COLORS_COPY_TEXT + 1) })).toBeNull();
-    expect(parseColorsCopy({ type: 'colors.copy', text: 1 })).toBeNull();
-    expect(parseColorsCopy({ type: 'colors.reveal', line: 1 })).toBeNull();
-    expect(parseColorsCopy(null)).toBeNull();
+
+    // both survive the JSON wire and the shared codec decode (webview side)
+    for (const env of [init, set]) {
+      const decoded = decode(JSON.parse(JSON.stringify(env)));
+      expect(decoded.ok).toBe(true);
+      if (decoded.ok) {
+        expect(decoded.envelope.type).toBe(env.type);
+        expect(decoded.envelope.payload).toEqual(env.payload);
+      }
+    }
+  });
+
+  test('studio.ready with view colors is ready; other views ignored', () => {
+    expect(
+      handleColorsWebviewMessage(encode(VIEW_TO_HOST.StudioReady, { view: COLORS_STUDIO_VIEW })),
+    ).toEqual({ kind: 'ready' });
+    expect(
+      handleColorsWebviewMessage(
+        encode(VIEW_TO_HOST.StudioReady, { view: COLORS_STUDIO_VIEW, capabilities: ['copy'] }),
+      ),
+    ).toEqual({ kind: 'ready' });
+    expect(
+      handleColorsWebviewMessage(encode(VIEW_TO_HOST.StudioReady, { view: 'watchlist' })).kind,
+    ).toBe('ignore');
+  });
+
+  test('studio.action reveal unpacks args.line with the old reveal validation', () => {
+    const reveal = (args?: Record<string, unknown>) =>
+      handleColorsWebviewMessage(
+        args === undefined
+          ? encode(VIEW_TO_HOST.StudioAction, { view: COLORS_STUDIO_VIEW, action: 'reveal' })
+          : encode(VIEW_TO_HOST.StudioAction, {
+              view: COLORS_STUDIO_VIEW,
+              action: 'reveal',
+              args,
+            }),
+      );
+    expect(reveal({ line: 4 })).toEqual({ kind: 'reveal', line: 4 });
+    expect(reveal({ line: 4, extra: true })).toEqual({ kind: 'reveal', line: 4 });
+    expect(reveal({ line: 0 }).kind).toBe('ignore');
+    expect(reveal({ line: -2 }).kind).toBe('ignore');
+    expect(reveal({ line: 1.5 }).kind).toBe('ignore');
+    expect(reveal({ line: '2' }).kind).toBe('ignore');
+    expect(reveal({}).kind).toBe('ignore');
+    expect(reveal().kind).toBe('ignore');
+  });
+
+  test('studio.action copy unpacks args.text with the old copy validation', () => {
+    const copy = (args?: Record<string, unknown>) =>
+      handleColorsWebviewMessage(
+        args === undefined
+          ? encode(VIEW_TO_HOST.StudioAction, { view: COLORS_STUDIO_VIEW, action: 'copy' })
+          : encode(VIEW_TO_HOST.StudioAction, { view: COLORS_STUDIO_VIEW, action: 'copy', args }),
+      );
+    expect(copy({ text: '#fff' })).toEqual({ kind: 'copy', text: '#fff' });
+    expect(copy({ text: '' }).kind).toBe('ignore');
+    expect(copy({ text: 'x'.repeat(MAX_COLORS_COPY_TEXT + 1) }).kind).toBe('ignore');
+    expect(copy({ text: 1 }).kind).toBe('ignore');
+    expect(copy().kind).toBe('ignore');
+  });
+
+  test('studio.action refresh ignores args like the old colors.refresh', () => {
+    expect(
+      handleColorsWebviewMessage(
+        encode(VIEW_TO_HOST.StudioAction, { view: COLORS_STUDIO_VIEW, action: 'refresh' }),
+      ),
+    ).toEqual({ kind: 'refresh' });
+    expect(
+      handleColorsWebviewMessage(
+        encode(VIEW_TO_HOST.StudioAction, {
+          view: COLORS_STUDIO_VIEW,
+          action: 'refresh',
+          args: { force: true },
+        }),
+      ),
+    ).toEqual({ kind: 'refresh' });
+    // wrong view and unknown action names are ignored
+    expect(
+      handleColorsWebviewMessage(
+        encode(VIEW_TO_HOST.StudioAction, { view: 'symbols', action: 'refresh' }),
+      ).kind,
+    ).toBe('ignore');
+    expect(
+      handleColorsWebviewMessage(
+        encode(VIEW_TO_HOST.StudioAction, { view: COLORS_STUDIO_VIEW, action: 'nope' }),
+      ).kind,
+    ).toBe('ignore');
+  });
+
+  test('decode failures and junk reject without throwing', () => {
     const hostile = new Proxy(
       {},
       {
@@ -121,10 +206,88 @@ describe('colors messages', () => {
         },
       },
     );
-    expect(isColorsReady(hostile)).toBe(false);
-    expect(isColorsRefresh(hostile)).toBe(false);
-    expect(parseColorsReveal(hostile)).toBeNull();
-    expect(parseColorsCopy(hostile)).toBeNull();
+    expect(() => handleColorsWebviewMessage(hostile)).not.toThrow();
+    expect(handleColorsWebviewMessage(hostile).kind).toBe('reject');
+    for (const junk of [null, undefined, [], 'colors.ready', 1, {}] as const) {
+      expect(handleColorsWebviewMessage(junk).kind).toBe('reject');
+    }
+    // old flat wire (now an unknown type)
+    expect(handleColorsWebviewMessage({ type: 'colors.ready' }).kind).toBe('reject');
+    expect(handleColorsWebviewMessage({ type: 'colors.reveal', line: 1 }).kind).toBe('reject');
+    // bad version / bad ts / bad payload field
+    expect(
+      handleColorsWebviewMessage({
+        v: 99,
+        type: 'studio.ready',
+        payload: { view: 'colors' },
+        ts: 1,
+      }).kind,
+    ).toBe('reject');
+    expect(
+      handleColorsWebviewMessage({ v: 1, type: 'studio.ready', payload: { view: 'colors' } }).kind,
+    ).toBe('reject');
+    expect(
+      handleColorsWebviewMessage({
+        v: 1,
+        type: 'studio.action',
+        payload: { view: 'colors', action: 'reveal', args: [] },
+        ts: 1,
+      }).kind,
+    ).toBe('reject');
+  });
+
+  test('echoed host→view types are rejected; unrelated view→host types ignored', () => {
+    expect(handleColorsWebviewMessage(encodeColorsSet([], 'x')).kind).toBe('reject');
+    expect(handleColorsWebviewMessage(encodeColorsInit([], 'x')).kind).toBe('reject');
+    expect(
+      handleColorsWebviewMessage(
+        encode(VIEW_TO_HOST.WebviewReady, { view: 'chart', capabilities: [] }),
+      ).kind,
+    ).toBe('ignore');
+    expect(
+      handleColorsWebviewMessage(encode(VIEW_TO_HOST.ResultsFocus, { runId: 'r1' })).kind,
+    ).toBe('ignore');
+  });
+
+  test('hostile args getters reject, never throw', () => {
+    const hostileLine = new Proxy(
+      {},
+      {
+        get(_target: unknown, key: string | symbol) {
+          if (key === 'line') throw new Error('boom');
+          return undefined;
+        },
+      },
+    );
+    const revealHandle = handleColorsWebviewMessage({
+      v: PROTOCOL_VERSION,
+      type: VIEW_TO_HOST.StudioAction,
+      payload: { view: COLORS_STUDIO_VIEW, action: 'reveal', args: hostileLine },
+      ts: 1,
+    });
+    expect(revealHandle.kind).toBe('reject');
+    if (revealHandle.kind !== 'reject') return;
+    expect(revealHandle.error.code).toBe(PROTOCOL_ERROR_CODES.BAD_ENVELOPE);
+    expect(revealHandle.error.message).toContain('boom');
+
+    const hostileText = new Proxy(
+      {},
+      {
+        get() {
+          throw 'nope';
+        },
+      },
+    );
+    const copyHandle = handleColorsWebviewMessage({
+      v: PROTOCOL_VERSION,
+      type: VIEW_TO_HOST.StudioAction,
+      payload: { view: COLORS_STUDIO_VIEW, action: 'copy', args: hostileText },
+      ts: 1,
+    });
+    expect(copyHandle.kind).toBe('reject');
+    if (copyHandle.kind !== 'reject') return;
+    expect(copyHandle.error.code).toBe(PROTOCOL_ERROR_CODES.BAD_ENVELOPE);
+    expect(copyHandle.error.message).toContain('nope');
   });
 
   test('colorKind classifies hex, named, and rgb/new', () => {
