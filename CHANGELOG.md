@@ -19,6 +19,9 @@ with its commit history preserved.
 
 - Electron `compile-tests` type error where `assert.deepStrictEqual` narrowed
   the activity-view id list and rejected forbidden plugin view ids.
+- Activation no longer throws on VS Code builds without
+  `lm.registerMcpServerDefinitionProvider` / `lm.registerTool`; both features
+  are feature-detected and soft-fail while the rest of the extension activates.
 
 ### Changed
 

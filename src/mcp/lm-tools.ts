@@ -804,6 +804,9 @@ export function registerLmTools(
   context: ExtensionContext,
   deps: LmToolsDeps,
 ): { dispose(): void }[] {
+  // Language model tools are not available on every supported VS Code build.
+  if (typeof lm.registerTool !== 'function') return [];
+
   const disposables = [
     lm.registerTool(LM_TOOL_NAMES.runScript, createRunScriptTool(deps)),
     lm.registerTool(

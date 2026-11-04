@@ -302,12 +302,18 @@ export function registerMcpProvider(context: ExtensionContext): {
     resolveMcpServerDefinition: async (server) => server,
   };
 
-  const disposables = [
+  const disposables: { dispose(): void }[] = [
     commands.registerCommand(MCP_COMMANDS.showConfig, () =>
       showMcpConfigSnippet(),
     ),
-    lm.registerMcpServerDefinitionProvider(MCP_PROVIDER_ID, provider),
   ];
+  // MCP server definition providers landed after the 1.95 engine floor.
+  // Feature-detect so activation still succeeds on older VS Code builds.
+  if (typeof lm.registerMcpServerDefinitionProvider === 'function') {
+    disposables.push(
+      lm.registerMcpServerDefinitionProvider(MCP_PROVIDER_ID, provider),
+    );
+  }
   context.subscriptions.push(...disposables);
   return disposables;
 }
