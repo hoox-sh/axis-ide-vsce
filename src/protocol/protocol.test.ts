@@ -86,6 +86,11 @@ const SAMPLES: { [K in MessageType]: PayloadByType[K] } = {
   [VIEW_TO_HOST.ChartRequestReload]: {},
   [VIEW_TO_HOST.ResultsFocus]: { runId: 'r1' },
   [VIEW_TO_HOST.ResultsReady]: {},
+  [HOST_TO_VIEW.StudioInit]: { view: 'colors', data: { swatches: [] } },
+  [HOST_TO_VIEW.StudioSet]: { view: 'watchlist', data: { rows: [] } },
+  [HOST_TO_VIEW.StudioNotice]: { view: 'logs', level: 'info', message: 'stream connected' },
+  [VIEW_TO_HOST.StudioReady]: { view: 'colors', capabilities: ['copy'] },
+  [VIEW_TO_HOST.StudioAction]: { view: 'colors', action: 'copy', args: { id: 'swatch-1' } },
 };
 
 afterEach(() => {
@@ -105,7 +110,7 @@ describe('axis.webview.v1 protocol', () => {
   test('ALL_MESSAGE_TYPES matches frozen design §6 golden list', () => {
     expect([...ALL_MESSAGE_TYPES].sort()).toEqual([...SECTION_6_MESSAGE_TYPES].sort());
     expect(new Set(ALL_MESSAGE_TYPES).size).toBe(ALL_MESSAGE_TYPES.length);
-    expect(ALL_MESSAGE_TYPES.length).toBe(15);
+    expect(ALL_MESSAGE_TYPES.length).toBe(20);
   });
 
   test('round-trip encode→decode for every message type', () => {
@@ -319,6 +324,45 @@ describe('axis.webview.v1 protocol', () => {
   });
 });
 
+describe('studio.* namespace payloads', () => {
+  test('studio.init allows omitted data', () => {
+    const env = encode(HOST_TO_VIEW.StudioInit, { view: 'colors' });
+    const result = decode(env);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.envelope.payload).toEqual({ view: 'colors' });
+    }
+  });
+
+  test('studio.set accepts any JSON data value including null', () => {
+    const env = encode(HOST_TO_VIEW.StudioSet, { view: 'colors', data: null });
+    const result = decode(env);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.envelope.payload).toEqual({ view: 'colors', data: null });
+    }
+  });
+
+  test('studio.ready keeps capabilities optional — no defaulting', () => {
+    const env = encode(VIEW_TO_HOST.StudioReady, { view: 'alerts' });
+    expect(env.payload).toEqual({ view: 'alerts' });
+    const result = decode(env);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.envelope.payload).toEqual({ view: 'alerts' });
+    }
+  });
+
+  test('studio.action allows omitted args', () => {
+    const env = encode(VIEW_TO_HOST.StudioAction, { view: 'colors', action: 'refresh' });
+    const result = decode(env);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.envelope.payload).toEqual({ view: 'colors', action: 'refresh' });
+    }
+  });
+});
+
 describe('decode reject paths', () => {
   test('never throws on garbage and asserts BAD_ENVELOPE', () => {
     const junk = [null, undefined, 1, 'x', true, []];
@@ -518,6 +562,64 @@ describe('decode reject paths', () => {
       { type: VIEW_TO_HOST.ResultsReady, payload: null, tip: 'object' },
       { type: VIEW_TO_HOST.ResultsReady, payload: [], tip: 'object' },
       { type: VIEW_TO_HOST.ResultsReady, payload: { extra: true }, tip: 'empty' },
+      // studio.* — view is required (non-empty string) on every studio type
+      { type: HOST_TO_VIEW.StudioInit, payload: null, tip: 'object' },
+      { type: HOST_TO_VIEW.StudioInit, payload: {}, tip: 'view' },
+      { type: HOST_TO_VIEW.StudioInit, payload: { view: '' }, tip: 'view' },
+      { type: HOST_TO_VIEW.StudioInit, payload: { view: 1, data: {} }, tip: 'view' },
+      { type: HOST_TO_VIEW.StudioSet, payload: [], tip: 'object' },
+      { type: HOST_TO_VIEW.StudioSet, payload: {}, tip: 'view' },
+      { type: HOST_TO_VIEW.StudioSet, payload: { view: 'colors' }, tip: 'data' },
+      { type: HOST_TO_VIEW.StudioSet, payload: { view: '', data: 1 }, tip: 'view' },
+      { type: HOST_TO_VIEW.StudioNotice, payload: null, tip: 'object' },
+      { type: HOST_TO_VIEW.StudioNotice, payload: { level: 'info', message: 'x' }, tip: 'view' },
+      { type: HOST_TO_VIEW.StudioNotice, payload: { view: 'logs', message: 'x' }, tip: 'level' },
+      {
+        type: HOST_TO_VIEW.StudioNotice,
+        payload: { view: 'logs', level: 'info' },
+        tip: 'message',
+      },
+      {
+        type: HOST_TO_VIEW.StudioNotice,
+        payload: { view: 'logs', level: '', message: 'x' },
+        tip: 'level',
+      },
+      {
+        type: HOST_TO_VIEW.StudioNotice,
+        payload: { view: 'logs', level: 'info', message: '' },
+        tip: 'message',
+      },
+      { type: VIEW_TO_HOST.StudioReady, payload: 'x', tip: 'object' },
+      { type: VIEW_TO_HOST.StudioReady, payload: { capabilities: [] }, tip: 'view' },
+      {
+        type: VIEW_TO_HOST.StudioReady,
+        payload: { view: 'colors', capabilities: [1] },
+        tip: 'capabilities',
+      },
+      {
+        type: VIEW_TO_HOST.StudioReady,
+        payload: { view: 'colors', capabilities: 'copy' },
+        tip: 'capabilities',
+      },
+      { type: VIEW_TO_HOST.StudioAction, payload: null, tip: 'object' },
+      { type: VIEW_TO_HOST.StudioAction, payload: { action: 'copy' }, tip: 'view' },
+      { type: VIEW_TO_HOST.StudioAction, payload: { view: 'colors' }, tip: 'action' },
+      { type: VIEW_TO_HOST.StudioAction, payload: { view: 'colors', action: '' }, tip: 'action' },
+      {
+        type: VIEW_TO_HOST.StudioAction,
+        payload: { view: 'colors', action: 'copy', args: [] },
+        tip: 'args',
+      },
+      {
+        type: VIEW_TO_HOST.StudioAction,
+        payload: { view: 'colors', action: 'copy', args: 'id' },
+        tip: 'args',
+      },
+      {
+        type: VIEW_TO_HOST.StudioAction,
+        payload: { view: 'colors', action: 'copy', args: null },
+        tip: 'args',
+      },
     ];
 
     for (const c of cases) {
@@ -554,5 +656,24 @@ describe('encode reject paths', () => {
   test('throws when empty payloads carry keys', () => {
     expect(() => encode(VIEW_TO_HOST.ChartRequestReload, { x: 1 } as never)).toThrow(/empty/);
     expect(() => encode(VIEW_TO_HOST.ResultsReady, { x: 1 } as never)).toThrow(/empty/);
+  });
+
+  test('throws on invalid studio payloads', () => {
+    expect(() => encode(HOST_TO_VIEW.StudioInit, {} as never)).toThrow(/studio\.init/);
+    expect(() => encode(HOST_TO_VIEW.StudioSet, { view: 'colors' } as never)).toThrow(
+      /studio\.set/,
+    );
+    expect(() =>
+      encode(HOST_TO_VIEW.StudioNotice, { view: 'logs', level: 'info' } as never),
+    ).toThrow(/studio\.notice/);
+    expect(() =>
+      encode(VIEW_TO_HOST.StudioReady, { view: '', capabilities: ['copy'] }),
+    ).toThrow(/studio\.ready/);
+    expect(() => encode(VIEW_TO_HOST.StudioAction, { view: 'colors', action: '' })).toThrow(
+      /studio\.action/,
+    );
+    expect(() =>
+      encode(VIEW_TO_HOST.StudioAction, { view: 'colors', action: 'copy', args: [] } as never),
+    ).toThrow(/studio\.action/);
   });
 });

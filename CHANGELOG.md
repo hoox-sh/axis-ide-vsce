@@ -22,6 +22,11 @@ with its commit history preserved.
   component builders, and a shared
   `createStudioViteConfig()` factory. The Colors studio pilots the
   `@axis-shared` alias (inert until a studio imports it).
+- `axis.webview.v1` protocol extended with a generic `studio.*` namespace
+  (`studio.init`, `studio.set`, `studio.notice`, `studio.ready`,
+  `studio.action`) so every studio can share one codec, one error-code
+  table, and one 100%-covered test suite. Additive only — existing
+  `chart.*` / `results.*` / `host.*` branches are untouched.
 
 ### Fixed
 

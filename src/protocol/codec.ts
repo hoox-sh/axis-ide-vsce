@@ -84,6 +84,17 @@ function requireEmptyObject(type: MessageType, payload: unknown): ProtocolError 
   return null;
 }
 
+/** Every studio.* payload requires a non-empty `view` string (the studio id). */
+function requireStudioView(
+  type: MessageType,
+  payload: Record<string, unknown>,
+): ProtocolError | null {
+  if (typeof payload.view !== 'string' || payload.view.length === 0) {
+    return err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, `${type}.view must be a non-empty string`);
+  }
+  return null;
+}
+
 /**
  * Validate + normalize payload. Returns error or the (possibly normalized) payload.
  * Normalization: webview.ready defaults capabilities to [].
@@ -216,6 +227,47 @@ function validatePayload(
       }
       return { error: null, payload };
     }
+    case HOST_TO_VIEW.StudioInit: {
+      if (!isPlainObject(payload)) {
+        return { error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.init payload must be an object') };
+      }
+      const view = requireStudioView(HOST_TO_VIEW.StudioInit, payload);
+      if (view) return { error: view };
+      return { error: null, payload };
+    }
+    case HOST_TO_VIEW.StudioSet: {
+      if (!isPlainObject(payload)) {
+        return { error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.set payload must be an object') };
+      }
+      const view = requireStudioView(HOST_TO_VIEW.StudioSet, payload);
+      if (view) return { error: view };
+      if (!('data' in payload)) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.set requires view and data'),
+        };
+      }
+      return { error: null, payload };
+    }
+    case HOST_TO_VIEW.StudioNotice: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.notice payload must be an object'),
+        };
+      }
+      const view = requireStudioView(HOST_TO_VIEW.StudioNotice, payload);
+      if (view) return { error: view };
+      if (typeof payload.level !== 'string' || payload.level.length === 0) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.notice.level must be a non-empty string'),
+        };
+      }
+      if (typeof payload.message !== 'string' || payload.message.length === 0) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.notice.message must be a non-empty string'),
+        };
+      }
+      return { error: null, payload };
+    }
     case VIEW_TO_HOST.WebviewReady: {
       if (!isPlainObject(payload)) {
         return {
@@ -306,6 +358,55 @@ function validatePayload(
     case VIEW_TO_HOST.ResultsReady: {
       const empty = requireEmptyObject(type, payload);
       if (empty) return { error: empty };
+      return { error: null, payload };
+    }
+    case VIEW_TO_HOST.StudioReady: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.ready payload must be an object'),
+        };
+      }
+      const view = requireStudioView(VIEW_TO_HOST.StudioReady, payload);
+      if (view) return { error: view };
+      if (payload.capabilities !== undefined) {
+        if (
+          !Array.isArray(payload.capabilities) ||
+          !payload.capabilities.every((c) => typeof c === 'string')
+        ) {
+          return {
+            error: err(
+              PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+              'studio.ready.capabilities must be string[] when present',
+            ),
+          };
+        }
+      }
+      return { error: null, payload };
+    }
+    case VIEW_TO_HOST.StudioAction: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'studio.action payload must be an object'),
+        };
+      }
+      const view = requireStudioView(VIEW_TO_HOST.StudioAction, payload);
+      if (view) return { error: view };
+      if (typeof payload.action !== 'string' || payload.action.length === 0) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'studio.action.action must be a non-empty string',
+          ),
+        };
+      }
+      if (payload.args !== undefined && !isPlainObject(payload.args)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'studio.action.args must be an object when present',
+          ),
+        };
+      }
       return { error: null, payload };
     }
     default: {

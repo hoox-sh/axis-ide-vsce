@@ -52,6 +52,9 @@ export const HOST_TO_VIEW = {
   HostRunStatus: 'host.run.status',
   HostError: 'host.error',
   ResultsSet: 'results.set',
+  StudioInit: 'studio.init',
+  StudioSet: 'studio.set',
+  StudioNotice: 'studio.notice',
 } as const;
 
 /** View → host message types. */
@@ -63,6 +66,8 @@ export const VIEW_TO_HOST = {
   ChartRequestReload: 'chart.requestReload',
   ResultsFocus: 'results.focus',
   ResultsReady: 'results.ready',
+  StudioReady: 'studio.ready',
+  StudioAction: 'studio.action',
 } as const;
 
 export type HostToViewType = (typeof HOST_TO_VIEW)[keyof typeof HOST_TO_VIEW];
@@ -80,7 +85,10 @@ export const ALL_MESSAGE_TYPES: readonly MessageType[] = [
   ...Object.values(VIEW_TO_HOST),
 ];
 
-/** Frozen golden list matching design §6 (tests assert equality with ALL_MESSAGE_TYPES). */
+/**
+ * Frozen golden list — design §6 plus the additive `studio.*` namespace
+ * (tests assert equality with ALL_MESSAGE_TYPES).
+ */
 export const SECTION_6_MESSAGE_TYPES: readonly MessageType[] = [
   HOST_TO_VIEW.ChartInit,
   HOST_TO_VIEW.ChartFull,
@@ -97,6 +105,11 @@ export const SECTION_6_MESSAGE_TYPES: readonly MessageType[] = [
   HOST_TO_VIEW.ResultsSet,
   VIEW_TO_HOST.ResultsFocus,
   VIEW_TO_HOST.ResultsReady,
+  HOST_TO_VIEW.StudioInit,
+  HOST_TO_VIEW.StudioSet,
+  HOST_TO_VIEW.StudioNotice,
+  VIEW_TO_HOST.StudioReady,
+  VIEW_TO_HOST.StudioAction,
 ];
 
 export const HOST_TO_VIEW_TYPES: ReadonlySet<string> = new Set(Object.values(HOST_TO_VIEW));
@@ -192,6 +205,45 @@ export interface ResultsFocusPayload {
 
 export type ResultsReadyPayload = Record<string, never>;
 
+/**
+ * Generic studio namespace payloads — one shape family for every studio
+ * beyond the chart/results specialists. `view` is the studio id (free-form
+ * non-empty string), not a `WebviewView`.
+ */
+
+export interface StudioInitPayload {
+  view: string;
+  /** Initial studio state; any JSON value, optional on the wire. */
+  data?: unknown;
+}
+
+export interface StudioSetPayload {
+  view: string;
+  /** New studio state; any JSON value, required. */
+  data: unknown;
+}
+
+export interface StudioNoticePayload {
+  view: string;
+  /** Notice level, e.g. "info" | "warn" | "error" (non-empty string). */
+  level: string;
+  message: string;
+}
+
+export interface StudioReadyPayload {
+  view: string;
+  /** Capability names; optional and left untouched (no defaulting). */
+  capabilities?: string[];
+}
+
+export interface StudioActionPayload {
+  view: string;
+  /** Studio-defined action name, e.g. "copy" | "reveal" | "refresh". */
+  action: string;
+  /** Optional plain-object action arguments (arrays rejected). */
+  args?: Record<string, unknown>;
+}
+
 /** Payload map keyed by message-type constants (no duplicated wire strings). */
 export type PayloadByType = {
   [HOST_TO_VIEW.ChartInit]: ChartInitPayload;
@@ -209,6 +261,11 @@ export type PayloadByType = {
   [VIEW_TO_HOST.ChartRequestReload]: ChartRequestReloadPayload;
   [VIEW_TO_HOST.ResultsFocus]: ResultsFocusPayload;
   [VIEW_TO_HOST.ResultsReady]: ResultsReadyPayload;
+  [HOST_TO_VIEW.StudioInit]: StudioInitPayload;
+  [HOST_TO_VIEW.StudioSet]: StudioSetPayload;
+  [HOST_TO_VIEW.StudioNotice]: StudioNoticePayload;
+  [VIEW_TO_HOST.StudioReady]: StudioReadyPayload;
+  [VIEW_TO_HOST.StudioAction]: StudioActionPayload;
 };
 
 export interface ProtocolError {
