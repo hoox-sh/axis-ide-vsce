@@ -1,29 +1,11 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Symbols panel — VS Code theme tokens only. No toolkit.
+ * Symbols panel — layout + visual rules only. The shared base (tokens,
+ * theme reset + [hidden] + focus-visible + scrollbars, ax-* components) is
+ * imported by main.ts ahead of this file. The local focus-visible block
+ * keeps the panel's historical outline-offset (the shared rule uses -1px).
  */
-
-html,
-body {
-  border: 0;
-  outline: 0;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--vscode-panel-background, var(--vscode-editor-background));
-  color: var(--vscode-foreground);
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
 
 .symbols-live {
   position: absolute;
@@ -161,10 +143,6 @@ body {
   min-width: 0;
 }
 
-.symbols-recent[hidden] {
-  display: none;
-}
-
 .symbols-recent__label {
   margin: 0;
   font-size: 11px;
@@ -254,10 +232,6 @@ body {
   margin: 8px 0 0;
   color: var(--vscode-descriptionForeground);
   font-size: 12px;
-}
-
-.symbols-empty[hidden] {
-  display: none;
 }
 
 .symbols-insert:focus-visible,

@@ -21,12 +21,13 @@ import {
   MAX_SYMBOL_TEXT,
   SYMBOL_CATEGORIES,
   SYMBOL_CATEGORY_LABELS,
-  encodeSymbolsSet,
+  SYMBOLS_STUDIO_VIEW,
   filterSymbols,
   isSymbolCategory,
   listSymbols,
-  parseSymbolsWebMessage,
   symbolCategoryLabel,
+  symbolsStudioData,
+  symbolsTextFromArgs,
   type AxisSymbol,
 } from './symbols-messages';
 
@@ -133,31 +134,30 @@ describe('filterSymbols', () => {
   });
 });
 
-describe('encodeSymbolsSet', () => {
+describe('symbolsStudioData', () => {
   test('posts a sanitized snapshot and coerces category', () => {
-    const full = encodeSymbolsSet(listSymbols(), '  up  ', 'ARROWS');
-    expect(full.type).toBe('symbols.set');
+    const full = symbolsStudioData(listSymbols(), '  up  ', 'ARROWS');
     expect(full.query).toBe('up');
     expect(full.category).toBe('arrows');
     expect(full.symbols).toEqual(listSymbols());
 
-    const all = encodeSymbolsSet(listSymbols(), '', 'all');
+    const all = symbolsStudioData(listSymbols(), '', 'all');
     expect(all.category).toBe('');
     expect(all.symbols).toEqual(listSymbols());
 
-    expect(encodeSymbolsSet(listSymbols(), 1, null)).toEqual({
-      type: 'symbols.set',
+    expect(symbolsStudioData(listSymbols(), 1, null)).toEqual({
       symbols: listSymbols(),
       query: '',
       category: '',
     });
-    expect(encodeSymbolsSet(listSymbols(), 'x', 'nope').category).toBe('');
-    expect(encodeSymbolsSet({ not: 'array' }, '', 'stars').symbols).toEqual([]);
+    expect(symbolsStudioData(listSymbols(), 'x', 'nope').category).toBe('');
+    expect(symbolsStudioData({ not: 'array' }, '', 'stars').symbols).toEqual([]);
+    expect(SYMBOLS_STUDIO_VIEW).toBe('symbols');
   });
 
   test('drops hostile rows and survives a throwing iterator', () => {
     const good = sample();
-    const mixed = encodeSymbolsSet(
+    const mixed = symbolsStudioData(
       [
         null,
         [],
@@ -191,34 +191,31 @@ describe('encodeSymbolsSet', () => {
         throw new Error('iter');
       }
     }
-    const blown = encodeSymbolsSet(new Boom(1), ' keep ', 'stars');
-    expect(blown).toEqual({ type: 'symbols.set', symbols: [], query: 'keep', category: 'stars' });
+    const blown = symbolsStudioData(new Boom(1), ' keep ', 'stars');
+    expect(blown).toEqual({ symbols: [], query: 'keep', category: 'stars' });
   });
 });
 
-describe('parseSymbolsWebMessage', () => {
-  test('accepts insert and copy text and rejects the rest', () => {
-    expect(parseSymbolsWebMessage({ type: 'symbols.insert', text: '\u2191' })).toEqual({
-      type: 'symbols.insert',
-      text: '\u2191',
-    });
-    expect(parseSymbolsWebMessage({ type: 'symbols.copy', text: 'x'.repeat(MAX_SYMBOL_TEXT) })).toEqual({
-      type: 'symbols.copy',
-      text: 'x'.repeat(MAX_SYMBOL_TEXT),
-    });
-    expect(parseSymbolsWebMessage(null)).toBeNull();
-    expect(parseSymbolsWebMessage('symbols.insert')).toBeNull();
-    expect(parseSymbolsWebMessage(1)).toBeNull();
-    expect(parseSymbolsWebMessage([])).toBeNull();
-    expect(parseSymbolsWebMessage({ type: 'symbols.set', text: '\u2191' })).toBeNull();
-    expect(parseSymbolsWebMessage({ type: 'symbols.insert', text: 1 })).toBeNull();
-    expect(parseSymbolsWebMessage({ type: 'symbols.insert' })).toBeNull();
-    expect(parseSymbolsWebMessage({ type: 'symbols.copy', text: '' })).toBeNull();
-    expect(parseSymbolsWebMessage({ type: 'symbols.insert', text: 'x'.repeat(MAX_SYMBOL_TEXT + 1) })).toBeNull();
+describe('symbolsTextFromArgs', () => {
+  test('keeps the old insert/copy text validation and rejects the rest', () => {
+    expect(symbolsTextFromArgs({ text: '\u2191' })).toBe('\u2191');
+    expect(symbolsTextFromArgs({ text: 'x'.repeat(MAX_SYMBOL_TEXT) })).toBe(
+      'x'.repeat(MAX_SYMBOL_TEXT),
+    );
+    expect(symbolsTextFromArgs({ text: '\u2191', extra: 1 })).toBe('\u2191');
+    expect(symbolsTextFromArgs(null)).toBeNull();
+    expect(symbolsTextFromArgs(undefined)).toBeNull();
+    expect(symbolsTextFromArgs('symbols.insert')).toBeNull();
+    expect(symbolsTextFromArgs(1)).toBeNull();
+    expect(symbolsTextFromArgs([])).toBeNull();
+    expect(symbolsTextFromArgs({})).toBeNull();
+    expect(symbolsTextFromArgs({ text: 1 })).toBeNull();
+    expect(symbolsTextFromArgs({ text: '' })).toBeNull();
+    expect(symbolsTextFromArgs({ text: 'x'.repeat(MAX_SYMBOL_TEXT + 1) })).toBeNull();
     expect(
-      parseSymbolsWebMessage(
+      symbolsTextFromArgs(
         new Proxy(
-          { type: 'symbols.insert', text: '\u2191' },
+          { text: '\u2191' },
           { get() { throw new Error('msg'); } },
         ),
       ),

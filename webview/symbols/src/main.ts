@@ -17,31 +17,33 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Symbols webview. Host posts symbols.set. Click inserts; Shift-click or
- * Copy copies. Recent inserts persist in webview state via setState.
- * Status text is local ("Inserted" / "Copied").
+ * AXIS Symbols studio webview on the shared runtime + studio.* protocol.
+ * Host posts studio.init / studio.set with data `{ symbols, query,
+ * category }`. Click inserts; Shift-click or Copy copies. Recent inserts
+ * persist in webview state via setState. Status text is local
+ * ("Inserted" / "Copied").
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
+import { createFilter } from '@axis-shared/state';
+import { setHidden, setText } from '@axis-shared/dom';
+import {
+  SYMBOLS_VIEW,
+  decodeSymbolsSet,
+  encodeSymbolsCopy,
+  encodeSymbolsInsert,
+  encodeSymbolsReady,
+  symbolRowFrom,
+  type SymbolRow,
+} from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
-
-type SymbolRow = {
-  id: string;
-  category: string;
-  char: string;
-  name: string;
-};
-
-type PersistedState = {
-  recent: SymbolRow[];
-};
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: SYMBOLS_VIEW });
 
 const CHIPS: ReadonlyArray<{ id: string; label: string }> = [
   { id: '', label: 'All' },
@@ -55,15 +57,26 @@ const CHIPS: ReadonlyArray<{ id: string; label: string }> = [
 const CATEGORY_IDS = new Set(['arrows', 'shapes', 'box', 'checks', 'stars']);
 const RECENT_MAX = 8;
 
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
+type PersistedState = {
+  recent: SymbolRow[];
+};
+
 let shellReady = false;
 let userEdited = false;
 let received = false;
 let catalog: SymbolRow[] = [];
-let query = '';
-let category = '';
 let recent: SymbolRow[] = [];
+
+// Shared filter machine. In-memory only (no persistKey / api) to keep the
+// pre-migration behavior: query + category start empty on every webview
+// load. The '' chip is the All chip, as before.
+const symbolFilter = createFilter({
+  chips: ['', 'arrows', 'shapes', 'box', 'checks', 'stars'],
+  initial: { query: '', filter: '' },
+  onChange: () => {
+    render();
+  },
+});
 
 function canonicalCategory(value: string): string {
   const raw = value.trim().toLowerCase();
@@ -78,7 +91,7 @@ function readPersisted(raw: unknown): SymbolRow[] {
     if (!Array.isArray(list)) return [];
     const out: SymbolRow[] = [];
     for (const item of list) {
-      const row = readRow(item);
+      const row = symbolRowFrom(item);
       if (row) out.push(row);
       if (out.length >= RECENT_MAX) break;
     }
@@ -89,12 +102,7 @@ function readPersisted(raw: unknown): SymbolRow[] {
 }
 
 function persistRecent(): void {
-  if (!apiRef || disposed) return;
-  try {
-    apiRef.setState({ recent } satisfies PersistedState);
-  } catch {
-    // host state is optional
-  }
+  studio.setState({ recent } satisfies PersistedState);
 }
 
 function pushRecent(symbol: SymbolRow): void {
@@ -133,41 +141,11 @@ function ensureLive(): HTMLElement {
   return el;
 }
 
-function readRow(item: unknown): SymbolRow | null {
-  if (item === null || typeof item !== 'object') return null;
-  const row = item as Record<string, unknown>;
-  const id = row.id;
-  const rowCategory = row.category;
-  const char = row.char;
-  const name = row.name;
-  if (typeof id !== 'string' || typeof rowCategory !== 'string') return null;
-  if (typeof char !== 'string' || typeof name !== 'string') return null;
-  if (!id || !char || !name) return null;
-  return { id, category: rowCategory, char, name };
-}
-
-function decodeSet(data: unknown): { symbols: SymbolRow[]; query: string; category: string } | null {
-  try {
-    if (data === null || typeof data !== 'object') return null;
-    const rec = data as Record<string, unknown>;
-    if (rec.type !== 'symbols.set' || !Array.isArray(rec.symbols)) return null;
-    const symbols: SymbolRow[] = [];
-    for (const item of rec.symbols) {
-      const row = readRow(item);
-      if (row) symbols.push(row);
-    }
-    const nextQuery = typeof rec.query === 'string' ? rec.query : '';
-    const nextCategory = typeof rec.category === 'string' ? rec.category : '';
-    return { symbols, query: nextQuery, category: nextCategory };
-  } catch {
-    return null;
-  }
-}
-
 function visibleSymbols(): SymbolRow[] {
+  const { query, filter } = symbolFilter.get();
   const q = query.trim().toLowerCase();
   return catalog.filter((symbol) => {
-    if (category && symbol.category !== category) return false;
+    if (filter && symbol.category !== filter) return false;
     if (!q) return true;
     return (
       symbol.name.toLowerCase().includes(q) ||
@@ -177,20 +155,11 @@ function visibleSymbols(): SymbolRow[] {
   });
 }
 
-function post(message: { type: 'symbols.insert' | 'symbols.copy'; text: string }): void {
-  if (!apiRef || disposed) return;
-  try {
-    apiRef.postMessage(message);
-  } catch {
-    // host may be gone
-  }
-}
-
 function announce(status: 'Inserted' | 'Copied'): void {
   const live = ensureLive();
   live.textContent = '';
   window.setTimeout(() => {
-    if (!disposed && live.isConnected) live.textContent = status;
+    if (live.isConnected) live.textContent = status;
   }, 30);
 }
 
@@ -205,13 +174,13 @@ function findByChar(text: string): SymbolRow | null {
 }
 
 function act(text: string, copy: boolean): void {
-  if (!text || disposed) return;
+  if (!text) return;
   if (copy) {
-    post({ type: 'symbols.copy', text });
+    studio.post(encodeSymbolsCopy(text));
     announce('Copied');
     return;
   }
-  post({ type: 'symbols.insert', text });
+  studio.post(encodeSymbolsInsert(text));
   announce('Inserted');
   const symbol = findByChar(text);
   if (symbol) pushRecent(symbol);
@@ -260,7 +229,7 @@ function renderChips(): void {
   if (!chips) return;
   chips.querySelectorAll('button').forEach((button) => {
     const id = button.getAttribute('data-category') ?? '';
-    const on = id === category;
+    const on = symbolFilter.isActive(id);
     button.setAttribute('aria-pressed', on ? 'true' : 'false');
     button.classList.toggle('is-active', on);
   });
@@ -289,17 +258,17 @@ function renderRecent(): void {
 function renderGrid(): void {
   const grid = document.getElementById('symbols-grid');
   const empty = document.getElementById('symbols-empty');
-  const count = document.getElementById('symbols-count');
   if (!grid || !empty) return;
   const rows = visibleSymbols();
-  if (count) count.textContent = String(rows.length);
+  setText('symbols-count', String(rows.length));
   grid.replaceChildren();
   for (const symbol of rows) grid.append(symbolItem(symbol));
   const showEmpty = rows.length === 0;
-  empty.hidden = !showEmpty;
+  setHidden('symbols-empty', !showEmpty);
   if (showEmpty) {
+    const { query, filter } = symbolFilter.get();
     if (!received) empty.textContent = 'Loading symbols…';
-    else if (query.trim() || category) empty.textContent = 'No symbols match your search.';
+    else if (query.trim() || filter) empty.textContent = 'No symbols match your search.';
     else empty.textContent = 'No symbols available.';
   }
 }
@@ -307,6 +276,7 @@ function renderGrid(): void {
 function render(): void {
   ensureShell();
   const search = document.getElementById('symbols-search');
+  const query = symbolFilter.get().query;
   if (search instanceof HTMLInputElement && document.activeElement !== search && search.value !== query) {
     search.value = query;
   }
@@ -360,11 +330,10 @@ function ensureShell(): void {
   search.autocomplete = 'off';
   search.spellcheck = false;
   search.setAttribute('aria-label', 'Search symbols');
-  search.value = query;
+  search.value = symbolFilter.get().query;
   search.addEventListener('input', () => {
     userEdited = true;
-    query = search.value;
-    renderGrid();
+    symbolFilter.setQuery(search.value);
   });
 
   const chips = document.createElement('div');
@@ -378,12 +347,10 @@ function ensureShell(): void {
     button.className = 'symbols-chip';
     button.textContent = chip.label;
     button.setAttribute('data-category', chip.id);
-    button.setAttribute('aria-pressed', chip.id === category ? 'true' : 'false');
+    button.setAttribute('aria-pressed', symbolFilter.isActive(chip.id) ? 'true' : 'false');
     button.addEventListener('click', () => {
       userEdited = true;
-      category = chip.id;
-      renderChips();
-      renderGrid();
+      symbolFilter.setFilter(chip.id);
     });
     chips.append(button);
   }
@@ -450,42 +417,24 @@ function ensureShell(): void {
   root.append(shell);
 }
 
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeSet(event.data);
+function onHostMessage(message: unknown): void {
+  const decoded = decodeSymbolsSet(message);
   if (!decoded) return;
   catalog = decoded.symbols;
   received = true;
   if (!userEdited) {
-    query = decoded.query.trim();
-    category = canonicalCategory(decoded.category);
+    symbolFilter.setQuery(decoded.query.trim());
+    symbolFilter.setFilter(canonicalCategory(decoded.category));
   }
   render();
 }
 
 function main(): void {
-  try {
-    apiRef = acquireVsCodeApi();
-  } catch {
-    apiRef = null;
-  }
-  if (apiRef) {
-    try {
-      recent = readPersisted(apiRef.getState());
-    } catch {
-      recent = [];
-    }
-  }
-  window.addEventListener('message', onHostMessage);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
+  recent = readPersisted(studio.getState());
+  studio.onMessage(onHostMessage);
   ensureLive();
   render();
+  studio.post(encodeSymbolsReady());
 }
 
 main();

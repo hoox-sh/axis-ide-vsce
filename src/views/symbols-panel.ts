@@ -17,27 +17,36 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Bottom-panel Symbols webview (`axis.symbols`).
- * Inserts at the active text editor cursor. Copy uses the host clipboard.
- * "Inserted" / "Copied" are announced by the webview, not the host.
+ * Bottom-panel Symbols view (`axis.symbols`) — thin shim over the generic
+ * studio provider (enhancement plan §5 Phase 2). Inserts at the active text
+ * editor cursor; Copy uses the host clipboard; "Inserted" / "Copied" are
+ * announced by the webview, not the host. The first `studio.ready`
+ * handshake is answered with `studio.init` carrying the catalog (the old
+ * panel posted a flat `symbols.set` at resolve time, retried on 0/50/200ms
+ * timers — the handshake replaces that race). vscode glue only — the pure
+ * logic lives in `symbols-messages.ts` and `symbols-studio.ts`.
  */
 
 import { existsSync } from 'node:fs';
 import {
+  ColorThemeKind,
   type ExtensionContext,
   type Position,
   type TextEditor,
   Uri,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
   env,
   window,
 } from 'vscode';
-import { buildSymbolsWebviewHtml } from './symbols-html';
-import { encodeSymbolsSet, listSymbols, parseSymbolsWebMessage } from './symbols-messages';
+import { SYMBOLS_STUDIO_VIEW, listSymbols, symbolsStudioData, symbolsTextFromArgs } from './symbols-messages';
+import { buildSymbolsStudioBody, symbolsInsertPositions, SYMBOLS_STUDIO_VIEW_ID } from './symbols-studio';
+import type { StudioRegistration } from './studio-registry';
+import {
+  registerStudioView,
+  type StudioProviderDeps,
+  type StudioViewHost,
+} from './studio-provider';
 
-export const SYMBOLS_VIEW_ID = 'axis.symbols';
+export const SYMBOLS_VIEW_ID = SYMBOLS_STUDIO_VIEW_ID;
 
 const NONCE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 const NO_EDITOR = 'AXIS: Open an editor to insert a symbol.';
@@ -46,52 +55,51 @@ const COPY_FAILED = 'AXIS: Could not copy the symbol.';
 
 function createNonce(): string {
   let text = '';
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < 32; i += 1) {
     text += NONCE_ALPHABET.charAt(Math.floor(Math.random() * NONCE_ALPHABET.length));
   }
   return text;
 }
 
-function symbolsAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'symbols', file);
+function themeBodyClass(kind: ColorThemeKind): string {
+  switch (kind) {
+    case ColorThemeKind.Light:
+      return 'vscode-light';
+    case ColorThemeKind.HighContrast:
+      return 'vscode-high-contrast';
+    case ColorThemeKind.HighContrastLight:
+      return 'vscode-high-contrast-light';
+    default:
+      return 'vscode-dark';
+  }
 }
 
-function getSymbolsHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = symbolsAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
+function currentThemeBodyClass(): string {
   try {
-    jsPath = mainJs.fsPath;
+    return themeBodyClass(window.activeColorTheme.kind);
   } catch {
-    jsPath = '';
+    return 'vscode-dark';
   }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS symbols webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:symbols`,
-    );
-  }
-  const script = webview.asWebviewUri(symbolsAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = symbolsAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildSymbolsWebviewHtml({
-    cspSource: webview.cspSource,
-    nonce: createNonce(),
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-  });
 }
 
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : 'AXIS symbols webview failed to load.';
-  return `<!DOCTYPE html><html lang="en"><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** `StudioProviderDeps` assembled from the vscode API, symbols-panel pattern. */
+function symbolsStudioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...segments) => Uri.joinPath(base as Uri, ...segments),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: currentThemeBodyClass,
+    createNonce,
+  };
+}
+
+/** Structural `window.registerWebviewViewProvider` forwarded to the shim. */
+function studioViewHost(): StudioViewHost {
+  return {
+    registerWebviewViewProvider: (viewId, provider, options) =>
+      window.registerWebviewViewProvider(viewId, provider, options),
+  };
 }
 
 function warn(message: string): void {
@@ -100,21 +108,6 @@ function warn(message: string): void {
   } catch {
     // window unavailable
   }
-}
-
-function insertPositions(editor: TextEditor): Position[] {
-  const selections = editor.selections?.length ? editor.selections : [editor.selection];
-  const seen = new Set<string>();
-  const positions: Position[] = [];
-  for (const selection of selections) {
-    const at = selection?.active;
-    if (!at) continue;
-    const key = `${at.line}:${at.character}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    positions.push(at);
-  }
-  return positions;
 }
 
 async function insertSymbolText(text: string): Promise<void> {
@@ -129,7 +122,7 @@ async function insertSymbolText(text: string): Promise<void> {
     return;
   }
   try {
-    const positions = insertPositions(editor);
+    const positions = symbolsInsertPositions<Position>(editor);
     if (positions.length === 0) {
       warn(INSERT_FAILED);
       return;
@@ -151,99 +144,29 @@ async function copySymbolText(text: string): Promise<void> {
   }
 }
 
-/**
- * WebviewViewProvider for the Symbols panel (`axis.symbols`).
- * Posts the full catalog on resolve (`symbols.set`).
- */
-export class SymbolsPanelProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
-  private timers: Array<ReturnType<typeof setTimeout>> = [];
-
-  constructor(private readonly context: ExtensionContext) {}
-
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'symbols')],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        void this.onMessage(raw);
-      });
-
-      webviewView.onDidDispose(() => {
-        this.clearTimers();
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getSymbolsHtml(webview, this.context.extensionUri);
-      } catch (error) {
-        try {
-          webview.html = fallbackHtml(error);
-        } catch {
-          // html setter unavailable
-        }
-        return;
-      }
-      this.scheduleCatalog();
-    } catch {
-      // never throw from resolve
-    }
-  }
-
-  private clearTimers(): void {
-    for (const timer of this.timers) clearTimeout(timer);
-    this.timers = [];
-  }
-
-  /** Post now and twice more so a late webview script still receives the catalog. */
-  private scheduleCatalog(): void {
-    this.clearTimers();
-    this.postCatalog();
-    for (const delay of [0, 50, 200]) {
-      const timer = setTimeout(() => this.postCatalog(), delay);
-      this.timers.push(timer);
-    }
-  }
-
-  private postCatalog(): void {
-    const webview = this.view?.webview;
-    if (!webview) return;
-    try {
-      void webview.postMessage(encodeSymbolsSet(listSymbols(), '', ''));
-    } catch {
-      // disposing
-    }
-  }
-
-  private async onMessage(raw: unknown): Promise<void> {
-    const msg = parseSymbolsWebMessage(raw);
-    if (!msg) return;
-    if (msg.type === 'symbols.copy') {
-      await copySymbolText(msg.text);
-      return;
-    }
-    await insertSymbolText(msg.text);
-  }
-}
-
 /** Register the Symbols bottom-panel view (`axis.symbols`). */
 export function registerSymbolsPanel(context: ExtensionContext): void {
-  const provider = new SymbolsPanelProvider(context);
-  try {
-    const disp = window.registerWebviewViewProvider(SYMBOLS_VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: false },
-    });
-    try {
-      context.subscriptions.push(disp);
-    } catch {
-      // subscriptions unavailable
-    }
-  } catch {
-    // uncontributed view id / test host
-  }
+  registerStudioView(
+    {
+      id: SYMBOLS_STUDIO_VIEW,
+      title: 'Symbols',
+      viewId: SYMBOLS_VIEW_ID,
+      retainContextWhenHidden: false,
+      buildBody: buildSymbolsStudioBody,
+      actions: {
+        copy: (args) => {
+          const text = symbolsTextFromArgs(args);
+          if (text !== null) void copySymbolText(text);
+        },
+        insert: (args) => {
+          const text = symbolsTextFromArgs(args);
+          if (text !== null) void insertSymbolText(text);
+        },
+      },
+      restore: () => symbolsStudioData(listSymbols(), '', ''),
+    },
+    symbolsStudioDeps(context),
+    studioViewHost(),
+    context,
+  );
 }

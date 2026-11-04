@@ -17,8 +17,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Symbols panel catalog and local messages.
- * Not part of axis.webview.v1. listSymbols / filterSymbols never throw.
+ * Symbols studio catalog + `studio.*` wire layer. `listSymbols` /
+ * `filterSymbols` never throw. Envelope encode/decode lives in ONE place —
+ * the shared `studio-protocol` bridge → `src/protocol/codec` — shared by
+ * host and view; this module owns the symbols `data` shape
+ * (`symbolsStudioData`, the old flat `symbols.set` payload fields preserved
+ * verbatim as `data`), the wire view id, and the insert/copy action `args`
+ * validation (`symbolsTextFromArgs`).
  */
 
 export const SYMBOL_CATEGORIES = ['arrows', 'shapes', 'box', 'checks', 'stars'] as const;
@@ -41,18 +46,18 @@ export const SYMBOL_CATEGORY_LABELS: Readonly<Record<SymbolCategory, string>> = 
   stars: 'Stars',
 };
 
-/** Host → webview. */
-export type SymbolsSetMessage = {
-  type: 'symbols.set';
+/** `view` value for every Symbols studio envelope — exactly `'symbols'`. */
+export const SYMBOLS_STUDIO_VIEW = 'symbols';
+
+/**
+ * `studio.init` / `studio.set` data — the old flat `symbols.set` payload
+ * fields (`symbols`, `query`, `category`), preserved verbatim minus `type`.
+ */
+export interface SymbolsStudioData {
   symbols: AxisSymbol[];
   query: string;
   category: string;
-};
-
-/** Webview → host. */
-export type SymbolsInsertMessage = { type: 'symbols.insert'; text: string };
-export type SymbolsCopyMessage = { type: 'symbols.copy'; text: string };
-export type SymbolsWebToHost = SymbolsInsertMessage | SymbolsCopyMessage;
+}
 
 /** Cap for insert/copy text and catalog chars. */
 export const MAX_SYMBOL_TEXT = 16;
@@ -222,8 +227,12 @@ function sanitizeSymbol(raw: unknown): AxisSymbol | null {
   }
 }
 
-/** Host → view snapshot. Drops hostile rows. Never throws. */
-export function encodeSymbolsSet(symbols: unknown, query: unknown, category: unknown): SymbolsSetMessage {
+/** Host → view snapshot (the old `symbols.set` payload fields verbatim). Drops hostile rows. Never throws. */
+export function symbolsStudioData(
+  symbols: unknown,
+  query: unknown,
+  category: unknown,
+): SymbolsStudioData {
   const text = canonicalQuery(query);
   const cat = canonicalCategory(category);
   try {
@@ -234,24 +243,29 @@ export function encodeSymbolsSet(symbols: unknown, query: unknown, category: unk
         if (symbol) list.push(symbol);
       }
     }
-    return { type: 'symbols.set', symbols: list, query: text, category: cat };
+    return { symbols: list, query: text, category: cat };
   } catch {
-    return { type: 'symbols.set', symbols: [], query: text, category: cat };
+    return { symbols: [], query: text, category: cat };
   }
 }
 
-/** Decode view → host. Hostile input returns null. Never throws. */
-export function parseSymbolsWebMessage(raw: unknown): SymbolsWebToHost | null {
+/**
+ * Old `parseSymbolsWebMessage` text validation, moved into `studio.action`
+ * `args`: a non-empty string capped at `MAX_SYMBOL_TEXT` (the insert and
+ * copy actions share it — the old parser accepted the same `text` for both
+ * `symbols.insert` and `symbols.copy`). Invalid args are null — the action
+ * handlers ignore them exactly like the old parser returned null. Never
+ * throws.
+ */
+export function symbolsTextFromArgs(args: unknown): string | null {
   try {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const rec = raw as Record<string, unknown>;
-    const type = rec.type;
-    if (type !== 'symbols.insert' && type !== 'symbols.copy') return null;
-    const text = rec.text;
+    if (args === null || typeof args !== 'object' || Array.isArray(args)) return null;
+    const text = (args as Record<string, unknown>).text;
     if (typeof text !== 'string') return null;
     if (text.length === 0 || text.length > MAX_SYMBOL_TEXT) return null;
-    return { type, text };
+    return text;
   } catch {
+    // hostile args getters — drop the action
     return null;
   }
 }
