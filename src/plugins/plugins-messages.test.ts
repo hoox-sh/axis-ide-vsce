@@ -17,18 +17,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { htmlHasInlineScript } from '../editors/chart-html';
+import { HOST_TO_VIEW, PROTOCOL_VERSION, VIEW_TO_HOST, decode, encode } from '../protocol';
 import { DEFAULT_ACTIVE_PLUGINS_V1 } from './types';
 import {
   DEFAULT_PLUGINS_FLAGS,
+  PLUGINS_STUDIO_VIEW,
+  PLUGINS_STUDIO_VIEW_ID,
   PLUGIN_KIND_ROLES,
   buildPluginCards,
-  decodePluginsHostToWeb,
-  decodePluginsWebToHost,
-  encodePluginsInit,
-  encodePluginsState,
+  buildPluginsStudioBody,
   extraForPluginCard,
   parsePluginsFlags,
   pluginCardFromDescriptor,
+  pluginsActivateFromArgs,
+  pluginsInitData,
+  pluginsStateData,
+  pluginsStudioRegistration,
+  type PluginsStudioHandlers,
 } from './plugins-messages';
 
 function hostileGet(key: string): Record<string, unknown> {
@@ -40,6 +46,11 @@ function hostileGet(key: string): Record<string, unknown> {
 }
 
 describe('plugins-messages', () => {
+  test('studio identity constants match the axis.plugins view', () => {
+    expect(PLUGINS_STUDIO_VIEW).toBe('plugins');
+    expect(PLUGINS_STUDIO_VIEW_ID).toBe('axis.plugins');
+  });
+
   test('parsePluginsFlags defaults and explicit true', () => {
     expect(parsePluginsFlags(undefined)).toEqual(DEFAULT_PLUGINS_FLAGS);
     expect(parsePluginsFlags(null)).toEqual(DEFAULT_PLUGINS_FLAGS);
@@ -166,8 +177,8 @@ describe('plugins-messages', () => {
     expect(buildPluginCards(iter, flags)).toEqual([]);
   });
 
-  test('encodePluginsInit / encodePluginsState never throw', () => {
-    const init = encodePluginsInit(
+  test('pluginsInitData / pluginsStateData never throw', () => {
+    const init = pluginsInitData(
       [
         {
           id: 'binance-ws',
@@ -179,242 +190,160 @@ describe('plugins-messages', () => {
       { source: 'okx-rest', apiKey: 'secret' },
       { liveEnabled: true },
     );
-    expect(init.type).toBe('plugins.init');
-    if (init.type !== 'plugins.init') return;
     expect(init.plugins[0]?.extra?.liveEnabled).toBe(true);
     expect(init.active.source).toBe('okx-rest');
     expect((init.active as { apiKey?: string }).apiKey).toBeUndefined();
     expect(init.flags.liveEnabled).toBe(true);
 
-    expect(encodePluginsInit({}, null, []).plugins).toEqual([]);
-    expect(encodePluginsInit(null, [], null).active.source).toBe(
+    expect(pluginsInitData({}, null, []).plugins).toEqual([]);
+    expect(pluginsInitData(null, [], null).active.source).toBe(
       DEFAULT_ACTIVE_PLUGINS_V1.source,
     );
 
-    const state = encodePluginsState({ engine: 'pyne-worker' }, { allowPyodide: true });
-    expect(state.type).toBe('plugins.state');
-    if (state.type !== 'plugins.state') return;
+    const state = pluginsStateData({ engine: 'pyne-worker' }, { allowPyodide: true });
     expect(state.active.engine).toBe('pyne-worker');
     expect(state.flags.allowPyodide).toBe(true);
 
-    expect(() => encodePluginsInit(hostileGet('x'), hostileGet('y'), hostileGet('z'))).not.toThrow();
-    expect(() => encodePluginsState(hostileGet('active'), hostileGet('flags'))).not.toThrow();
+    expect(() => pluginsInitData(hostileGet('x'), hostileGet('y'), hostileGet('z'))).not.toThrow();
+    expect(() => pluginsStateData(hostileGet('active'), hostileGet('flags'))).not.toThrow();
   });
 
-  test('decodePluginsWebToHost rejects arrays and hostile getters', () => {
-    expect(decodePluginsWebToHost(undefined)).toBeNull();
-    expect(decodePluginsWebToHost(null)).toBeNull();
-    expect(decodePluginsWebToHost([])).toBeNull();
-    expect(decodePluginsWebToHost('x')).toBeNull();
-    expect(decodePluginsWebToHost({ type: 'plugins.ready' })).toEqual({
-      type: 'plugins.ready',
+  test('pluginsInitData rides the studio.init envelope and survives the JSON wire', () => {
+    const data = pluginsInitData(
+      [{ id: 'pyodide', name: 'Pyodide', kind: 'engine', builtIn: true }],
+      { source: 'binance-rest' },
+      { allowPyodide: false },
+    );
+    const envelope = encode(HOST_TO_VIEW.StudioInit, { view: PLUGINS_STUDIO_VIEW, data });
+    expect(envelope.v).toBe(PROTOCOL_VERSION);
+    const decoded = decode(JSON.parse(JSON.stringify(envelope)));
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.envelope.type).toBe(HOST_TO_VIEW.StudioInit);
+    expect(decoded.envelope.payload).toEqual({ view: 'plugins', data });
+
+    const setData = pluginsStateData({ engine: 'server' }, {});
+    const setEnvelope = encode(HOST_TO_VIEW.StudioSet, { view: PLUGINS_STUDIO_VIEW, data: setData });
+    const setDecoded = decode(JSON.parse(JSON.stringify(setEnvelope)));
+    expect(setDecoded.ok).toBe(true);
+  });
+
+  test('pluginsActivateFromArgs keeps the old activate validation', () => {
+    expect(pluginsActivateFromArgs({ kind: 'source', id: 'okx-rest' })).toEqual({
+      kind: 'source',
+      id: 'okx-rest',
     });
-    expect(
-      decodePluginsWebToHost({ type: 'plugins.activate', kind: 'source', id: 'okx-rest' }),
-    ).toEqual({ type: 'plugins.activate', kind: 'source', id: 'okx-rest' });
-    expect(
-      decodePluginsWebToHost({
-        type: 'plugins.activate',
-        kind: '  source  ',
-        id: '  okx-rest  ',
-      }),
-    ).toEqual({ type: 'plugins.activate', kind: 'source', id: 'okx-rest' });
-    expect(
-      decodePluginsWebToHost({ type: 'plugins.activate', kind: 'source', id: '' }),
-    ).toBeNull();
-    expect(
-      decodePluginsWebToHost({ type: 'plugins.activate', kind: 'nope', id: 'x' }),
-    ).toBeNull();
-    expect(
-      decodePluginsWebToHost({ type: 'plugins.activate', kind: 1, id: 'x' }),
-    ).toBeNull();
-    expect(
-      decodePluginsWebToHost({
-        v: 1,
-        type: 'plugins.activate',
-        payload: { kind: 'engine', id: 'pyodide' },
-        ts: 1,
-      }),
-    ).toEqual({ type: 'plugins.activate', kind: 'engine', id: 'pyodide' });
-    expect(
-      decodePluginsWebToHost({ v: 1, type: 'plugins.ready', payload: {}, ts: 1 }),
-    ).toEqual({ type: 'plugins.ready' });
-    expect(decodePluginsWebToHost({ type: 'plugins.init' })).toBeNull();
-    expect(decodePluginsWebToHost(hostileGet('type'))).toBeNull();
+    expect(pluginsActivateFromArgs({ kind: '  source  ', id: '  okx-rest  ' })).toEqual({
+      kind: 'source',
+      id: 'okx-rest',
+    });
+    expect(pluginsActivateFromArgs({ kind: 'source', id: '' })).toBeNull();
+    expect(pluginsActivateFromArgs({ kind: 'source', id: '   ' })).toBeNull();
+    expect(pluginsActivateFromArgs({ kind: 'nope', id: 'x' })).toBeNull();
+    expect(pluginsActivateFromArgs({ kind: 1, id: 'x' })).toBeNull();
+    expect(pluginsActivateFromArgs({ id: 'x' })).toBeNull();
+    expect(pluginsActivateFromArgs({ kind: 'source' })).toBeNull();
+    expect(pluginsActivateFromArgs(undefined)).toBeNull();
+    expect(pluginsActivateFromArgs(null)).toBeNull();
+    expect(pluginsActivateFromArgs([])).toBeNull();
+    expect(pluginsActivateFromArgs('x')).toBeNull();
+    expect(pluginsActivateFromArgs({})).toBeNull();
+    expect(pluginsActivateFromArgs(hostileGet('kind'))).toBeNull();
     const kindBoom = {
-      type: 'plugins.activate',
       get kind() {
         throw new Error('kind');
       },
       id: 'x',
     };
-    expect(decodePluginsWebToHost(kindBoom)).toBeNull();
+    expect(pluginsActivateFromArgs(kindBoom)).toBeNull();
+  });
+});
+
+describe('buildPluginsStudioBody', () => {
+  test('emits the exact root the Plugins webview renders into', () => {
+    const handlers: PluginsStudioHandlers = {
+      activate: () => {},
+      state: () => pluginsInitData([], {}, {}),
+    };
+    const body = pluginsStudioRegistration(handlers).buildBody?.();
+    expect(body).toContain('id="plugins-root"');
+    expect(body).toContain('class="plugins-root"');
+    expect(body).toContain('data-axis-plugins-host="1"');
+    expect(body).toContain('class="plugins-root__header"');
+    expect(body).toContain('class="plugins-root__title"');
+    expect(body).toContain('Plugins</h1>');
+    expect(body).not.toContain('webview-ui-toolkit');
+    expect(body).not.toContain('vscode-elements');
+    expect(htmlHasInlineScript(body ?? '')).toBe(false);
+    expect(buildPluginsStudioBody()).toBe(body);
+  });
+});
+
+describe('pluginsStudioRegistration', () => {
+  function makeHandlers() {
+    const calls: string[] = [];
+    const handlers: PluginsStudioHandlers = {
+      activate: (kind, id) => {
+        calls.push(`activate:${kind}:${id}`);
+      },
+      state: () => {
+        calls.push('state');
+        return pluginsInitData([], { source: 'binance-rest' }, {});
+      },
+    };
+    return { handlers, calls };
+  }
+
+  test('registers the axis.plugins studio with retained context', () => {
+    const { handlers } = makeHandlers();
+    const entry = pluginsStudioRegistration(handlers);
+    expect(entry.id).toBe('plugins');
+    expect(entry.title).toBe('Plugins');
+    expect(entry.viewId).toBe('axis.plugins');
+    expect(entry.retainContextWhenHidden).toBe(true);
+    expect(Object.keys(entry.actions)).toEqual(['activate']);
   });
 
-  test('decodePluginsHostToWeb rejects arrays where objects expected', () => {
-    expect(decodePluginsHostToWeb(undefined)).toBeNull();
-    expect(decodePluginsHostToWeb([])).toBeNull();
-    expect(decodePluginsHostToWeb({ type: 'nope' })).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.state',
-        active: [],
-        flags: {},
-      }),
-    ).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.state',
-        active: 'x',
-        flags: {},
-      }),
-    ).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.state',
-        active: {},
-        flags: [],
-      }),
-    ).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.state',
-        active: { engine: 'server' },
-        flags: { allowPyodide: true },
-      }),
-    ).toEqual({
-      type: 'plugins.state',
-      active: { ...DEFAULT_ACTIVE_PLUGINS_V1, engine: 'server' },
-      flags: { allowPyodide: true, liveEnabled: false, allowUrlInstall: false },
+  test('studio.action activate dispatches to the handler with validated args', async () => {
+    const { handlers, calls } = makeHandlers();
+    const entry = pluginsStudioRegistration(handlers);
+    await entry.actions.activate?.(
+      { kind: ' source ', id: ' okx-rest ' },
+      { view: 'plugins', action: 'activate' },
+    );
+    await entry.actions.activate?.(
+      { kind: 'nope', id: 'x' },
+      { view: 'plugins', action: 'activate' },
+    );
+    await entry.actions.activate?.(undefined, { view: 'plugins', action: 'activate' });
+    expect(calls).toEqual(['activate:source:okx-rest', 'state']);
+  });
+
+  test('restore feeds the studio.init handshake with the current catalog', () => {
+    const { handlers } = makeHandlers();
+    const entry = pluginsStudioRegistration(handlers);
+    expect(entry.restore?.()).toEqual({
+      plugins: [],
+      active: { ...DEFAULT_ACTIVE_PLUGINS_V1, source: 'binance-rest' },
+      flags: DEFAULT_PLUGINS_FLAGS,
     });
+  });
 
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.init',
-        plugins: {},
-        active: {},
-        flags: {},
-      }),
-    ).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.init',
-        plugins: [],
-        active: [],
-        flags: {},
-      }),
-    ).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.init',
-        plugins: [],
-        active: {},
-        flags: [],
-      }),
-    ).toBeNull();
-
-    const decoded = decodePluginsHostToWeb({
-      type: 'plugins.init',
-      plugins: [
-        {
-          id: 'pyodide',
-          name: 'Pyodide',
-          kind: 'engine',
-          builtIn: true,
-          extra: { role: 'Pine runtime', flagOff: true, skip: { nested: true }, nan: Number.NaN },
-        },
-        { id: 'bad' },
-        null,
-        {
-          id: 'binance-rest',
-          kind: 'source',
-          extra: { role: 'Historical OHLCV', n: 1, ok: null },
-        },
-      ],
-      active: { source: 'binance-rest' },
-      flags: { allowPyodide: false },
+  test('action names and data ride the studio.* envelopes verbatim', () => {
+    const activateEnvelope = encode(VIEW_TO_HOST.StudioAction, {
+      view: PLUGINS_STUDIO_VIEW,
+      action: 'activate',
+      args: { kind: 'engine', id: 'pyodide' },
     });
-    expect(decoded?.type).toBe('plugins.init');
-    if (decoded?.type !== 'plugins.init') return;
-    expect(decoded.plugins.map((p) => p.id)).toEqual(['pyodide', 'binance-rest']);
-    expect(decoded.plugins[0]?.extra?.flagOff).toBe(true);
-    expect(decoded.plugins[1]?.extra?.n).toBe(1);
-    expect(decoded.plugins[1]?.extra?.ok).toBeNull();
-
-    const extraBoom = {
-      type: 'plugins.init',
-      plugins: [
-        {
-          id: 'local',
-          kind: 'storage',
-          extra: {
-            get role() {
-              throw new Error('role');
-            },
-          },
-        },
-        {
-          get id(): string {
-            throw new Error('card id');
-          },
-          kind: 'source',
-        },
-      ],
-      active: {},
-      flags: {},
-    };
-    const withBoom = decodePluginsHostToWeb(extraBoom);
-    expect(withBoom?.type).toBe('plugins.init');
-
-    const extraKeys = {
-      type: 'plugins.init',
-      plugins: [
-        {
-          id: 'local',
-          kind: 'storage',
-          extra: new Proxy(
-            {},
-            {
-              ownKeys() {
-                throw new Error('keys');
-              },
-              getOwnPropertyDescriptor() {
-                return { enumerable: true, configurable: true };
-              },
-            },
-          ),
-        },
-      ],
-      active: {},
-      flags: {},
-    };
-    expect(decodePluginsHostToWeb(extraKeys)?.type).toBe('plugins.init');
-
-    const cardIter: unknown[] = [
-      { id: 'local', kind: 'storage', builtIn: true, name: 'Local' },
-    ];
-    Object.defineProperty(cardIter, Symbol.iterator, {
-      value() {
-        throw new Error('iter');
-      },
+    const readyEnvelope = encode(VIEW_TO_HOST.StudioReady, { view: PLUGINS_STUDIO_VIEW });
+    const decodedActivate = decode(JSON.parse(JSON.stringify(activateEnvelope)));
+    const decodedReady = decode(JSON.parse(JSON.stringify(readyEnvelope)));
+    expect(decodedActivate.ok && decodedReady.ok).toBe(true);
+    if (!decodedActivate.ok) return;
+    expect(decodedActivate.envelope.payload).toEqual({
+      view: 'plugins',
+      action: 'activate',
+      args: { kind: 'engine', id: 'pyodide' },
     });
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.init',
-        plugins: cardIter,
-        active: {},
-        flags: {},
-      }),
-    ).toBeNull();
-
-    expect(decodePluginsHostToWeb(hostileGet('type'))).toBeNull();
-    expect(
-      decodePluginsHostToWeb({
-        type: 'plugins.init',
-        plugins: [{ id: 'x', kind: 'source', description: 12, name: 3, builtIn: 1 }],
-        active: {},
-        flags: {},
-      })?.type,
-    ).toBe('plugins.init');
   });
 });

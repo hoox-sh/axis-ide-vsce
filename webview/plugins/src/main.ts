@@ -17,13 +17,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Plugins studio webview: plugins.ready → plugins.init / plugins.state.
+ * AXIS Plugins studio on the shared runtime + studio.* protocol.
+ * Host posts studio.init (catalog + active + flags) / studio.set (active +
+ * flags); the view posts studio.ready and studio.action activate.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
 import {
+  PLUGINS_VIEW,
   KIND_TABS,
-  decodeHostMessage,
+  decodePluginsStudioMessage,
   encodePluginsActivate,
   encodePluginsReady,
   isKindTab,
@@ -43,16 +50,11 @@ import {
   type PluginsViewState,
 } from './state';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: PLUGINS_VIEW });
 
 let disposed = false;
-let apiRef: VsCodeApi | null = null;
 let state: PluginsViewState = initialPluginsState();
 let root: HTMLElement | null = null;
 
@@ -63,9 +65,9 @@ let copyFlashTimer: ReturnType<typeof setTimeout> | null = null;
 let activateFlashKey: FlashKey | null = null;
 let activateFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
-function persistTab(api: VsCodeApi, tab: KindTab): void {
+function persistTab(tab: KindTab): void {
   try {
-    api.setState({ tab });
+    studio.setState({ tab });
   } catch {
     // host state is optional
   }
@@ -147,37 +149,23 @@ function paint(): void {
   restoreFlashes();
 }
 
-function postReady(api: VsCodeApi): void {
-  if (disposed) return;
-  try {
-    api.postMessage(encodePluginsReady());
-  } catch {
-    // host may be gone
-  }
-}
-
 function postActivate(kind: string, id: string): void {
-  if (disposed || !apiRef) return;
   const msg = encodePluginsActivate(kind, id);
   if (!msg) return;
-  try {
-    apiRef.postMessage(msg);
-  } catch {
-    // host may be gone
-  }
+  studio.post(msg);
 }
 
-function onHostMessage(event: MessageEvent): void {
+function onHostMessage(message: unknown): void {
   if (disposed) return;
-  const decoded = decodeHostMessage(event.data);
-  if (!decoded.ok) return;
-  state = applyPluginsHostMessage(state, decoded.type, decoded.payload);
+  const decoded = decodePluginsStudioMessage(message);
+  if (!decoded) return;
+  state = applyPluginsHostMessage(state, decoded.kind, decoded.data);
   paint();
 }
 
 function selectTab(tab: KindTab): void {
   state = setKindTab(state, tab);
-  if (apiRef) persistTab(apiRef, state.tab);
+  persistTab(state.tab);
   paint();
   const selected = root?.querySelector(`#tab-${state.tab}`);
   if (selected instanceof HTMLElement) selected.focus();
@@ -321,36 +309,25 @@ function ensureRoot(): HTMLElement {
 }
 
 function main(): void {
-  const api = acquireVsCodeApi();
-  apiRef = api;
-  try {
-    state = initialPluginsState(tabFromPersisted(api.getState()));
-  } catch {
-    state = initialPluginsState();
-  }
+  state = initialPluginsState(tabFromPersisted(studio.getState()));
   root = ensureRoot();
-  window.addEventListener('message', onHostMessage);
   window.addEventListener('keydown', onGlobalKey);
   root.addEventListener('click', onClick);
   root.addEventListener('input', onInput);
   root.addEventListener('keydown', onKeyDown);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-      apiRef = null;
-      root = null;
-      copyFlashKey = null;
-      activateFlashKey = null;
-      if (copyFlashTimer) clearTimeout(copyFlashTimer);
-      if (activateFlashTimer) clearTimeout(activateFlashTimer);
-      copyFlashTimer = null;
-      activateFlashTimer = null;
-    },
-    { once: true },
-  );
+  window.addEventListener('pagehide', () => {
+    disposed = true;
+    root = null;
+    copyFlashKey = null;
+    activateFlashKey = null;
+    if (copyFlashTimer) clearTimeout(copyFlashTimer);
+    if (activateFlashTimer) clearTimeout(activateFlashTimer);
+    copyFlashTimer = null;
+    activateFlashTimer = null;
+  });
+  studio.onMessage(onHostMessage);
   paint();
-  postReady(api);
+  studio.post(encodePluginsReady());
 }
 
 main();

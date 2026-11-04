@@ -17,9 +17,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { HOST_TO_VIEW, VIEW_TO_HOST, decode, encode } from '../../src/protocol';
 import {
-  PROTOCOL_VERSION,
-  decodeHostMessage,
+  PLUGINS_VIEW,
+  decodePluginsStudioMessage,
   encodePluginsActivate,
   encodePluginsReady,
   normalizePluginCard,
@@ -100,16 +101,20 @@ const samplePlugins = [
 ];
 
 describe('plugins webview protocol', () => {
-  test('encodePluginsActivate payload includes kind and id', () => {
-    const msg = encodePluginsActivate('engine', 'pyodide', 42);
+  test('encodePluginsActivate rides studio.action with kind and id in args', () => {
+    const msg = encodePluginsActivate('engine', 'pyodide');
     expect(msg).not.toBeNull();
     if (!msg) return;
-    expect(msg.v).toBe(PROTOCOL_VERSION);
-    expect(msg.type).toBe('plugins.activate');
-    expect(msg.kind).toBe('engine');
-    expect(msg.id).toBe('pyodide');
-    expect(msg.payload).toEqual({ kind: 'engine', id: 'pyodide' });
-    expect(msg.ts).toBe(42);
+    expect(msg.v).toBe(1);
+    expect(msg.type).toBe(VIEW_TO_HOST.StudioAction);
+    expect(msg.ts).toBeTypeOf('number');
+    expect(msg.payload).toEqual({
+      view: PLUGINS_VIEW,
+      action: 'activate',
+      args: { kind: 'engine', id: 'pyodide' },
+    });
+    const decoded = decode(JSON.parse(JSON.stringify(msg)));
+    expect(decoded.ok).toBe(true);
   });
 
   test('encodePluginsActivate rejects bad kind or empty id', () => {
@@ -118,44 +123,66 @@ describe('plugins webview protocol', () => {
     expect(encodePluginsActivate('source', null)).toBeNull();
   });
 
-  test('encodePluginsReady is plugins.ready', () => {
-    const msg = encodePluginsReady(1);
-    expect(msg.type).toBe('plugins.ready');
-    expect(msg.payload).toEqual({});
+  test('encodePluginsReady is studio.ready for the plugins view', () => {
+    const msg = encodePluginsReady();
+    expect(msg.type).toBe(VIEW_TO_HOST.StudioReady);
+    expect(msg.payload).toEqual({ view: PLUGINS_VIEW });
+    expect(msg.v).toBe(1);
   });
 
-  test('decodeHostMessage accepts envelope plugins.init', () => {
-    const decoded = decodeHostMessage({
-      v: PROTOCOL_VERSION,
-      type: 'plugins.init',
-      payload: { plugins: samplePlugins, active: { source: 'binance-rest' }, flags: { allowPyodide: false } },
-      ts: 1,
-    });
-    expect(decoded.ok).toBe(true);
-    if (!decoded.ok) return;
-    expect(decoded.type).toBe('plugins.init');
-    expect(Array.isArray(decoded.payload.plugins)).toBe(true);
+  test('decodePluginsStudioMessage accepts studio.init envelopes', () => {
+    const decoded = decodePluginsStudioMessage(
+      encode(HOST_TO_VIEW.StudioInit, {
+        view: PLUGINS_VIEW,
+        data: {
+          plugins: samplePlugins,
+          active: { source: 'binance-rest' },
+          flags: { allowPyodide: false },
+        },
+      }),
+    );
+    expect(decoded).not.toBeNull();
+    if (!decoded) return;
+    expect(decoded.kind).toBe('init');
+    expect(Array.isArray(decoded.data.plugins)).toBe(true);
   });
 
-  test('decodeHostMessage accepts flat plugins.state JSON', () => {
-    const decoded = decodeHostMessage({
-      type: 'plugins.state',
-      active: { engine: 'server' },
-      flags: { allowPyodide: true },
-    });
-    expect(decoded.ok).toBe(true);
-    if (!decoded.ok) return;
-    expect(decoded.type).toBe('plugins.state');
-    expect((decoded.payload.active as { engine?: string }).engine).toBe('server');
+  test('decodePluginsStudioMessage accepts studio.set envelopes', () => {
+    const decoded = decodePluginsStudioMessage(
+      encode(HOST_TO_VIEW.StudioSet, {
+        view: PLUGINS_VIEW,
+        data: { active: { engine: 'server' }, flags: { allowPyodide: true } },
+      }),
+    );
+    expect(decoded).not.toBeNull();
+    if (!decoded) return;
+    expect(decoded.kind).toBe('set');
+    expect((decoded.data.active as { engine?: string }).engine).toBe('server');
   });
 
-  test('ignore bad messages (never throw)', () => {
-    expect(decodeHostMessage(null).ok).toBe(false);
-    expect(decodeHostMessage('plugins.init').ok).toBe(false);
-    expect(decodeHostMessage({ type: 'plugins.ready' }).ok).toBe(false);
-    expect(decodeHostMessage({ v: 2, type: 'plugins.init', payload: {}, ts: 1 }).ok).toBe(false);
-    expect(decodeHostMessage({ type: 'plugins.init', ts: Number.NaN }).ok).toBe(false);
-    expect(() => decodeHostMessage(undefined)).not.toThrow();
+  test('ignore bad messages (never throw) — strict envelopes only', () => {
+    expect(decodePluginsStudioMessage(null)).toBeNull();
+    expect(decodePluginsStudioMessage('garbage')).toBeNull();
+    expect(decodePluginsStudioMessage({ type: 'nope' })).toBeNull();
+    expect(
+      decodePluginsStudioMessage(
+        encode(VIEW_TO_HOST.StudioReady, { view: PLUGINS_VIEW }),
+      ),
+    ).toBeNull();
+    expect(
+      decodePluginsStudioMessage(
+        encode(HOST_TO_VIEW.StudioInit, { view: 'colors', data: { plugins: [] } }),
+      ),
+    ).toBeNull();
+    expect(
+      decodePluginsStudioMessage(encode(HOST_TO_VIEW.StudioInit, { view: PLUGINS_VIEW })),
+    ).toBeNull();
+    expect(
+      decodePluginsStudioMessage(
+        encode(HOST_TO_VIEW.StudioSet, { view: PLUGINS_VIEW, data: 'nope' }),
+      ),
+    ).toBeNull();
+    expect(() => decodePluginsStudioMessage(undefined)).not.toThrow();
   });
 });
 
@@ -178,31 +205,39 @@ describe('plugins webview tab filter + state', () => {
     expect(setKindTab(start, 'nope').tab).toBe('all');
   });
 
-  test('plugins.init then plugins.state updates active without dropping catalog', () => {
+  test('studio.init then studio.set updates active without dropping catalog', () => {
     let state = initialPluginsState();
-    const init = decodeHostMessage({
-      type: 'plugins.init',
-      plugins: samplePlugins,
-      active: { source: 'binance-rest', engine: 'server', stream: 'binance-ws', storage: 'local' },
-      flags: { allowPyodide: false },
-    });
-    expect(init.ok).toBe(true);
-    if (!init.ok) return;
-    state = applyPluginsHostMessage(state, init.type, init.payload);
+    const init = decodePluginsStudioMessage(
+      encode(HOST_TO_VIEW.StudioInit, {
+        view: PLUGINS_VIEW,
+        data: {
+          plugins: samplePlugins,
+          active: { source: 'binance-rest', engine: 'server', stream: 'binance-ws', storage: 'local' },
+          flags: { allowPyodide: false },
+        },
+      }),
+    );
+    expect(init).not.toBeNull();
+    if (!init) return;
+    state = applyPluginsHostMessage(state, init.kind, init.data);
     expect(state.ready).toBe(true);
     expect(state.plugins.length).toBe(5);
     expect(formatActiveStatus(state.active)).toBe(
       'Active · src binance-rest · eng server · stm binance-ws · stor local',
     );
 
-    const next = decodeHostMessage({
-      type: 'plugins.state',
-      active: { source: 'custom-src', engine: 'pyodide', stream: 'binance-ws', storage: 'local' },
-      flags: { allowPyodide: false },
-    });
-    expect(next.ok).toBe(true);
-    if (!next.ok) return;
-    state = applyPluginsHostMessage(state, next.type, next.payload);
+    const next = decodePluginsStudioMessage(
+      encode(HOST_TO_VIEW.StudioSet, {
+        view: PLUGINS_VIEW,
+        data: {
+          active: { source: 'custom-src', engine: 'pyodide', stream: 'binance-ws', storage: 'local' },
+          flags: { allowPyodide: false },
+        },
+      }),
+    );
+    expect(next).not.toBeNull();
+    if (!next) return;
+    state = applyPluginsHostMessage(state, next.kind, next.data);
     expect(state.plugins.length).toBe(5);
     expect(state.active.source).toBe('custom-src');
     expect(state.active.engine).toBe('pyodide');
@@ -210,7 +245,7 @@ describe('plugins webview tab filter + state', () => {
 
   test('malformed init plugins array is ignored', () => {
     const start = initialPluginsState();
-    const next = applyPluginsHostMessage(start, 'plugins.init', {
+    const next = applyPluginsHostMessage(start, 'init', {
       plugins: { not: 'array' },
       active: { source: 'x' },
     });
@@ -269,7 +304,7 @@ describe('plugins webview search + chips', () => {
     ]);
   });
 
-  test('setSearchQuery is local, identity-stable, and survives plugins.init', () => {
+  test('setSearchQuery is local, identity-stable, and survives studio.init', () => {
     const start = initialPluginsState();
     expect(setSearchQuery(start, '').query).toBe('');
     expect(setSearchQuery(start, '')).toBe(start);
@@ -281,14 +316,15 @@ describe('plugins webview search + chips', () => {
     expect(typed.query).toBe('Pyodide');
     expect(setSearchQuery(typed, 'Pyodide')).toBe(typed);
 
-    const init = decodeHostMessage({
-      type: 'plugins.init',
-      plugins: samplePlugins,
-      active: { source: 'binance-rest' },
-    });
-    expect(init.ok).toBe(true);
-    if (!init.ok) return;
-    const next = applyPluginsHostMessage(typed, init.type, init.payload);
+    const init = decodePluginsStudioMessage(
+      encode(HOST_TO_VIEW.StudioInit, {
+        view: PLUGINS_VIEW,
+        data: { plugins: samplePlugins, active: { source: 'binance-rest' } },
+      }),
+    );
+    expect(init).not.toBeNull();
+    if (!init) return;
+    const next = applyPluginsHostMessage(typed, init.kind, init.data);
     expect(next.query).toBe('Pyodide');
     expect(next.plugins.length).toBe(5);
   });

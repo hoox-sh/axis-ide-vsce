@@ -17,16 +17,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Plugins studio webview messages (`axis.plugins` channel).
- * Never throws — hostile getters / arrays-where-objects return defaults or null.
+ * Plugins studio wire layer on the `studio.*` namespace of axis.webview.v1
+ * (frozen Phase-1 contract). Pure — no vscode. Never throws — hostile
+ * getters / arrays-where-objects return defaults or null.
+ *
+ * Host → view: `studio.init` carrying
+ * `{ view: 'plugins', data: { plugins, active, flags } }` and `studio.set`
+ * carrying `{ view: 'plugins', data: { active, flags } }` — the exact
+ * fields the old flat `plugins.init` / `plugins.state` messages carried,
+ * preserved verbatim. View → host: `studio.ready` and `studio.action`
+ * (`activate`) — the old flat payload fields move into `args`.
  */
 
+import type { StudioRegistration } from '../views/studio-registry';
 import { parseActivePluginsV1 } from './active';
 import {
   PLUGIN_KINDS,
   type ActivePluginsV1,
   type PluginKind,
 } from './types';
+
+/** `view` value for every Plugins studio envelope — exactly `'plugins'`. */
+export const PLUGINS_STUDIO_VIEW = 'plugins';
+
+/** VS Code view id of the Plugins studio (`axis.plugins`). */
+export const PLUGINS_STUDIO_VIEW_ID = 'axis.plugins';
 
 export type PluginsFlags = {
   allowPyodide: boolean;
@@ -45,22 +60,24 @@ export type PluginCard = {
   extra?: PluginCardExtra;
 };
 
-export type PluginsHostToWeb =
-  | {
-      type: 'plugins.init';
-      plugins: PluginCard[];
-      active: ActivePluginsV1;
-      flags: PluginsFlags;
-    }
-  | {
-      type: 'plugins.state';
-      active: ActivePluginsV1;
-      flags: PluginsFlags;
-    };
+/**
+ * `studio.init` data — the exact `plugins` / `active` / `flags` fields the
+ * old flat `plugins.init` message carried, preserved verbatim.
+ */
+export type PluginsInitData = {
+  plugins: PluginCard[];
+  active: ActivePluginsV1;
+  flags: PluginsFlags;
+};
 
-export type PluginsWebToHost =
-  | { type: 'plugins.ready' }
-  | { type: 'plugins.activate'; kind: PluginKind; id: string };
+/**
+ * `studio.set` data — the exact `active` / `flags` fields the old flat
+ * `plugins.state` message carried, preserved verbatim.
+ */
+export type PluginsStateData = {
+  active: ActivePluginsV1;
+  flags: PluginsFlags;
+};
 
 export const DEFAULT_PLUGINS_FLAGS: PluginsFlags = {
   allowPyodide: false,
@@ -111,30 +128,6 @@ export function parsePluginsFlags(raw: unknown): PluginsFlags {
     liveEnabled: readBoolFlag(raw, 'liveEnabled'),
     allowUrlInstall: readBoolFlag(raw, 'allowUrlInstall'),
   };
-}
-
-function parseExtra(raw: unknown): PluginCardExtra | undefined {
-  try {
-    if (!isPlainObject(raw)) return undefined;
-    const out: PluginCardExtra = {};
-    for (const key of Object.keys(raw)) {
-      try {
-        const v = raw[key];
-        if (v === null || typeof v === 'string' || typeof v === 'boolean') {
-          out[key] = v;
-          continue;
-        }
-        if (typeof v === 'number' && Number.isFinite(v)) {
-          out[key] = v;
-        }
-      } catch {
-        // hostile extra getter
-      }
-    }
-    return Object.keys(out).length > 0 ? out : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /** Kind-specific `extra` bag for the plugins studio UI. */
@@ -211,135 +204,96 @@ export function buildPluginCards(
   }
 }
 
-function parseCardList(raw: unknown, flags: PluginsFlags): PluginCard[] | null {
-  try {
-    if (!Array.isArray(raw)) return null;
-    const out: PluginCard[] = [];
-    for (const item of raw) {
-      try {
-        if (!isPlainObject(item)) continue;
-        const id = typeof item.id === 'string' ? item.id.trim() : '';
-        const kindRaw = item.kind;
-        if (!id || !isPluginKind(kindRaw)) continue;
-        const nameRaw = item.name;
-        const name =
-          typeof nameRaw === 'string' && nameRaw.trim() ? nameRaw.trim() : id;
-        const extra = parseExtra(item.extra) ?? extraForPluginCard(kindRaw, id, flags);
-        const card: PluginCard = {
-          id,
-          name,
-          kind: kindRaw,
-          builtIn: item.builtIn === true,
-          extra,
-        };
-        if (item.description != null) {
-          const d = String(item.description);
-          if (d) card.description = d;
-        }
-        out.push(card);
-      } catch {
-        // skip hostile card
-      }
-    }
-    return out;
-  } catch {
-    return null;
-  }
-}
-
-/** Encode `plugins.init` (never throws). */
-export function encodePluginsInit(
+/** `studio.init` data builder (the old `plugins.init` payload, verbatim). */
+export function pluginsInitData(
   plugins: unknown,
   active: unknown,
   flags: unknown,
-): PluginsHostToWeb {
+): PluginsInitData {
   const parsedFlags = parsePluginsFlags(flags);
   const cards = Array.isArray(plugins)
     ? buildPluginCards(plugins, parsedFlags)
     : [];
   return {
-    type: 'plugins.init',
     plugins: cards,
     active: parseActivePluginsV1(active),
     flags: parsedFlags,
   };
 }
 
-/** Encode `plugins.state` (never throws). */
-export function encodePluginsState(
-  active: unknown,
-  flags: unknown,
-): PluginsHostToWeb {
+/** `studio.set` data builder (the old `plugins.state` payload, verbatim). */
+export function pluginsStateData(active: unknown, flags: unknown): PluginsStateData {
   return {
-    type: 'plugins.state',
     active: parseActivePluginsV1(active),
     flags: parsePluginsFlags(flags),
   };
 }
 
-/** Decode webview → host message (never throws). */
-export function decodePluginsWebToHost(raw: unknown): PluginsWebToHost | null {
+/**
+ * Old `decodePluginsWebToHost` activate validation, moved onto
+ * `studio.action` args: `args.kind` must be a plugin kind and `args.id` a
+ * non-empty trimmed string. Null otherwise — invalid activates are
+ * ignored, never thrown.
+ */
+export function pluginsActivateFromArgs(args: unknown): { kind: PluginKind; id: string } | null {
   try {
-    if (!isPlainObject(raw)) return null;
-    const type = raw.type;
-    if (type === 'plugins.ready') {
-      return { type: 'plugins.ready' };
-    }
-    if (type === 'plugins.activate') {
-      const payload = isPlainObject(raw.payload) ? raw.payload : undefined;
-      const kindRaw = raw.kind ?? payload?.kind;
-      const idRaw = raw.id ?? payload?.id;
-      if (typeof kindRaw !== 'string' || typeof idRaw !== 'string') return null;
-      const kind = kindRaw.trim();
-      const id = idRaw.trim();
-      if (!id || !isPluginKind(kind)) return null;
-      return { type: 'plugins.activate', kind, id };
-    }
-    return null;
+    if (!isPlainObject(args)) return null;
+    const kindRaw = args.kind;
+    const idRaw = args.id;
+    if (typeof kindRaw !== 'string' || typeof idRaw !== 'string') return null;
+    const kind = kindRaw.trim();
+    const id = idRaw.trim();
+    if (!id || !isPluginKind(kind)) return null;
+    return { kind, id };
   } catch {
     return null;
   }
 }
 
-/** Decode host → webview message (never throws). */
-export function decodePluginsHostToWeb(raw: unknown): PluginsHostToWeb | null {
-  try {
-    if (!isPlainObject(raw)) return null;
-    const type = raw.type;
-    if (type === 'plugins.state') {
-      const activeRaw = raw.active;
-      const flagsRaw = raw.flags;
-      if (Array.isArray(activeRaw) || (activeRaw != null && typeof activeRaw !== 'object')) {
-        return null;
-      }
-      if (Array.isArray(flagsRaw) || (flagsRaw != null && typeof flagsRaw !== 'object')) {
-        return null;
-      }
-      return encodePluginsState(activeRaw, flagsRaw);
-    }
-    if (type === 'plugins.init') {
-      const pluginsRaw = raw.plugins;
-      const activeRaw = raw.active;
-      const flagsRaw = raw.flags;
-      if (!Array.isArray(pluginsRaw)) return null;
-      if (Array.isArray(activeRaw) || (activeRaw != null && typeof activeRaw !== 'object')) {
-        return null;
-      }
-      if (Array.isArray(flagsRaw) || (flagsRaw != null && typeof flagsRaw !== 'object')) {
-        return null;
-      }
-      const flags = parsePluginsFlags(flagsRaw);
-      const plugins = parseCardList(pluginsRaw, flags);
-      if (!plugins) return null;
-      return {
-        type: 'plugins.init',
-        plugins,
-        active: parseActivePluginsV1(activeRaw),
-        flags,
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+/**
+ * Trusted studio DOM for the Plugins shell body — the exact markup the old
+ * plugins HTML builder emitted between the theme-classed `<body>` and the
+ * script tag. The webview replaces this root's content on first paint;
+ * inline scripts are refused by the shell regardless.
+ */
+export function buildPluginsStudioBody(): string {
+  return `<div id="plugins-root" class="plugins-root" data-axis-plugins-host="1">
+    <header class="plugins-root__header">
+      <h1 class="plugins-root__title">Plugins</h1>
+    </header>
+  </div>`;
+}
+
+/** Host behavior the Plugins studio registration wires behind `studio.action`. */
+export interface PluginsStudioHandlers {
+  /** `studio.action activate` — activate one plugin kind/id. */
+  activate(kind: PluginKind, id: string): void | Promise<void>;
+  /** Current studio state — feeds the `studio.init` handshake ack. */
+  state(): PluginsInitData;
+}
+
+/**
+ * Build the Plugins `StudioRegistration` (enhancement plan §5 Phase 2).
+ * Pure data + dispatch: the shim supplies the vscode-backed handlers, the
+ * generic provider owns the shell, the ready handshake, and encoding.
+ */
+export function pluginsStudioRegistration(
+  handlers: PluginsStudioHandlers,
+): StudioRegistration {
+  return {
+    id: PLUGINS_STUDIO_VIEW,
+    title: 'Plugins',
+    viewId: PLUGINS_STUDIO_VIEW_ID,
+    retainContextWhenHidden: true,
+    buildBody: buildPluginsStudioBody,
+    actions: {
+      activate: async (args) => {
+        const activation = pluginsActivateFromArgs(args);
+        if (!activation) return;
+        await handlers.activate(activation.kind, activation.id);
+        handlers.state();
+      },
+    },
+    restore: () => handlers.state(),
+  };
 }

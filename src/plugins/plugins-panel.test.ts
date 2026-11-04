@@ -16,10 +16,12 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { beforeAll, describe, expect, mock, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { resetLoggerForTests, setLogSink } from '../host/logger';
+import { HOST_TO_VIEW, VIEW_TO_HOST, encode } from '../protocol';
 
 type G = {
   __axisAllowPyodide?: unknown;
@@ -251,6 +253,10 @@ beforeAll(async () => {
   activeMod = await import('./active');
 });
 
+afterEach(() => {
+  resetLoggerForTests();
+});
+
 function makeAssets(withCss: boolean): string {
   const root = mkdtempSync(join(tmpdir(), 'axis-plugins-wv-'));
   const dir = join(root, 'dist', 'webview', 'plugins');
@@ -320,6 +326,21 @@ function makeWebview(opts?: {
   return { webview, view, order, posted, getHandler: () => messageHandler, dispose: () => disposeHandler?.() };
 }
 
+function makeContext(extensionPath: string) {
+  return { subscriptions: [] as Array<{ dispose(): void }>, extensionUri: Uri.file(extensionPath) };
+}
+
+/** One studio envelope as posted by the generic provider. */
+interface StudioPosted {
+  v: number;
+  type: string;
+  payload: { view: string; data?: Record<string, unknown> };
+}
+
+function asStudioPosted(raw: unknown): StudioPosted {
+  return raw as StudioPosted;
+}
+
 describe('PluginsWebviewViewProvider', () => {
   test('constants and register retainContextWhenHidden', () => {
     expect(panel.PLUGINS_WEBVIEW_VIEW_ID).toBe('axis.plugins');
@@ -327,38 +348,32 @@ describe('PluginsWebviewViewProvider', () => {
     g().__axisRegisterWvThrow = false;
     const mem = activeMod.createMemoryWorkspaceState();
     const reg = new registryMod.HostPluginRegistry();
-    const provider = panel.registerPluginsWebviewView(
-      { subscriptions: [] as Array<{ dispose(): void }>, extensionUri: Uri.file('/tmp') } as never,
-      reg,
-      mem,
-    );
+    const provider = panel.registerPluginsWebviewView(makeContext('/tmp') as never, reg, mem);
     expect(provider).toBeInstanceOf(panel.PluginsWebviewViewProvider);
+    expect(provider.register()).toBe(provider);
     const rec = g().__axisWebviewRegistrations?.[0];
     expect(rec?.id).toBe('axis.plugins');
     expect(rec?.options?.webviewOptions?.retainContextWhenHidden).toBe(true);
 
     g().__axisRegisterWvThrow = true;
     expect(() =>
-      panel.registerPluginsWebviewView(
-        { subscriptions: [], extensionUri: Uri.file('/tmp') } as never,
-        reg,
-        mem,
-      ),
+      panel.registerPluginsWebviewView(makeContext('/tmp') as never, reg, mem),
     ).not.toThrow();
     g().__axisRegisterWvThrow = false;
   });
 
-  test('resolve sets options, handler before html, theme classes, css present/absent', async () => {
+  test('resolve sets options, handler before html, theme classes, css present/absent', () => {
     const mem = activeMod.createMemoryWorkspaceState();
     const reg = registryMod.ensureBuiltinsRegistered(new registryMod.HostPluginRegistry());
 
     g().__axisThemeKind = ColorThemeKind.Light;
     const withCss = makeAssets(true);
     const provider = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       reg,
       mem,
     );
+    provider.register();
     const a = makeWebview();
     expect(() => provider.resolveWebviewView(a.view as never)).not.toThrow();
     expect(a.order[0]).toBe('onDidReceiveMessage');
@@ -368,16 +383,18 @@ describe('PluginsWebviewViewProvider', () => {
       join('dist', 'webview', 'plugins'),
     );
     expect(a.webview.html).toContain('id="plugins-root"');
+    expect(a.webview.html).toContain('data-axis-plugins-host="1"');
     expect(a.webview.html).toContain('class="vscode-light"');
     expect(a.webview.html).toContain('https://webview.test/main.css');
 
     g().__axisThemeKind = ColorThemeKind.HighContrast;
     const noCss = makeAssets(false);
     const provider2 = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(noCss) } as never,
+      makeContext(noCss) as never,
       reg,
       mem,
     );
+    provider2.register();
     const b = makeWebview();
     provider2.resolveWebviewView(b.view as never);
     expect(b.webview.html).toContain('class="vscode-high-contrast"');
@@ -385,10 +402,11 @@ describe('PluginsWebviewViewProvider', () => {
 
     g().__axisThemeKind = ColorThemeKind.HighContrastLight;
     const provider3 = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       reg,
       mem,
     );
+    provider3.register();
     const c = makeWebview();
     provider3.resolveWebviewView(c.view as never);
     expect(c.webview.html).toContain('class="vscode-high-contrast-light"');
@@ -409,20 +427,22 @@ describe('PluginsWebviewViewProvider', () => {
     const mem = activeMod.createMemoryWorkspaceState();
     const reg = new registryMod.HostPluginRegistry();
     const provider = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file('/no-such-axis-plugins-assets') } as never,
+      makeContext('/no-such-axis-plugins-assets') as never,
       reg,
       mem,
     );
+    provider.register();
     const a = makeWebview();
     expect(() => provider.resolveWebviewView(a.view as never)).not.toThrow();
     expect(a.webview.html).toContain('assets missing');
 
     const withCss = makeAssets(true);
     const okProvider = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       reg,
       mem,
     );
+    okProvider.register();
     const boom = makeWebview({ htmlThrow: true });
     expect(() => okProvider.resolveWebviewView(boom.view as never)).not.toThrow();
     expect(boom.webview.html.length).toBeGreaterThan(0);
@@ -431,13 +451,16 @@ describe('PluginsWebviewViewProvider', () => {
     expect(() => provider.resolveWebviewView(always.view as never)).not.toThrow();
 
     const throwFs = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file('/throw-fs') } as never,
+      makeContext('/throw-fs') as never,
       reg,
       mem,
     );
+    throwFs.register();
     const fsView = makeWebview();
     expect(() => throwFs.resolveWebviewView(fsView.view as never)).not.toThrow();
-    expect(fsView.webview.html).toContain('unknown');
+    // Detailed-but-sanitized fallback (same as the old per-studio builders):
+    // the missing-assets reason is surfaced, the raw error is not.
+    expect(fsView.webview.html).toContain('assets missing at unknown');
 
     const asThrow = makeWebview({
       asWebviewUri: () => {
@@ -445,10 +468,11 @@ describe('PluginsWebviewViewProvider', () => {
       },
     });
     const okProv = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       reg,
       mem,
     );
+    okProv.register();
     expect(() => okProv.resolveWebviewView(asThrow.view as never)).not.toThrow();
     expect(asThrow.webview.html).toContain('nope');
   });
@@ -462,35 +486,38 @@ describe('PluginsWebviewViewProvider', () => {
     let refreshes = 0;
     const withCss = makeAssets(true);
     const provider = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       reg,
       mem,
       () => {
         refreshes += 1;
       },
     );
+    provider.register();
     const w = makeWebview();
     provider.resolveWebviewView(w.view as never);
     const handler = w.getHandler();
     expect(handler).toBeTypeOf('function');
-    await handler?.({ type: 'plugins.ready' });
-    const init = w.posted[0] as {
-      type: string;
+    await handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'plugins' }));
+    const init = asStudioPosted(w.posted[0]);
+    expect(init.v).toBe(1);
+    expect(init.type).toBe(HOST_TO_VIEW.StudioInit);
+    expect(init.payload.view).toBe('plugins');
+    const data = init.payload.data as {
       plugins: Array<{ id: string; kind: string; extra?: Record<string, unknown> }>;
       flags: { allowPyodide: boolean; liveEnabled: boolean; allowUrlInstall: boolean };
     };
-    expect(init.type).toBe('plugins.init');
-    expect(init.flags).toEqual({
+    expect(data.flags).toEqual({
       allowPyodide: false,
       liveEnabled: true,
       allowUrlInstall: true,
     });
-    const source = init.plugins.find((p) => p.kind === 'source');
-    const stream = init.plugins.find((p) => p.kind === 'stream');
-    const pyodide = init.plugins.find((p) => p.id === 'pyodide');
-    const storage = init.plugins.find((p) => p.kind === 'storage');
-    const dataset = init.plugins.find((p) => p.kind === 'dataset');
-    const component = init.plugins.find((p) => p.kind === 'component');
+    const source = data.plugins.find((p) => p.kind === 'source');
+    const stream = data.plugins.find((p) => p.kind === 'stream');
+    const pyodide = data.plugins.find((p) => p.id === 'pyodide');
+    const storage = data.plugins.find((p) => p.kind === 'storage');
+    const dataset = data.plugins.find((p) => p.kind === 'dataset');
+    const component = data.plugins.find((p) => p.kind === 'component');
     expect(source?.extra?.role).toBe('Historical OHLCV');
     expect(stream?.extra?.role).toBe('Live bars');
     expect(stream?.extra?.liveEnabled).toBe(true);
@@ -500,16 +527,36 @@ describe('PluginsWebviewViewProvider', () => {
     expect(dataset?.extra?.role).toBe('On-chain dataset');
     expect(component).toBeUndefined();
 
-    await handler?.({ type: 'plugins.activate', kind: 'source', id: 'okx-rest' });
+    await handler?.(
+      encode(VIEW_TO_HOST.StudioAction, {
+        view: 'plugins',
+        action: 'activate',
+        args: { kind: 'source', id: 'okx-rest' },
+      }),
+    );
+    // Activation is async (awaitable handler); drain the microtask queue.
+    await new Promise((r) => setTimeout(r, 0));
     expect(refreshes).toBe(1);
     expect(activeMod.isActivePlugin(mem, 'source', 'okx-rest')).toBe(true);
-    const state = w.posted[1] as { type: string; active: { source?: string } };
-    expect(state.type).toBe('plugins.state');
-    expect(state.active.source).toBe('okx-rest');
+    const state = asStudioPosted(w.posted[1]);
+    expect(state.type).toBe(HOST_TO_VIEW.StudioSet);
+    expect((state.payload.data as { active: { source?: string } }).active.source).toBe(
+      'okx-rest',
+    );
 
+    // Unknown types, junk, and invalid activate args are logged-and-dropped.
     await handler?.({ type: 'nope' });
     await handler?.([]);
-    await handler?.({ type: 'plugins.activate', kind: 'nope', id: 'x' });
+    await handler?.(
+      encode(VIEW_TO_HOST.StudioAction, {
+        view: 'plugins',
+        action: 'activate',
+        args: { kind: 'nope', id: 'x' },
+      }),
+    );
+    await handler?.(
+      encode(VIEW_TO_HOST.StudioAction, { view: 'nope', action: 'activate' }),
+    );
     expect(w.posted.length).toBe(2);
 
     const boomPost = makeWebview({
@@ -518,14 +565,24 @@ describe('PluginsWebviewViewProvider', () => {
       },
     });
     provider.resolveWebviewView(boomPost.view as never);
-    await expect(boomPost.getHandler()?.({ type: 'plugins.ready' })).resolves.toBeUndefined();
-    await expect(
-      boomPost.getHandler()?.({ type: 'plugins.activate', kind: 'source', id: 'okx-rest' }),
-    ).resolves.toBeUndefined();
+    expect(() =>
+      boomPost.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'plugins' })),
+    ).not.toThrow();
+    expect(() =>
+      boomPost
+        .getHandler()
+        ?.(
+          encode(VIEW_TO_HOST.StudioAction, {
+            view: 'plugins',
+            action: 'activate',
+            args: { kind: 'source', id: 'okx-rest' },
+          }),
+        ),
+    ).not.toThrow();
     expect(() => provider.postState()).not.toThrow();
   });
 
-  test('flags config throws, listAll throws, dispose, reveal, postState', async () => {
+  test('flags config throws, listAll throws, reveal, postState', async () => {
     const mem = activeMod.createMemoryWorkspaceState();
     const withCss = makeAssets(true);
     g().__axisCfgThrow = 'axis.engine';
@@ -543,16 +600,17 @@ describe('PluginsWebviewViewProvider', () => {
       },
     };
     const provider = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       hostileReg as never,
       mem,
     );
+    provider.register();
     const w = makeWebview();
     provider.resolveWebviewView(w.view as never);
-    await w.getHandler()?.({ type: 'plugins.ready' });
-    const init = w.posted[0] as { type: string; plugins: unknown[] };
-    expect(init.type).toBe('plugins.init');
-    expect(init.plugins).toEqual([]);
+    await w.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'plugins' }));
+    const init = asStudioPosted(w.posted[0]);
+    expect(init.type).toBe(HOST_TO_VIEW.StudioInit);
+    expect((init.payload.data as { plugins: unknown[] }).plugins).toEqual([]);
 
     expect(() => provider.reveal()).not.toThrow();
     expect(w.view.shown).toBe(true);
@@ -562,13 +620,39 @@ describe('PluginsWebviewViewProvider', () => {
     expect(() => provider.reveal()).not.toThrow();
 
     provider.postState();
-    expect((w.posted[1] as { type: string }).type).toBe('plugins.state');
+    expect(asStudioPosted(w.posted[1]).type).toBe(HOST_TO_VIEW.StudioSet);
+
+    // Hostile refreshTrees callback: the activation failure is swallowed and
+    // state still posts (the catch in PluginsWebviewViewProvider.activate).
+    const boomTrees = new panel.PluginsWebviewViewProvider(
+      makeContext(withCss) as never,
+      new registryMod.HostPluginRegistry() as never,
+      mem,
+      () => {
+        throw new Error('trees-boom');
+      },
+    );
+    boomTrees.register();
+    const tw = makeWebview();
+    boomTrees.resolveWebviewView(tw.view as never);
+    await tw.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'plugins' }));
+    expect(() =>
+      tw.getHandler()?.(
+        encode(VIEW_TO_HOST.StudioAction, {
+          view: 'plugins',
+          action: 'activate',
+          args: { kind: 'source', id: 'okx-rest' },
+        }),
+      ),
+    ).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(asStudioPosted(tw.posted.at(-1)).type).toBe(HOST_TO_VIEW.StudioSet);
 
     const other = makeWebview();
     provider.resolveWebviewView(other.view as never);
     w.dispose();
     provider.postState();
-    expect((other.posted[0] as { type?: string } | undefined)?.type).toBe('plugins.state');
+    expect(asStudioPosted(other.posted[0]).type).toBe(HOST_TO_VIEW.StudioSet);
     other.dispose();
     expect(() => provider.postState()).not.toThrow();
     expect(() => provider.reveal()).not.toThrow();
@@ -582,10 +666,11 @@ describe('PluginsWebviewViewProvider', () => {
       },
     });
     const cssProv = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       new registryMod.HostPluginRegistry() as never,
       mem,
     );
+    cssProv.register();
     expect(() => cssProv.resolveWebviewView(cssThrow.view as never)).not.toThrow();
     expect(cssThrow.webview.html).toContain('main.css');
   });
@@ -593,9 +678,6 @@ describe('PluginsWebviewViewProvider', () => {
   test('css existsSync throw uses script-derived href; resolve outer catch', () => {
     const mem = activeMod.createMemoryWorkspaceState();
     const withCss = makeAssets(true);
-    const styleBoomUri = {
-      fsPath: join(withCss, 'dist', 'webview', 'plugins', 'main.css'),
-    };
     const origJoin = Uri.joinPath;
     Uri.joinPath = ((base: { fsPath?: string }, ...parts: string[]) => {
       if (parts[parts.length - 1] === 'main.css' && base.fsPath === withCss) {
@@ -609,23 +691,24 @@ describe('PluginsWebviewViewProvider', () => {
     }) as typeof Uri.joinPath;
     try {
       const provider = new panel.PluginsWebviewViewProvider(
-        { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+        makeContext(withCss) as never,
         new registryMod.HostPluginRegistry() as never,
         mem,
       );
+      provider.register();
       const w = makeWebview();
       expect(() => provider.resolveWebviewView(w.view as never)).not.toThrow();
       expect(w.webview.html).toContain('main.css');
     } finally {
       Uri.joinPath = origJoin;
     }
-    void styleBoomUri;
 
     const provider = new panel.PluginsWebviewViewProvider(
-      { subscriptions: [], extensionUri: Uri.file(withCss) } as never,
+      makeContext(withCss) as never,
       new registryMod.HostPluginRegistry() as never,
       mem,
     );
+    provider.register();
     expect(() =>
       provider.resolveWebviewView({
         get webview(): never {
@@ -633,5 +716,30 @@ describe('PluginsWebviewViewProvider', () => {
         },
       } as never),
     ).not.toThrow();
+  });
+
+  test('decode failures and unknown actions are logged-and-dropped, never thrown', async () => {
+    const drops: string[] = [];
+    setLogSink((level, message) => {
+      if (level === 'warn') drops.push(message);
+    });
+    const mem = activeMod.createMemoryWorkspaceState();
+    const reg = registryMod.ensureBuiltinsRegistered(new registryMod.HostPluginRegistry());
+    const withCss = makeAssets(true);
+    const provider = new panel.PluginsWebviewViewProvider(
+      makeContext(withCss) as never,
+      reg,
+      mem,
+    );
+    provider.register();
+    const w = makeWebview();
+    provider.resolveWebviewView(w.view as never);
+    const handler = w.getHandler();
+    expect(() => handler?.('garbage')).not.toThrow();
+    expect(() => handler?.(null)).not.toThrow();
+    expect(() => handler?.(encode(VIEW_TO_HOST.StudioAction, { view: 'plugins', action: 'nope' }))).not.toThrow();
+    expect(drops.some((line) => line.includes('studio router dropped a message'))).toBe(true);
+    expect(drops.some((line) => line.includes('no handler on plugins'))).toBe(true);
+    expect(w.posted.length).toBe(0);
   });
 });

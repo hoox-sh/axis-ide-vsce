@@ -21,7 +21,6 @@
  */
 
 import {
-  HOST_TO_VIEW,
   KIND_TABS,
   PLUGIN_KINDS,
   isKindTab,
@@ -129,7 +128,7 @@ export function setKindTab(state: PluginsViewState, tab: unknown): PluginsViewSt
   return { ...state, tab };
 }
 
-/** Local search string (host protocol is unchanged). Non-strings become empty. */
+/** Local search string (studio data never carries the query). Non-strings become empty. */
 export function setSearchQuery(state: PluginsViewState, query: unknown): PluginsViewState {
   const next = typeof query === 'string' ? query : '';
   if (next === state.query) return state;
@@ -251,33 +250,35 @@ export function applyActivateFlash(
 }
 
 /**
- * Apply one decoded host message. Unknown types and hostile payloads leave
- * state unchanged (never throw).
+ * Apply one decoded studio.init / studio.set data record. Unknown kinds and
+ * hostile payloads leave state unchanged (never throw). `kind` mirrors the
+ * old message split: 'init' carries the full catalog, 'set' refreshes
+ * active/flags (and the catalog when the host re-sends it).
  */
 export function applyPluginsHostMessage(
   state: PluginsViewState,
-  type: string,
-  payload: Record<string, unknown>,
+  kind: 'init' | 'set',
+  data: Record<string, unknown>,
 ): PluginsViewState {
   try {
-    if (type === HOST_TO_VIEW.Init) {
-      if (!('plugins' in payload) || !Array.isArray(payload.plugins)) {
+    if (kind === 'init') {
+      if (!('plugins' in data) || !Array.isArray(data.plugins)) {
         return state;
       }
       return {
         ...state,
         ready: true,
-        plugins: normalizePlugins(payload.plugins),
-        active: normalizeActive(payload.active),
-        flags: normalizeFlags(payload.flags),
+        plugins: normalizePlugins(data.plugins),
+        active: normalizeActive(data.active),
+        flags: normalizeFlags(data.flags),
       };
     }
-    if (type === HOST_TO_VIEW.State) {
+    if (kind === 'set') {
       const next: PluginsViewState = { ...state, ready: true };
-      if ('active' in payload) next.active = normalizeActive(payload.active);
-      if ('flags' in payload) next.flags = normalizeFlags(payload.flags);
-      if ('plugins' in payload && Array.isArray(payload.plugins)) {
-        next.plugins = normalizePlugins(payload.plugins);
+      if ('active' in data) next.active = normalizeActive(data.active);
+      if ('flags' in data) next.flags = normalizeFlags(data.flags);
+      if ('plugins' in data && Array.isArray(data.plugins)) {
+        next.plugins = normalizePlugins(data.plugins);
       }
       return next;
     }

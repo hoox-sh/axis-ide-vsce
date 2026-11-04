@@ -16,11 +16,21 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Plugins studio shim (`axis.plugins`) on the generic studio provider
+ * (enhancement plan §5 Phase 2). This file keeps the historical export
+ * surface (`registerPluginsWebviewView`, `PluginsWebviewViewProvider`,
+ * `PLUGINS_WEBVIEW_VIEW_ID`, `readPluginsFlags`) and owns only the
+ * vscode-backed behavior; the shell, the `studio.ready` handshake, message
+ * routing, and `studio.*` encoding live in `studio-provider.ts` /
+ * `studio-router.ts` / `studio-html.ts`, and the pure payload builders,
+ * the shell body, and the registration live in `plugins-messages.ts`.
+ */
+
 import { existsSync } from 'node:fs';
 import {
   ColorThemeKind,
   type ExtensionContext,
-  type Webview,
   type WebviewView,
   type WebviewViewProvider,
   Uri,
@@ -29,18 +39,27 @@ import {
 } from 'vscode';
 import { runActivatePluginCommand } from './activate-command';
 import { readActivePlugins, type WorkspaceStateHelpers } from './active';
-import { buildPluginsWebviewHtml } from './plugins-html';
 import {
-  buildPluginCards,
-  decodePluginsWebToHost,
-  encodePluginsInit,
-  encodePluginsState,
+  PLUGINS_STUDIO_VIEW_ID,
   parsePluginsFlags,
+  pluginsInitData,
+  pluginsStateData,
+  pluginsStudioRegistration,
+  buildPluginCards,
+  type PluginCard,
   type PluginsFlags,
+  type PluginsInitData,
 } from './plugins-messages';
 import type { HostPluginRegistry } from './registry';
+import type { StudioRegistration } from '../views/studio-registry';
+import {
+  registerStudioView,
+  StudioViewProvider,
+  type StudioProviderDeps,
+} from '../views/studio-provider';
+import type { PluginKind } from './types';
 
-export const PLUGINS_WEBVIEW_VIEW_ID = 'axis.plugins';
+export const PLUGINS_WEBVIEW_VIEW_ID = PLUGINS_STUDIO_VIEW_ID;
 
 function themeBodyClass(kind: ColorThemeKind): string {
   switch (kind) {
@@ -63,10 +82,6 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function pluginsAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'plugins', file);
-}
-
 function readBoolSetting(section: string, key: string): boolean {
   try {
     return workspace.getConfiguration(section).get(key) === true;
@@ -84,113 +99,67 @@ export function readPluginsFlags(): PluginsFlags {
   });
 }
 
-function getPluginsHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = pluginsAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS plugins webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
-    );
-  }
-  const script = webview.asWebviewUri(pluginsAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = pluginsAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildPluginsWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** `StudioProviderDeps` assembled from the real vscode surface (no nonce). */
+function pluginsStudioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+  };
 }
 
 /**
- * Sidebar WebviewViewProvider for the Plugins studio (`axis.plugins`).
- * Posts `plugins.init` on `plugins.ready`; `plugins.state` after activate.
+ * Sidebar Plugins studio (`axis.plugins`) on the generic provider.
+ * The registered `WebviewViewProvider` is the generic `StudioViewProvider`;
+ * this class keeps the historical surface (`postState` for command wiring,
+ * reveal) and forwards `resolveWebviewView` to the generic provider.
  */
 export class PluginsWebviewViewProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+  private readonly entry: StudioRegistration;
+  private readonly deps: StudioProviderDeps;
+  private studio: StudioViewProvider | undefined;
 
   constructor(
     private readonly context: ExtensionContext,
     private readonly registry: HostPluginRegistry,
     private readonly helpers: WorkspaceStateHelpers,
     private readonly refreshTrees?: () => void | Thenable<void>,
-  ) {}
-
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'plugins'),
-        ],
-      };
-
-      // Register message handler BEFORE assigning html (chart-editor lesson).
-      webview.onDidReceiveMessage((raw) => {
-        return this.onMessage(webview, raw);
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getPluginsHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+  ) {
+    this.entry = pluginsStudioRegistration({
+      activate: async (kind, id) => {
+        await this.activate(kind, id);
+      },
+      state: () => this.initData(),
+    });
+    this.deps = pluginsStudioDeps(context);
   }
 
-  /** Push `plugins.state` to the resolved webview (best-effort). */
+  /** Wire `axis.plugins` through the generic provider. Idempotent; never throws. */
+  register(): this {
+    if (this.studio) return this;
+    this.studio = registerStudioView(this.entry, this.deps, window, this.context);
+    return this;
+  }
+
+  resolveWebviewView(webviewView: WebviewView): void {
+    this.studio?.resolveWebviewView(webviewView);
+  }
+
+  /** Push a fresh `studio.set` (active + flags) to the resolved webview (best-effort). */
   postState(): void {
-    try {
-      const webview = this.view?.webview;
-      if (!webview) return;
-      this.postStateTo(webview);
-    } catch {
-      // disposing
-    }
+    this.studio?.postStudioSet(
+      pluginsStateData(readActivePlugins(this.helpers), readPluginsFlags()),
+    );
   }
 
   /** Reveal the panel if resolved (best-effort). */
   reveal(): void {
-    try {
-      this.view?.show?.(true);
-    } catch {
-      // older hosts / disposing
-    }
+    this.studio?.reveal(true);
   }
 
-  private listCards(flags: PluginsFlags) {
+  private listCards(flags: PluginsFlags): PluginCard[] {
     let list: unknown = [];
     try {
       list = this.registry.listAll();
@@ -200,39 +169,21 @@ export class PluginsWebviewViewProvider implements WebviewViewProvider {
     return buildPluginCards(list, flags);
   }
 
-  private postInit(webview: Webview): void {
+  private initData(): PluginsInitData {
     const flags = readPluginsFlags();
-    void webview.postMessage(
-      encodePluginsInit(this.listCards(flags), readActivePlugins(this.helpers), flags),
+    return pluginsInitData(
+      this.listCards(flags),
+      readActivePlugins(this.helpers),
+      flags,
     );
   }
 
-  private postStateTo(webview: Webview): void {
-    const flags = readPluginsFlags();
-    void webview.postMessage(
-      encodePluginsState(readActivePlugins(this.helpers), flags),
-    );
-  }
-
-  private async onMessage(webview: Webview, raw: unknown): Promise<void> {
-    try {
-      const msg = decodePluginsWebToHost(raw);
-      if (!msg) return;
-      if (msg.type === 'plugins.ready') {
-        this.postInit(webview);
-        return;
-      }
-      if (msg.type === 'plugins.activate') {
-        await runActivatePluginCommand(
-          this.helpers,
-          { kind: msg.kind, id: msg.id },
-          this.refreshTrees,
-        );
-        this.postStateTo(webview);
-      }
-    } catch {
-      // never throw into the webview host
-    }
+  private async activate(kind: PluginKind, id: string): Promise<void> {
+    // `runActivatePluginCommand` is defensive throughout (parse, write, notify
+    // and the refresh callback all swallow their own failures), so no extra
+    // guard is needed here — state is posted either way.
+    await runActivatePluginCommand(this.helpers, { kind, id }, this.refreshTrees);
+    this.postState();
   }
 }
 
@@ -242,21 +193,7 @@ export function registerPluginsWebviewView(
   helpers: WorkspaceStateHelpers,
   refreshTrees?: () => void | Thenable<void>,
 ): PluginsWebviewViewProvider {
-  const provider = new PluginsWebviewViewProvider(
-    context,
-    registry,
-    helpers,
-    refreshTrees,
-  );
-  try {
-    const disp = window.registerWebviewViewProvider(
-      PLUGINS_WEBVIEW_VIEW_ID,
-      provider,
-      { webviewOptions: { retainContextWhenHidden: true } },
-    );
-    context.subscriptions.push(disp);
-  } catch {
-    // uncontributed view id / test host
-  }
+  const provider = new PluginsWebviewViewProvider(context, registry, helpers, refreshTrees);
+  provider.register();
   return provider;
 }

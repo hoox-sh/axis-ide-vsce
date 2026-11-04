@@ -1,29 +1,11 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Plugins studio — VS Code theme tokens only (no webview-ui-toolkit).
+ * Plugins studio — layout + visual rules only. The shared base (tokens,
+ * theme reset + focus-visible + scrollbars, ax-* components) is imported
+ * by main.ts ahead of this file; the shell carries the studio's VS Code
+ * surface (the old html/body declarations).
  */
-
-html,
-body {
-  border: 0;
-  outline: 0;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--vscode-editor-background, #1e1e1e);
-  color: var(--vscode-foreground, #cccccc);
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
 
 #plugins-root,
 .plugins-shell {
@@ -32,6 +14,10 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  background: var(--vscode-editor-background, #1e1e1e);
+  color: var(--vscode-foreground, #cccccc);
+  font-family: var(--vscode-font-family, system-ui, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
 }
 
 .plugins-header {

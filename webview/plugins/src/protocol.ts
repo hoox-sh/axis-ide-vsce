@@ -17,24 +17,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Plugins studio host↔webview codec (axis.webview.v1 + flat JSON).
- * Host sibling encodes `plugins.init` / `plugins.state`; this view posts
- * `plugins.ready` and `plugins.activate`. Never throws on hostile input.
+ * Plugins studio-local protocol layer on the shared `studio.*` namespace
+ * of axis.webview.v1. Envelope encode/decode lives in ONE place —
+ * webview/shared/studio-protocol → src/protocol/codec — shared by host and
+ * view. This file owns the plugins view-local card/active/flags
+ * normalization and the frozen action set the host accepts: activate —
+ * nothing else. Strict envelopes only: the lenient flat-JSON tolerance of
+ * the previous ad-hoc decoder is gone.
  */
 
-export const PROTOCOL_VERSION = 1 as const;
+import {
+  decodeStudioData,
+  encodeStudioAction,
+  encodeStudioReady,
+  type AxisEnvelope,
+  type StudioActionPayload,
+  type StudioReadyPayload,
+} from '../../shared/studio-protocol';
 
-export const HOST_TO_VIEW = {
-  Init: 'plugins.init',
-  State: 'plugins.state',
-} as const;
-
-export const VIEW_TO_HOST = {
-  Ready: 'plugins.ready',
-  Activate: 'plugins.activate',
-} as const;
-
-const HOST_TYPES = new Set<string>([HOST_TO_VIEW.Init, HOST_TO_VIEW.State]);
+/** Studio view id — the `axis.plugins` VS Code view (frozen contract). */
+export const PLUGINS_VIEW = 'plugins';
 
 export type PluginKind =
   | 'source'
@@ -89,29 +91,12 @@ export type PluginsFlags = {
   allowPyodide?: boolean;
 };
 
-export type WebviewDecodeOk = {
-  ok: true;
-  type: string;
-  payload: Record<string, unknown>;
-};
-export type WebviewDecodeErr = { ok: false; error: string };
-export type WebviewDecodeResult = WebviewDecodeOk | WebviewDecodeErr;
-
-export type PluginsActivateMessage = {
-  v: typeof PROTOCOL_VERSION;
-  type: typeof VIEW_TO_HOST.Activate;
-  kind: PluginKind;
-  id: string;
-  payload: { kind: PluginKind; id: string };
-  ts: number;
-};
-
-export type PluginsReadyMessage = {
-  v: typeof PROTOCOL_VERSION;
-  type: typeof VIEW_TO_HOST.Ready;
-  payload: Record<string, never>;
-  ts: number;
-};
+/** One decoded studio.init / studio.set addressed to the plugins view. */
+export interface PluginsStudioState {
+  kind: 'init' | 'set';
+  /** The studio `data` record — `plugins` / `active` / `flags` fields. */
+  data: Record<string, unknown>;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -215,60 +200,35 @@ export function normalizeFlags(raw: unknown): PluginsFlags {
   return out;
 }
 
-/** Never-throw decode of untrusted host postMessage data. */
-export function decodeHostMessage(raw: unknown): WebviewDecodeResult {
-  try {
-    if (!isPlainObject(raw)) {
-      return { ok: false, error: 'envelope must be a non-null object' };
-    }
-    if ('v' in raw && raw.v !== PROTOCOL_VERSION) {
-      return { ok: false, error: `unsupported protocol version: ${String(raw.v)}` };
-    }
-    if (typeof raw.type !== 'string' || raw.type.length === 0) {
-      return { ok: false, error: 'type must be a non-empty string' };
-    }
-    if (!HOST_TYPES.has(raw.type)) {
-      return { ok: false, error: `unexpected or view→host type: ${raw.type}` };
-    }
-    if ('ts' in raw && (typeof raw.ts !== 'number' || !Number.isFinite(raw.ts))) {
-      return { ok: false, error: 'ts must be a finite number' };
-    }
-    const payload = isPlainObject(raw.payload) ? raw.payload : raw;
-    return { ok: true, type: raw.type, payload };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: `decode failed: ${message}` };
-  }
+/**
+ * Never-throw decode of studio.init / studio.set envelopes addressed to the
+ * plugins view. Strict: the envelope must decode through the shared codec,
+ * carry the plugins view, and a plain-object `data` record. Null for
+ * anything else.
+ */
+export function decodePluginsStudioMessage(raw: unknown): PluginsStudioState | null {
+  const message = decodeStudioData(raw);
+  if (!message || message.view !== PLUGINS_VIEW) return null;
+  if (!isPlainObject(message.data)) return null;
+  return { kind: message.kind, data: message.data };
 }
 
-export function encodePluginsReady(ts = Date.now()): PluginsReadyMessage {
-  return {
-    v: PROTOCOL_VERSION,
-    type: VIEW_TO_HOST.Ready,
-    payload: {},
-    ts,
-  };
+/** studio.ready for the plugins view — no capabilities, as before. */
+export function encodePluginsReady(): AxisEnvelope<StudioReadyPayload> {
+  return encodeStudioReady(PLUGINS_VIEW);
 }
 
-/** View → host activate. Invalid kind/id returns null (caller must not post). */
+/** studio.action `activate` — the old flat `kind` / `id` fields ride `args`. */
 export function encodePluginsActivate(
   kind: unknown,
   id: unknown,
-  ts = Date.now(),
-): PluginsActivateMessage | null {
+): AxisEnvelope<StudioActionPayload> | null {
   try {
     if (!isPluginKind(kind)) return null;
     if (typeof id !== 'string') return null;
     const trimmed = id.trim();
     if (!trimmed) return null;
-    return {
-      v: PROTOCOL_VERSION,
-      type: VIEW_TO_HOST.Activate,
-      kind,
-      id: trimmed,
-      payload: { kind, id: trimmed },
-      ts,
-    };
+    return encodeStudioAction(PLUGINS_VIEW, 'activate', { kind, id: trimmed });
   } catch {
     return null;
   }
