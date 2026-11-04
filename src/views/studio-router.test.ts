@@ -149,6 +149,23 @@ describe('StudioMessageRouter', () => {
     expect(drops[1]).toContain('studio.action reveal handler threw on logs: action-boom');
   });
 
+  test('async handler rejections are logged, never escape', async () => {
+    const drops: string[] = [];
+    const router = new StudioMessageRouter((message) => drops.push(message));
+    router.register({
+      view: 'plugins',
+      actions: {
+        activate: async () => {
+          throw new Error('async-boom');
+        },
+      },
+    });
+    expect(() => router.handle(actionEnvelope('plugins', 'activate', {}))).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(drops.length).toBe(1);
+    expect(drops[0]).toContain('studio.action activate handler failed on plugins: async-boom');
+  });
+
   test('non-studio envelopes are ignored silently', () => {
     const drops: string[] = [];
     const router = new StudioMessageRouter((message) => drops.push(message));

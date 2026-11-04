@@ -233,6 +233,22 @@ describe('StudioViewProvider resolveStudioView', () => {
     expect(w.webview.html).toContain('class="vscode-dark"');
   });
 
+  test('a throwing joinPath degrades to an empty asset root, never throws', () => {
+    const { entry } = makeEntry();
+    const deps = makeDeps();
+    const provider = new StudioViewProvider(entry, {
+      ...deps,
+      joinPath: () => {
+        throw new Error('joinPath-boom');
+      },
+    });
+    const w = makeWebview();
+    expect(() => provider.resolveStudioView(w.view)).not.toThrow();
+    expect(w.webview.options.enableScripts).toBe(true);
+    expect(w.webview.options.localResourceRoots).toEqual([]);
+    expect(w.webview.html).toContain('assets missing at unknown');
+  });
+
   test('missing assets render the fallback message; fsPath throw degrades the same way', () => {
     const { entry } = makeEntry();
     const provider = new StudioViewProvider(entry, makeDeps({ files: new Set() }));

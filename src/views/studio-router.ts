@@ -37,7 +37,7 @@ export interface StudioActionContext {
 export type StudioActionHandler = (
   args: Record<string, unknown> | undefined,
   context: StudioActionContext,
-) => void;
+) => void | Promise<void>;
 
 /** `studio.ready` handshake hook (the provider acks with `studio.init`). */
 export type StudioReadyHandler = (payload: StudioReadyPayload) => void;
@@ -121,7 +121,16 @@ export class StudioMessageRouter {
       return;
     }
     try {
-      handler(payload.args, { view: payload.view, action: payload.action });
+      const result = handler(payload.args, { view: payload.view, action: payload.action });
+      // Async handlers (e.g. plugin activation) settle out-of-band; a rejection
+      // must not escape into the webview host.
+      if (result && typeof (result as Promise<void>).then === 'function') {
+        void (result as Promise<void>).catch((error: unknown) => {
+          this.sink(
+            `studio.action ${payload.action} handler failed on ${payload.view}: ${messageOf(error)}`,
+          );
+        });
+      }
     } catch (error) {
       this.sink(
         `studio.action ${payload.action} handler threw on ${payload.view}: ${messageOf(error)}`,

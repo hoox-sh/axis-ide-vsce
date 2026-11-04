@@ -18,8 +18,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { buildChartWebviewHtml } from '../editors/chart-html';
-import { getColorsHtml } from './colors-html';
-import { buildLogsWebviewHtml } from './logs-html';
+
 import { buildStudioHtml, escapeHtmlAttr, htmlHasInlineScript } from './studio-html';
 
 const CSP_SOURCE = 'https://csp.example.vscode-webview.test';
@@ -44,28 +43,39 @@ function shellHtml(bodyClass: string, bodyHtml = '', nonce?: string): string {
 }
 
 describe('buildStudioHtml CSP parity', () => {
-  test('nonce shell CSP is byte-identical to the colors builder', () => {
+  test('nonce shell CSP is the paint-only matrix with the nonce on script-src', () => {
     const nonce = 'Abc123+/=_-xyz';
-    const colors = getColorsHtml({
-      cspSource: CSP_SOURCE,
-      nonce,
-      scriptUri: SCRIPT_URI,
-      styleUri: STYLE_URI,
-      bodyClass: 'vscode-light',
-    });
     const studio = shellHtml('vscode-light', '', nonce);
-    expect(cspAttr(studio)).toBe(cspAttr(colors));
+    // The colors builder (deleted in the Phase-2 colors migration) was the
+    // reference for this matrix; its CSP was the same directive list, so the
+    // assertion pins the matrix itself.
+    expect(cspAttr(studio)).toBe(
+      [
+        "default-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        `script-src 'nonce-${nonce}' ${CSP_SOURCE}`,
+        `style-src ${CSP_SOURCE} 'unsafe-inline'`,
+        `img-src ${CSP_SOURCE} data: blob:`,
+        "connect-src 'none'",
+      ].join('; '),
+    );
+    expect(studio).not.toContain("script-src 'unsafe-inline'");
   });
 
-  test('nonce-free shell CSP is byte-identical to the logs builder', () => {
-    const logs = buildLogsWebviewHtml({
-      cspSource: CSP_SOURCE,
-      scriptUri: SCRIPT_URI,
-      styleUri: STYLE_URI,
-      bodyClass: 'vscode-dark',
-    });
+  test('nonce-free shell CSP matches the canonical paint-only matrix', () => {
     const studio = shellHtml('vscode-dark');
-    expect(cspAttr(studio)).toBe(cspAttr(logs));
+    expect(cspAttr(studio)).toBe(
+      [
+        "default-src 'none'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        `script-src ${CSP_SOURCE}`,
+        `style-src ${CSP_SOURCE} 'unsafe-inline'`,
+        `img-src ${CSP_SOURCE} data: blob:`,
+        "connect-src 'none'",
+      ].join('; '),
+    );
   });
 
   test('full directive list is the chart paint-only matrix', () => {

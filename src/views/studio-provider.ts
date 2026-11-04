@@ -86,6 +86,9 @@ function messageOf(error: unknown): string {
 
 /** colors/logs-style fallback: plain message, no CSP, no assets. */
 function fallbackHtml(error: unknown): string {
+  // Detailed-but-sanitized: the old per-studio builders echoed the reason
+  // (missing assets / asWebviewUri / buildBody) so operators could act on it.
+  // Strip angle brackets so the message can never inject markup.
   const message = error instanceof Error ? error.message : String(error);
   return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
 }
@@ -130,15 +133,21 @@ export class StudioViewProvider implements WebviewViewProvider {
     try {
       this.view = webviewView;
       const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [this.assetsRoot()],
-      };
       webview.onDidReceiveMessage((raw) => this.handleRaw(raw));
       webviewView.onDidDispose(() => {
         if (this.view === webviewView) this.view = undefined;
       });
       try {
+        let root: unknown;
+        try {
+          root = this.assetsRoot();
+        } catch {
+          root = undefined;
+        }
+        webview.options = {
+          enableScripts: true,
+          localResourceRoots: root === undefined ? [] : [root],
+        };
         webview.html = this.buildHtml(webview);
       } catch (error) {
         try {
@@ -236,14 +245,16 @@ export class StudioViewProvider implements WebviewViewProvider {
 
   /** colors/symbols/logs pattern: refuse to mount without compiled assets. */
   private buildHtml(webview: StudioWebviewLike): string {
-    const mainJs = this.assetPath('main.js');
     let jsPath = '';
+    let mainJs: unknown;
     try {
+      mainJs = this.assetPath('main.js');
       jsPath = this.deps.fsPath(mainJs);
     } catch {
       jsPath = '';
+      mainJs = undefined;
     }
-    if (!jsPath || !this.deps.assetExists(jsPath)) {
+    if (!jsPath || !this.deps.assetExists(jsPath) || mainJs === undefined) {
       throw new Error(
         `AXIS ${this.entry.id} webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
       );
