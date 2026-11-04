@@ -148,7 +148,7 @@ updating that doc.
 
 ## Develop
 
-Requirements: [Bun](https://bun.sh) `1.4.3`, Node 22 (esbuild / Vite / vsce
+Requirements: [Bun](https://bun.sh) `1.4.4`, Node 22 (esbuild / Vite / vsce
 shell-outs), and VS Code `^1.95.0` for the electron suite.
 
 ```bash

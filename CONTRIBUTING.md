@@ -14,7 +14,7 @@ Script™ / PYNE beside the editor with AXIS charts, results, and live sessions.
 
 ## Setup
 
-Requirements: [Bun](https://bun.sh) `1.4.3`, Node 22, VS Code `^1.95.0`.
+Requirements: [Bun](https://bun.sh) `1.4.4`, Node 22, VS Code `^1.95.0`.
 
 ```bash
 bun install
