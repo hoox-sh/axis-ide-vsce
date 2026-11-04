@@ -17,9 +17,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Scripts studio messages and snapshot shaping.
- * Pure — no vscode. Never throws. Never copies Pine `code`.
+ * Scripts studio messages and snapshot shaping on the `studio.*` namespace
+ * of axis.webview.v1 (frozen Phase-1 contract). Pure — no vscode.
+ * Never throws. Never copies Pine `code`.
+ *
+ * Host → view: `studio.init` / `studio.set` carrying
+ * `{ view: 'scripts', data: { snapshot } }` — the exact `snapshot` field the
+ * old flat `scripts.set` message carried, preserved verbatim. View → host:
+ * `studio.ready` and `studio.action` (`run` | `openChart` | `apply`) — the
+ * old flat payload fields move into `args`.
  */
+
+import type { StudioRegistration } from './studio-registry';
 
 /** Command ids confirmed in package.json (do not invent aliases). */
 export const SCRIPTS_RUN_COMMAND = 'axis.runScript';
@@ -30,6 +39,12 @@ export const SCRIPTS_SUGGESTION_MAX = 8;
 
 export const SCRIPTS_EMPTY_RUN =
   'Run a Pine Script™ (Ctrl+Enter)';
+
+/** `view` value for every Scripts studio envelope — exactly `'scripts'`. */
+export const SCRIPTS_STUDIO_VIEW = 'scripts';
+
+/** VS Code view id of the Scripts studio (`axis.indicators`). */
+export const SCRIPTS_STUDIO_VIEW_ID = 'axis.indicators';
 
 export type ScriptRunStatus = 'ok' | 'error';
 
@@ -59,15 +74,13 @@ export type ScriptsSnapshot = {
   epoch: number | null;
 };
 
-export type ScriptsWebMessage =
-  | { type: 'scripts.ready' }
-  | { type: 'scripts.run' }
-  | { type: 'scripts.openChart' }
-  | { type: 'scripts.apply'; id: string };
-
-export type ScriptsHostMessage =
-  | { type: 'scripts.set'; snapshot: ScriptsSnapshot }
-  | { type: 'scripts.notice'; text: string };
+/**
+ * `studio.init` / `studio.set` data — the exact `snapshot` field the old
+ * flat `scripts.set` message carried, preserved verbatim.
+ */
+export interface ScriptsStudioData {
+  snapshot: ScriptsSnapshot;
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -264,6 +277,29 @@ export function buildScriptsSnapshot(input: unknown): ScriptsSnapshot {
   };
 }
 
+/**
+ * `studio.init` / `studio.set` data builder — the old flat `scripts.set`
+ * message's `snapshot` field, wrapped verbatim. Never throws.
+ */
+export function scriptsStudioData(
+  lastRun: unknown,
+  suggestions: readonly ScriptSuggestion[],
+): ScriptsStudioData {
+  return {
+    snapshot: buildScriptsSnapshot({ lastRun, suggestions }),
+  };
+}
+
+/**
+ * Old `readApplyId` validation, moved onto `studio.action` args: the
+ * trimmed `args.id` (or a legacy nested `args.payload.id`), '' when absent
+ * or not a string. Invalid apply actions are ignored, never thrown.
+ */
+export function scriptsApplyIdFromArgs(args: unknown): string {
+  if (!isPlainObject(args)) return '';
+  return readApplyId(args);
+}
+
 function readApplyId(raw: Record<string, unknown>): string {
   const top = readString(raw, 'id');
   if (top) return top;
@@ -276,34 +312,101 @@ function readApplyId(raw: Record<string, unknown>): string {
   }
 }
 
-/** Webview → host. Unknown / hostile payloads return null. Never throws. */
-export function parseScriptsWebMessage(raw: unknown): ScriptsWebMessage | null {
-  if (!isPlainObject(raw)) return null;
-  let type = '';
-  try {
-    const value = raw.type;
-    type = typeof value === 'string' ? value.trim() : '';
-  } catch {
-    return null;
-  }
-  if (type === 'scripts.ready') return { type: 'scripts.ready' };
-  if (type === 'scripts.run') return { type: 'scripts.run' };
-  if (type === 'scripts.openChart') return { type: 'scripts.openChart' };
-  if (type === 'scripts.apply') {
-    const id = readApplyId(raw);
-    if (!id) return null;
-    return { type: 'scripts.apply', id };
-  }
-  return null;
-}
-
-/** Host → webview `scripts.set`. */
-export function encodeScriptsSet(input: unknown): ScriptsHostMessage {
-  return { type: 'scripts.set', snapshot: buildScriptsSnapshot(input) };
-}
-
-/** Host → webview aria-live notice. Non-strings become empty text. */
-export function encodeScriptsNotice(text: unknown): ScriptsHostMessage {
+/** `studio.notice` message text — the old `scripts.notice` text validation. */
+export function scriptsNoticeMessage(text: unknown): string {
   const value = typeof text === 'string' ? text.trim() : '';
-  return { type: 'scripts.notice', text: value };
+  return value;
+}
+
+/**
+ * Trusted studio DOM for the Scripts shell body — the exact markup the old
+ * `scripts-html.ts` builder emitted between the theme-classed `<body>` and
+ * the script tag (webview JS depends on these ids/classes). Inline scripts
+ * are refused by the shell; this body carries none.
+ */
+export function buildScriptsStudioBody(): string {
+  return `<div id="scripts-root" class="scripts-root" data-axis-scripts-host="1">
+    <header class="scripts-header">
+      <h1 class="scripts-title">Scripts</h1>
+    </header>
+    <section class="scripts-card" aria-labelledby="scripts-last-heading">
+      <h2 class="scripts-card__title" id="scripts-last-heading">Last run</h2>
+      <p class="scripts-empty" id="scripts-empty">${SCRIPTS_EMPTY_RUN}</p>
+      <dl class="scripts-dl" id="scripts-last" hidden>
+        <dt>Script</dt><dd id="scripts-title"></dd>
+        <dt>Symbol</dt><dd id="scripts-symbol"></dd>
+        <dt>Interval</dt><dd id="scripts-interval"></dd>
+        <dt>Mode</dt><dd id="scripts-mode"></dd>
+        <dt>Status</dt><dd id="scripts-status"></dd>
+        <dt id="scripts-error-label">Error</dt><dd id="scripts-error"></dd>
+        <dt>When</dt><dd id="scripts-at"></dd>
+        <dt id="scripts-epoch-label">Epoch</dt><dd id="scripts-epoch"></dd>
+      </dl>
+      <button type="button" class="scripts-btn" id="scripts-run">
+        <svg class="scripts-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path fill="currentColor" d="M4 2.5v11l10-5.5L4 2.5z"/>
+        </svg>
+        Run
+      </button>
+    </section>
+    <section class="scripts-card" aria-labelledby="scripts-chart-heading">
+      <h2 class="scripts-card__title" id="scripts-chart-heading">Chart</h2>
+      <p class="scripts-card__copy">Chart beside the editor.</p>
+      <button type="button" class="scripts-btn" id="scripts-open-chart">
+        <svg class="scripts-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path fill="currentColor" d="M2 13V3h2v8h10v2H2zm3-3 2.2-3 1.8 2.2L12 5l2 1.2-4.2 5.2-2-2.4L7 11 5 8.2V10z"/>
+        </svg>
+        Open chart
+      </button>
+    </section>
+    <section class="scripts-card" aria-labelledby="scripts-suggest-heading">
+      <h2 class="scripts-card__title" id="scripts-suggest-heading">Suggestions</h2>
+      <ul class="scripts-list" id="scripts-suggestions"></ul>
+    </section>
+    <p class="scripts-live" id="scripts-live" aria-live="polite"></p>
+  </div>`;
+}
+
+/** Host behavior the Scripts studio registration wires behind `studio.action`. */
+export interface ScriptsStudioHandlers {
+  /** `studio.action run` — start a run of the active Pine editor. */
+  run(): void | Promise<void>;
+  /** `studio.action openChart` — open the sibling chart document. */
+  openChart(): void | Promise<void>;
+  /** `studio.action apply` — apply one builtin id as untitled Pine. */
+  apply(id: string): void | Promise<void>;
+  /** Current studio state — feeds the `studio.init` handshake ack. */
+  snapshot(): ScriptsStudioData;
+}
+
+/**
+ * Build the Scripts `StudioRegistration` (enhancement plan §5 Phase 2).
+ * Pure data + dispatch: the shim supplies the vscode-backed handlers, the
+ * generic provider owns the shell, the ready handshake, and encoding.
+ */
+export function scriptsStudioRegistration(handlers: ScriptsStudioHandlers): StudioRegistration {
+  return {
+    id: SCRIPTS_STUDIO_VIEW,
+    title: 'Scripts',
+    viewId: SCRIPTS_STUDIO_VIEW_ID,
+    retainContextWhenHidden: true,
+    buildBody: buildScriptsStudioBody,
+    actions: {
+      run: async () => {
+        await handlers.run();
+        handlers.snapshot();
+      },
+      openChart: async () => {
+        await handlers.openChart();
+        handlers.snapshot();
+      },
+      apply: async (args) => {
+        const id = scriptsApplyIdFromArgs(args);
+        if (!id) return;
+        await handlers.apply(id);
+        handlers.snapshot();
+      },
+    },
+    restore: () => handlers.snapshot(),
+  };
 }

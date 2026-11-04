@@ -1,37 +1,24 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Scripts studio — VS Code theme tokens only (no webview-ui-toolkit).
+ * Scripts studio — layout + visual rules only. The shared base (tokens,
+ * theme reset + focus-visible + scrollbars, ax-* components) is imported
+ * by main.ts ahead of this file; the root carries the studio's VS Code
+ * surface (the old html/body declarations).
  */
 
-html,
-body {
-  border: 0;
-  outline: 0;
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--vscode-editor-background);
-  color: var(--vscode-foreground);
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
 .scripts-root {
+  position: relative;
   height: 100%;
   overflow: auto;
   padding: 8px 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 8px;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
 }
 
 .scripts-header {
@@ -202,8 +189,4 @@ body {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
-}
-
-.scripts-root {
-  position: relative;
 }

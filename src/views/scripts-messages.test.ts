@@ -17,20 +17,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { htmlHasInlineScript } from '../editors/chart-html';
+import {
+  HOST_TO_VIEW,
+  PROTOCOL_VERSION,
+  VIEW_TO_HOST,
+  decode,
+  encode,
+} from '../protocol';
 import {
   SCRIPTS_APPLY_BUILTIN_COMMAND,
   SCRIPTS_EMPTY_RUN,
   SCRIPTS_OPEN_CHART_COMMAND,
   SCRIPTS_RUN_COMMAND,
+  SCRIPTS_STUDIO_VIEW,
+  SCRIPTS_STUDIO_VIEW_ID,
   SCRIPTS_SUGGESTION_MAX,
   buildScriptsSnapshot,
-  encodeScriptsNotice,
-  encodeScriptsSet,
-  parseScriptsWebMessage,
   readRunEpoch,
   scriptRunCardFromLastRun,
   scriptSuggestionFromEntry,
+  scriptsApplyIdFromArgs,
+  scriptsNoticeMessage,
+  scriptsStudioData,
+  scriptsStudioRegistration,
   unwrapRunRecord,
+  type ScriptsStudioHandlers,
 } from './scripts-messages';
 
 function boom(key: string): Record<string, unknown> {
@@ -48,6 +60,8 @@ describe('scripts command ids', () => {
     expect(SCRIPTS_APPLY_BUILTIN_COMMAND).toBe('axis.applyBuiltin');
     expect(SCRIPTS_SUGGESTION_MAX).toBe(8);
     expect(SCRIPTS_EMPTY_RUN).toContain('Ctrl+Enter');
+    expect(SCRIPTS_STUDIO_VIEW).toBe('scripts');
+    expect(SCRIPTS_STUDIO_VIEW_ID).toBe('axis.indicators');
   });
 });
 
@@ -394,83 +408,183 @@ describe('buildScriptsSnapshot', () => {
   });
 });
 
-describe('parseScriptsWebMessage', () => {
-  test('accepts ready, run, openChart, and apply', () => {
-    expect(parseScriptsWebMessage({ type: 'scripts.ready' })).toEqual({
-      type: 'scripts.ready',
-    });
-    expect(parseScriptsWebMessage({ type: ' scripts.run ' })).toEqual({ type: 'scripts.run' });
-    expect(parseScriptsWebMessage({ type: 'scripts.openChart' })).toEqual({
-      type: 'scripts.openChart',
-    });
-    expect(parseScriptsWebMessage({ type: 'scripts.apply', id: ' sma ' })).toEqual({
-      type: 'scripts.apply',
-      id: 'sma',
-    });
-    expect(
-      parseScriptsWebMessage({
-        type: 'scripts.apply',
-        id: 'sma',
-        payload: { id: 'ema' },
-      }),
-    ).toEqual({ type: 'scripts.apply', id: 'sma' });
-    expect(parseScriptsWebMessage({ type: 'scripts.apply', payload: { id: 'ema' } })).toEqual({
-      type: 'scripts.apply',
-      id: 'ema',
-    });
-  });
-
-  test('rejects junk and hostile messages', () => {
-    expect(parseScriptsWebMessage(null)).toBeNull();
-    expect(parseScriptsWebMessage(undefined)).toBeNull();
-    expect(parseScriptsWebMessage([])).toBeNull();
-    expect(parseScriptsWebMessage('scripts.run')).toBeNull();
-    expect(parseScriptsWebMessage(1)).toBeNull();
-    expect(parseScriptsWebMessage(true)).toBeNull();
-    expect(parseScriptsWebMessage({})).toBeNull();
-    expect(parseScriptsWebMessage({ type: 1 })).toBeNull();
-    expect(parseScriptsWebMessage({ type: 'scripts.nope' })).toBeNull();
-    expect(parseScriptsWebMessage({ type: 'scripts.apply' })).toBeNull();
-    expect(parseScriptsWebMessage({ type: 'scripts.apply', id: '   ' })).toBeNull();
-    expect(parseScriptsWebMessage({ type: 'scripts.apply', id: 4 })).toBeNull();
-    expect(parseScriptsWebMessage({ type: 'scripts.apply', payload: [] })).toBeNull();
-    expect(parseScriptsWebMessage({ type: 'scripts.apply', payload: { id: '' } })).toBeNull();
-    expect(parseScriptsWebMessage(boom('type'))).toBeNull();
-    expect(
-      parseScriptsWebMessage({
-        type: 'scripts.apply',
-        id: '',
-        get payload() {
-          throw new Error('payload');
-        },
-      }),
-    ).toBeNull();
-  });
-});
-
-describe('encode host messages', () => {
-  test('scripts.set and scripts.notice', () => {
-    const set = encodeScriptsSet({
-      lastRun: { id: 'run-1', status: 'success', meta: { script_name: 'A' } },
-      suggestions: [{ id: 'sma', title: 'SMA', code: 'hidden' }],
-    });
-    expect(set.type).toBe('scripts.set');
-    if (set.type !== 'scripts.set') return;
-    expect(set.snapshot.lastRun?.title).toBe('A');
-    expect(set.snapshot.suggestions[0]).toEqual({
+describe('scriptsStudioData', () => {
+  test('wraps the old scripts.set snapshot field verbatim', () => {
+    const data = scriptsStudioData(
+      { id: 'run-1', status: 'success', meta: { script_name: 'A' } },
+      [{ id: 'sma', title: 'SMA', code: 'hidden' }],
+    );
+    expect(data.snapshot.lastRun?.title).toBe('A');
+    expect(data.snapshot.suggestions[0]).toEqual({
       id: 'sma',
       title: 'SMA',
       kind: 'indicator',
       category: '',
     });
-    expect(JSON.stringify(set)).not.toContain('hidden');
-    expect(encodeScriptsNotice('  Applied  ')).toEqual({
-      type: 'scripts.notice',
-      text: 'Applied',
+    expect(data.snapshot.epoch).toBeNull();
+    expect(JSON.stringify(data)).not.toContain('hidden');
+
+    const empty = scriptsStudioData(null, []);
+    expect(empty).toEqual({
+      snapshot: { lastRun: null, suggestions: [], epoch: null },
     });
-    expect(encodeScriptsNotice('Run started').text).toBe('Run started');
-    expect(encodeScriptsNotice(1)).toEqual({ type: 'scripts.notice', text: '' });
-    expect(encodeScriptsNotice(null)).toEqual({ type: 'scripts.notice', text: '' });
-    expect(encodeScriptsNotice(undefined).text).toBe('');
+  });
+
+  test('rides the studio.init / studio.set envelope and survives the JSON wire', () => {
+    const data = scriptsStudioData(
+      { id: 'run-1', status: 'error', error: 'boom', createdAt: 5 },
+      [],
+    );
+    for (const type of [HOST_TO_VIEW.StudioInit, HOST_TO_VIEW.StudioSet]) {
+      const envelope = encode(type, { view: SCRIPTS_STUDIO_VIEW, data });
+      expect(envelope.v).toBe(PROTOCOL_VERSION);
+      const decoded = decode(JSON.parse(JSON.stringify(envelope)));
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) return;
+      expect(decoded.envelope.type).toBe(type);
+      expect(decoded.envelope.payload).toEqual({ view: 'scripts', data });
+    }
+  });
+});
+
+describe('scriptsApplyIdFromArgs', () => {
+  test('accepts args.id and the legacy nested args.payload.id', () => {
+    expect(scriptsApplyIdFromArgs({ id: ' sma ' })).toBe('sma');
+    expect(scriptsApplyIdFromArgs({ id: 'sma', payload: { id: 'ema' } })).toBe('sma');
+    expect(scriptsApplyIdFromArgs({ payload: { id: 'ema' } })).toBe('ema');
+    expect(scriptsApplyIdFromArgs({ id: 'run-a', extra: true })).toBe('run-a');
+  });
+
+  test('rejects junk and hostile args (old apply validation)', () => {
+    expect(scriptsApplyIdFromArgs(undefined)).toBe('');
+    expect(scriptsApplyIdFromArgs(null)).toBe('');
+    expect(scriptsApplyIdFromArgs([])).toBe('');
+    expect(scriptsApplyIdFromArgs('sma')).toBe('');
+    expect(scriptsApplyIdFromArgs(1)).toBe('');
+    expect(scriptsApplyIdFromArgs({})).toBe('');
+    expect(scriptsApplyIdFromArgs({ id: '   ' })).toBe('');
+    expect(scriptsApplyIdFromArgs({ id: 4 })).toBe('');
+    expect(scriptsApplyIdFromArgs({ payload: [] })).toBe('');
+    expect(scriptsApplyIdFromArgs({ payload: { id: '' } })).toBe('');
+    expect(scriptsApplyIdFromArgs(boom('id'))).toBe('');
+    expect(
+      scriptsApplyIdFromArgs({
+        id: '',
+        get payload() {
+          throw new Error('payload');
+        },
+      }),
+    ).toBe('');
+  });
+});
+
+describe('scriptsNoticeMessage', () => {
+  test('trims and coerces like the old scripts.notice text', () => {
+    expect(scriptsNoticeMessage('  Applied  ')).toBe('Applied');
+    expect(scriptsNoticeMessage('Run started')).toBe('Run started');
+    expect(scriptsNoticeMessage(1)).toBe('');
+    expect(scriptsNoticeMessage(null)).toBe('');
+    expect(scriptsNoticeMessage(undefined)).toBe('');
+  });
+});
+
+describe('buildScriptsStudioBody', () => {
+  test('emits the exact ids/classes the Scripts webview depends on', () => {
+    const body = scriptsStudioRegistration({
+      run: () => {},
+      openChart: () => {},
+      apply: () => {},
+      snapshot: () => scriptsStudioData(null, []),
+    }).buildBody?.();
+    expect(body).toContain('id="scripts-root"');
+    expect(body).toContain('class="scripts-root"');
+    expect(body).toContain('data-axis-scripts-host="1"');
+    expect(body).toContain('id="scripts-run"');
+    expect(body).toContain('id="scripts-open-chart"');
+    expect(body).toContain('id="scripts-suggestions"');
+    expect(body).toContain('id="scripts-last"');
+    expect(body).toContain('id="scripts-empty"');
+    expect(body).toContain('id="scripts-live"');
+    expect(body).toContain('aria-live="polite"');
+    expect(body).toContain(SCRIPTS_EMPTY_RUN);
+    expect(body).toContain('<svg');
+    expect(body).toContain('class="scripts-header"');
+    expect(body).not.toContain('webview-ui-toolkit');
+    expect(body).not.toContain('vscode-elements');
+    expect(htmlHasInlineScript(body ?? '')).toBe(false);
+  });
+});
+
+describe('scriptsStudioRegistration', () => {
+  function makeHandlers() {
+    const calls: string[] = [];
+    const handlers: ScriptsStudioHandlers = {
+      run: () => {
+        calls.push('run');
+      },
+      openChart: () => {
+        calls.push('openChart');
+      },
+      apply: (id) => {
+        calls.push(`apply:${id}`);
+      },
+      snapshot: () => {
+        calls.push('snapshot');
+        return scriptsStudioData({ id: 'run-1', status: 'ok' }, []);
+      },
+    };
+    return { handlers, calls };
+  }
+
+  test('registers the axis.indicators studio with retained context', () => {
+    const { handlers } = makeHandlers();
+    const entry = scriptsStudioRegistration(handlers);
+    expect(entry.id).toBe('scripts');
+    expect(entry.title).toBe('Scripts');
+    expect(entry.viewId).toBe('axis.indicators');
+    expect(entry.retainContextWhenHidden).toBe(true);
+    expect(Object.keys(entry.actions).sort()).toEqual(['apply', 'openChart', 'run']);
+  });
+
+  test('studio.action run / openChart / apply dispatch to the handlers', async () => {
+    const { handlers, calls } = makeHandlers();
+    const entry = scriptsStudioRegistration(handlers);
+    await entry.actions.run?.(undefined, { view: 'scripts', action: 'run' });
+    await entry.actions.openChart?.(undefined, { view: 'scripts', action: 'openChart' });
+    await entry.actions.apply?.({ id: ' sma ' }, { view: 'scripts', action: 'apply' });
+    await entry.actions.apply?.({ id: '' }, { view: 'scripts', action: 'apply' });
+    await entry.actions.apply?.(undefined, { view: 'scripts', action: 'apply' });
+    expect(calls).toEqual(['run', 'snapshot', 'openChart', 'snapshot', 'apply:sma', 'snapshot']);
+  });
+
+  test('restore feeds the studio.init handshake with the current snapshot', () => {
+    const { handlers } = makeHandlers();
+    const entry = scriptsStudioRegistration(handlers);
+    const data = entry.restore?.();
+    expect(data).toEqual({
+      snapshot: {
+        lastRun: { title: 'run-1', symbol: '', interval: '', mode: '', status: 'ok', error: '', at: 0 },
+        suggestions: [],
+        epoch: null,
+      },
+    });
+  });
+
+  test('action names ride the studio.action envelope payload verbatim', () => {
+    for (const action of ['run', 'openChart', 'apply'] as const) {
+      const envelope = encode(VIEW_TO_HOST.StudioAction, {
+        view: SCRIPTS_STUDIO_VIEW,
+        action,
+        ...(action === 'apply' ? { args: { id: 'sma' } } : {}),
+      });
+      const decoded = decode(JSON.parse(JSON.stringify(envelope)));
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) return;
+      expect(decoded.envelope.payload).toEqual({
+        view: 'scripts',
+        action,
+        ...(action === 'apply' ? { args: { id: 'sma' } } : {}),
+      });
+    }
   });
 });

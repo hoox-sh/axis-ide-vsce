@@ -17,9 +17,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Scripts studio webview protocol.
- * Local envelopes only — not axis.webview.v1.
+ * Scripts studio-local protocol layer on the shared `studio.*` namespace of
+ * axis.webview.v1. Envelope encode/decode lives in ONE place —
+ * webview/shared/studio-protocol → src/protocol/codec — shared by host and
+ * view. This file owns the scripts `data` shape (`data.snapshot` on
+ * studio.init / studio.set, the exact field the old flat `scripts.set`
+ * message carried) and the frozen action set the host accepts:
+ * run | openChart | apply — nothing else.
  */
+
+import {
+  HOST_TO_VIEW,
+  decode,
+  decodeStudioData,
+  encodeStudioAction,
+  encodeStudioReady,
+  type AxisEnvelope,
+  type StudioActionPayload,
+  type StudioNoticePayload,
+  type StudioReadyPayload,
+} from '../../shared/studio-protocol';
+
+/** Studio view id — the `axis.indicators` VS Code view (frozen contract). */
+export const SCRIPTS_VIEW = 'scripts';
 
 export type ScriptRunStatus = 'ok' | 'error';
 
@@ -46,9 +66,11 @@ export type ScriptsViewSnapshot = {
   epoch: number | null;
 };
 
-export type ScriptsHostDecode =
-  | { type: 'scripts.set'; snapshot: ScriptsViewSnapshot }
-  | { type: 'scripts.notice'; text: string };
+/** One decoded studio.init / studio.set addressed to the scripts view. */
+export interface ScriptsStudioState {
+  kind: 'init' | 'set';
+  snapshot: ScriptsViewSnapshot;
+}
 
 const SUGGESTION_MAX = 8;
 
@@ -110,36 +132,51 @@ function snapshotFrom(raw: unknown): ScriptsViewSnapshot {
   };
 }
 
-/** Decode host → webview. Never throws. */
-export function decodeHostMessage(raw: unknown): ScriptsHostDecode | null {
-  try {
-    if (!isPlainObject(raw)) return null;
-    const type = raw.type;
-    if (type === 'scripts.set') {
-      const snapshot = isPlainObject(raw.snapshot) ? raw.snapshot : raw;
-      return { type: 'scripts.set', snapshot: snapshotFrom(snapshot) };
-    }
-    if (type === 'scripts.notice') {
-      return { type: 'scripts.notice', text: textOf(raw.text) };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+/**
+ * Never-throw decode of studio.init / studio.set envelopes addressed to the
+ * scripts view. Field semantics identical to the previous ad-hoc decode:
+ * the snapshot rides `data.snapshot`, with the old `raw.snapshot ?? raw`
+ * tolerance kept; a data-less studio.init returns null so the caller keeps
+ * its current state.
+ */
+export function decodeScriptsStudioData(raw: unknown): ScriptsStudioState | null {
+  const message = decodeStudioData(raw);
+  if (!message || message.view !== SCRIPTS_VIEW || message.data === undefined) return null;
+  const data = message.data;
+  const source = isPlainObject(data) && isPlainObject(data.snapshot) ? data.snapshot : data;
+  return { kind: message.kind, snapshot: snapshotFrom(source) };
 }
 
-export function encodeScriptsReady(): { type: 'scripts.ready' } {
-  return { type: 'scripts.ready' };
+/**
+ * Never-throw decode of a studio.notice envelope addressed to the scripts
+ * view; null for anything else. The old `scripts.notice` text rides
+ * `payload.message`.
+ */
+export function decodeScriptsStudioNotice(raw: unknown): string | null {
+  const result = decode(raw);
+  if (!result.ok) return null;
+  if (result.envelope.type !== HOST_TO_VIEW.StudioNotice) return null;
+  const payload = result.envelope.payload as StudioNoticePayload;
+  if (payload.view !== SCRIPTS_VIEW) return null;
+  return typeof payload.message === 'string' ? payload.message : '';
 }
 
-export function encodeScriptsRun(): { type: 'scripts.run' } {
-  return { type: 'scripts.run' };
+/** studio.ready for the scripts view — no capabilities, as before. */
+export function encodeScriptsReady(): AxisEnvelope<StudioReadyPayload> {
+  return encodeStudioReady(SCRIPTS_VIEW);
 }
 
-export function encodeScriptsOpenChart(): { type: 'scripts.openChart' } {
-  return { type: 'scripts.openChart' };
+/** studio.action `run` — run the active Pine editor (no args, as before). */
+export function encodeScriptsRun(): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(SCRIPTS_VIEW, 'run');
 }
 
-export function encodeScriptsApply(id: string): { type: 'scripts.apply'; id: string } {
-  return { type: 'scripts.apply', id };
+/** studio.action `openChart` — open the sibling chart document (no args). */
+export function encodeScriptsOpenChart(): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(SCRIPTS_VIEW, 'openChart');
+}
+
+/** studio.action `apply` — apply one builtin id; the old flat `id` field rides `args`. */
+export function encodeScriptsApply(id: string): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(SCRIPTS_VIEW, 'apply', { id });
 }

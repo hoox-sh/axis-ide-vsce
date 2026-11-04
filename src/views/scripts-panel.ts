@@ -17,7 +17,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Scripts studio WebviewView (`axis.indicators`).
+ * Scripts studio shim (`axis.indicators`) on the generic studio provider
+ * (enhancement plan §5 Phase 2). This file keeps the historical export
+ * surface (`registerScriptsStudio`, `ScriptsStudioProvider`, …) and owns
+ * only the vscode-backed behavior; the shell, the `studio.ready` handshake,
+ * message routing, and `studio.*` encoding live in `studio-provider.ts` /
+ * `studio-router.ts` / `studio-html.ts`, and the pure payload builders,
+ * the shell body, and the registration live in `scripts-messages.ts`.
  *
  * Last run: `ResultsFocusStore.subscribe` exists (`src/run/results-store.ts`).
  * Pass the store as the optional focus argument — this panel subscribes and
@@ -33,7 +39,6 @@ import { existsSync } from 'node:fs';
 import {
   ColorThemeKind,
   type ExtensionContext,
-  type Webview,
   type WebviewView,
   type WebviewViewProvider,
   Uri,
@@ -48,18 +53,24 @@ import {
 } from '../host/apply-builtin';
 import { getBuiltinById, loadBuiltinCatalog } from '../host/builtins';
 import { PINE_LANGUAGE_ID } from '../host/open-chart';
-import { buildScriptsWebviewHtml } from './scripts-html';
 import {
   SCRIPTS_OPEN_CHART_COMMAND,
   SCRIPTS_RUN_COMMAND,
+  SCRIPTS_STUDIO_VIEW_ID,
   buildScriptsSnapshot,
-  encodeScriptsNotice,
-  encodeScriptsSet,
-  parseScriptsWebMessage,
+  scriptsNoticeMessage,
+  scriptsStudioData,
+  scriptsStudioRegistration,
   type ScriptSuggestion,
 } from './scripts-messages';
+import type { StudioRegistration } from './studio-registry';
+import {
+  registerStudioView,
+  StudioViewProvider,
+  type StudioProviderDeps,
+} from './studio-provider';
 
-export const SCRIPTS_VIEW_ID = 'axis.indicators';
+export const SCRIPTS_VIEW_ID = SCRIPTS_STUDIO_VIEW_ID;
 
 /**
  * Structural lookalike of `ResultsFocusStore`.
@@ -93,50 +104,15 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function scriptsAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'scripts', file);
-}
-
-function assertScriptsAssets(extensionUri: Uri): void {
-  const mainJs = scriptsAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS scripts webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:scripts`,
-    );
-  }
-}
-
-function getScriptsHtml(webview: Webview, extensionUri: Uri): string {
-  assertScriptsAssets(extensionUri);
-  const script = webview.asWebviewUri(scriptsAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = scriptsAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildScriptsWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** `StudioProviderDeps` assembled from the real vscode surface (no nonce). */
+function scriptsStudioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+  };
 }
 
 function loadSuggestions(extensionPath: string): ScriptSuggestion[] {
@@ -198,11 +174,16 @@ async function applyBuiltinById(extensionPath: string, id: string): Promise<bool
 }
 
 /**
- * Sidebar WebviewViewProvider for Scripts (`axis.indicators`).
- * Suggestions are titles only — Pine `code` is never posted.
+ * Sidebar Scripts studio (`axis.indicators`) on the generic provider.
+ * Suggestions are titles only — Pine `code` is never posted. The registered
+ * `WebviewViewProvider` is the generic `StudioViewProvider`; this class
+ * keeps the historical surface (focus subscription, last-run pushes,
+ * reveal/dispose) and forwards `resolveWebviewView` to the generic provider.
  */
 export class ScriptsStudioProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+  private readonly entry: StudioRegistration;
+  private readonly deps: StudioProviderDeps;
+  private studio: StudioViewProvider | undefined;
   private detachFocus: (() => void) | undefined;
   private lastRunRaw: unknown = null;
   private readonly suggestions: ScriptSuggestion[];
@@ -212,7 +193,63 @@ export class ScriptsStudioProvider implements WebviewViewProvider {
     focus?: ResultsFocusLike,
   ) {
     this.suggestions = loadSuggestions(context.extensionPath);
+    this.entry = scriptsStudioRegistration({
+      run: () => {
+        void this.run().catch(() => {
+          // hostile command host — never throw into the router
+        });
+      },
+      openChart: () => {
+        void this.openChart().catch(() => {
+          // hostile command host — never throw into the router
+        });
+      },
+      apply: (id) => {
+        void this.applyBuiltin(id).catch(() => {
+          // hostile editor host — never throw into the router
+        });
+      },
+      snapshot: () => scriptsStudioData(this.lastRunRaw, this.suggestions),
+    });
+    this.deps = scriptsStudioDeps(context);
     this.attachFocus(focus);
+  }
+
+  /** Wire `axis.indicators` through the generic provider. Idempotent; never throws. */
+  register(): this {
+    if (this.studio) return this;
+    this.studio = registerStudioView(this.entry, this.deps, window, this.context);
+    try {
+      this.context.subscriptions.push({ dispose: () => this.dispose() });
+    } catch {
+      // subscriptions missing (test hosts)
+    }
+    return this;
+  }
+
+  resolveWebviewView(webviewView: WebviewView): void {
+    this.studio?.resolveWebviewView(webviewView);
+  }
+
+  /** Replace the last-run record (manual push or store snapshot). */
+  applyLastRun(summary: unknown): void {
+    this.lastRunRaw = summary ?? null;
+    this.pushSet();
+  }
+
+  reveal(): void {
+    this.studio?.reveal(true);
+  }
+
+  dispose(): void {
+    try {
+      this.detachFocus?.();
+    } catch {
+      // ignore
+    }
+    this.detachFocus = undefined;
+    this.studio?.dispose();
+    this.studio = undefined;
   }
 
   private attachFocus(focus: ResultsFocusLike | undefined): void {
@@ -227,111 +264,31 @@ export class ScriptsStudioProvider implements WebviewViewProvider {
     try {
       this.detachFocus = focus.subscribe((snapshot) => {
         this.lastRunRaw = snapshot ?? null;
-        this.postSet();
+        this.pushSet();
       });
     } catch {
       this.detachFocus = undefined;
     }
   }
 
-  /** Replace the last-run record (manual push or store snapshot). */
-  applyLastRun(summary: unknown): void {
-    this.lastRunRaw = summary ?? null;
-    this.postSet();
+  private pushSet(): void {
+    this.studio?.postStudioSet(scriptsStudioData(this.lastRunRaw, this.suggestions));
   }
 
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'scripts'),
-        ],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        void this.onMessage(raw);
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getScriptsHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+  private pushNotice(text: string): void {
+    this.studio?.postStudioNotice('info', scriptsNoticeMessage(text));
   }
 
-  private post(message: unknown): void {
-    try {
-      void this.view?.webview.postMessage(message);
-    } catch {
-      // disposing
-    }
+  private async run(): Promise<void> {
+    if (await executeNamed(SCRIPTS_RUN_COMMAND)) this.pushNotice('Run started');
   }
 
-  private postSet(): void {
-    this.post(
-      encodeScriptsSet({
-        lastRun: this.lastRunRaw,
-        suggestions: this.suggestions,
-      }),
-    );
+  private async openChart(): Promise<void> {
+    await executeNamed(SCRIPTS_OPEN_CHART_COMMAND);
   }
 
-  private postNotice(text: string): void {
-    this.post(encodeScriptsNotice(text));
-  }
-
-  private async onMessage(raw: unknown): Promise<void> {
-    const msg = parseScriptsWebMessage(raw);
-    if (!msg) return;
-    if (msg.type === 'scripts.ready') {
-      this.postSet();
-      return;
-    }
-    if (msg.type === 'scripts.run') {
-      const ok = await executeNamed(SCRIPTS_RUN_COMMAND);
-      if (ok) this.postNotice('Run started');
-      return;
-    }
-    if (msg.type === 'scripts.openChart') {
-      await executeNamed(SCRIPTS_OPEN_CHART_COMMAND);
-      return;
-    }
-    if (msg.type === 'scripts.apply') {
-      const applied = await applyBuiltinById(this.context.extensionPath, msg.id);
-      if (applied) this.postNotice('Applied');
-    }
-  }
-
-  reveal(): void {
-    try {
-      this.view?.show?.(true);
-    } catch {
-      // older hosts
-    }
-  }
-
-  dispose(): void {
-    try {
-      this.detachFocus?.();
-    } catch {
-      // ignore
-    }
-    this.detachFocus = undefined;
-    this.view = undefined;
+  private async applyBuiltin(id: string): Promise<void> {
+    if (await applyBuiltinById(this.context.extensionPath, id)) this.pushNotice('Applied');
   }
 }
 
@@ -346,21 +303,8 @@ export function registerScriptsStudio(
   focus?: ResultsFocusLike,
 ): ScriptsStudioProvider {
   const provider = new ScriptsStudioProvider(context, focus);
+  provider.register();
   studio = provider;
-  try {
-    context.subscriptions.push(
-      window.registerWebviewViewProvider(SCRIPTS_VIEW_ID, provider, {
-        webviewOptions: { retainContextWhenHidden: true },
-      }),
-    );
-  } catch {
-    // uncontributed view id / test host
-  }
-  try {
-    context.subscriptions.push({ dispose: () => provider.dispose() });
-  } catch {
-    // subscriptions missing
-  }
   return provider;
 }
 

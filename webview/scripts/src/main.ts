@@ -17,12 +17,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Scripts studio: scripts.ready → scripts.set, buttons post run / chart / apply.
+ * AXIS Scripts studio on the shared runtime + studio.* protocol.
+ * Host posts studio.init / studio.set with data `{ snapshot }`; buttons
+ * post studio.action run / openChart / apply; notices arrive as
+ * studio.notice.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
+import { setHidden, setText } from '@axis-shared/dom';
 import {
-  decodeHostMessage,
+  SCRIPTS_VIEW,
+  decodeScriptsStudioData,
+  decodeScriptsStudioNotice,
   encodeScriptsApply,
   encodeScriptsOpenChart,
   encodeScriptsReady,
@@ -32,26 +42,9 @@ import {
   type ScriptsViewSnapshot,
 } from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
-
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
-
-function setText(id: string, text: string): void {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
-}
-
-function setHidden(id: string, hidden: boolean): void {
-  const el = document.getElementById(id);
-  if (el) el.hidden = hidden;
-}
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: SCRIPTS_VIEW });
 
 function setLive(text: string): void {
   const el = document.getElementById('scripts-live');
@@ -111,12 +104,7 @@ function renderSuggestions(rows: readonly ScriptSuggestion[]): void {
     button.textContent = 'Apply';
     button.dataset.id = row.id;
     button.addEventListener('click', () => {
-      if (disposed || !apiRef) return;
-      try {
-        apiRef.postMessage(encodeScriptsApply(row.id));
-      } catch {
-        // host gone
-      }
+      studio.post(encodeScriptsApply(row.id));
     });
 
     li.append(main, button);
@@ -125,7 +113,6 @@ function renderSuggestions(rows: readonly ScriptSuggestion[]): void {
 }
 
 function applySnapshot(snap: ScriptsViewSnapshot): void {
-  if (disposed) return;
   const card: ScriptRunCard | null = snap.lastRun;
   const empty = card == null;
   setHidden('scripts-empty', !empty);
@@ -154,61 +141,30 @@ function applySnapshot(snap: ScriptsViewSnapshot): void {
   renderSuggestions(snap.suggestions);
 }
 
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeHostMessage(event.data);
-  if (!decoded) return;
-  if (decoded.type === 'scripts.set') {
-    applySnapshot(decoded.snapshot);
+function onHostMessage(message: unknown): void {
+  const state = decodeScriptsStudioData(message);
+  if (state) {
+    applySnapshot(state.snapshot);
     return;
   }
-  if (decoded.type === 'scripts.notice') {
-    setLive(decoded.text);
-  }
+  const notice = decodeScriptsStudioNotice(message);
+  if (notice !== null) setLive(notice);
 }
 
 function bindClick(id: string, message: unknown, live: string | null): void {
   const el = document.getElementById(id);
   if (!el) return;
   el.addEventListener('click', () => {
-    if (disposed || !apiRef) return;
     if (live) setLive(live);
-    try {
-      apiRef.postMessage(message);
-    } catch {
-      // host gone
-    }
+    studio.post(message);
   });
 }
 
-function postReady(api: VsCodeApi): void {
-  if (disposed) return;
-  try {
-    api.postMessage(encodeScriptsReady());
-  } catch {
-    // host may be gone
-  }
-}
-
 function main(): void {
-  let api: VsCodeApi;
-  try {
-    api = acquireVsCodeApi();
-  } catch {
-    return;
-  }
-  apiRef = api;
-  window.addEventListener('message', onHostMessage);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
   bindClick('scripts-run', encodeScriptsRun(), 'Run started');
   bindClick('scripts-open-chart', encodeScriptsOpenChart(), null);
-  postReady(api);
+  studio.onMessage(onHostMessage);
+  studio.post(encodeScriptsReady());
 }
 
 main();

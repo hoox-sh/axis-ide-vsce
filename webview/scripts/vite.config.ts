@@ -16,31 +16,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { resolve } from 'node:path';
-import { defineConfig } from 'vite';
+import { createStudioViteConfig } from '../shared/vite';
 
 /** Scripts studio webview → ./dist/webview/scripts/ */
-export default defineConfig({
-  root: resolve(__dirname),
-  base: './',
-  publicDir: false,
-  build: {
-    outDir: resolve(__dirname, '../../dist/webview/scripts'),
-    emptyOutDir: true,
-    target: 'es2020',
-    sourcemap: false,
-    minify: true,
-    lib: {
-      entry: resolve(__dirname, 'src/main.ts'),
-      formats: ['iife'],
-      name: 'AxisScriptsWebview',
-      fileName: () => 'main.js',
-    },
-    cssCodeSplit: false,
-    rollupOptions: {
-      output: {
-        assetFileNames: 'main.[ext]',
-      },
-    },
-  },
-});
+export default createStudioViteConfig('scripts', 'AxisScriptsWebview');
