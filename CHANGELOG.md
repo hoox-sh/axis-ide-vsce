@@ -35,6 +35,12 @@ with its commit history preserved.
   is now `studio.init`/`studio.set`/`studio.ready`/`studio.action` with
   the old payload shapes preserved verbatim; behavior and visuals are
   unchanged.
+- Generic studio host infrastructure (Phase 2 groundwork, not yet wired):
+  `buildStudioHtml()` (single paint-only CSP shell, byte-identical CSP to
+  the current builders), a generic `StudioViewProvider`, a
+  `StudioMessageRouter` (decode → route by view/action, errors logged and
+  dropped), and a `StudioRegistration` registry — all pure-host with 100%
+  line coverage.
 
 ### Fixed
 
