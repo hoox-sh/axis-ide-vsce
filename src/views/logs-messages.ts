@@ -17,10 +17,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pure script-log model for the Logs panel.
+ * Pure script-log model for the Logs panel + `studio.*` wire helpers.
  * Reads an unknown last-run record (logs / diagnostics may be absent).
  * Never throws.
+ *
+ * Wire mapping from the old flat protocol:
+ * - `{ type: 'logs.set', rows, runId, status }` became `studio.init` /
+ *   `studio.set` carrying `{ view: 'logs', data }` where `data` is
+ *   `{ rows, runId, status }` — the old payload fields preserved verbatim
+ *   (`logsStudioData` builds them).
+ * - `{ type: 'logs.ready' }` became `studio.ready` `{ view: 'logs' }`.
+ * - `{ type: 'logs.reveal', line }` became `studio.action` with
+ *   `{ line }` in `args`; `{ type: 'logs.copy', text }` became
+ *   `studio.action` with `{ text }` in `args`.
+ * - `{ type: 'logs.filter', level }` stays local: the old host ignored it
+ *   and the new one has no filter action at all.
  */
+
+import { escapeHtmlAttr } from '../editors/chart-html';
 
 /** Hard cap so a hostile payload cannot flood the webview. */
 export const LOG_ROW_CAP = 200;
@@ -50,18 +64,8 @@ export type LogRow = {
   time: string | null;
 };
 
-export type LogsSetMessage = {
-  type: 'logs.set';
-  rows: LogRow[];
-  runId: string | null;
-  status: string | null;
-};
-
-export type LogsWebMessage =
-  | { type: 'logs.ready' }
-  | { type: 'logs.reveal'; line: number }
-  | { type: 'logs.filter'; level: LogFilter }
-  | { type: 'logs.copy'; text: string };
+/** `view` value for every Logs studio envelope — exactly `'logs'`. */
+export const LOGS_STUDIO_VIEW = 'logs';
 
 const LEVEL_BY_NAME: Record<string, LogLevel> = {
   error: 'error',
@@ -443,44 +447,50 @@ function readStatus(record: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** Host → webview `logs.set`. */
-export function encodeLogsSet(record: unknown): LogsSetMessage {
+/** Host → web `studio.init` / `studio.set` data — the old `logs.set` payload fields verbatim. */
+export function logsStudioData(record: unknown): {
+  rows: LogRow[];
+  runId: string | null;
+  status: string | null;
+} {
   return {
-    type: 'logs.set',
     rows: logsFromRun(record),
     runId: readRunId(record),
     status: readStatus(record),
   };
 }
 
-function messageBag(raw: Record<string, unknown>): Record<string, unknown> {
-  const payload = readProp(raw, 'payload');
-  return isRecord(payload) ? payload : raw;
+/**
+ * Old `logs.reveal` validation, moved into `args`: the 1-based source line.
+ * Invalid args are ignored exactly like the old parser returned null.
+ * Never throws.
+ */
+export function parseLogsRevealArgs(args: unknown): number | null {
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) return null;
+  let line: unknown;
+  try {
+    line = (args as Record<string, unknown>).line;
+  } catch {
+    return null;
+  }
+  return lineFromValue(line);
 }
 
-/** Webview → host. Filter is local; copy uses the host clipboard. */
-export function parseLogsWebMessage(raw: unknown): LogsWebMessage | null {
-  if (!isRecord(raw)) return null;
-  const type = readProp(raw, 'type');
-  if (type === 'logs.ready') return { type: 'logs.ready' };
-  const bag = messageBag(raw);
-  if (type === 'logs.reveal') {
-    const line = lineFromValue(readProp(bag, 'line'));
-    if (line == null) return null;
-    return { type: 'logs.reveal', line };
+/**
+ * Old `logs.copy` validation, moved into `args`: bounded non-empty text.
+ * Never throws.
+ */
+export function parseLogsCopyArgs(args: unknown): string | null {
+  if (args === null || typeof args !== 'object' || Array.isArray(args)) return null;
+  let text: unknown;
+  try {
+    text = (args as Record<string, unknown>).text;
+  } catch {
+    return null;
   }
-  if (type === 'logs.filter') {
-    const level = normalizeFilter(readProp(bag, 'level'));
-    if (level == null) return null;
-    return { type: 'logs.filter', level };
-  }
-  if (type === 'logs.copy') {
-    const text = readProp(bag, 'text');
-    if (typeof text !== 'string') return null;
-    if (text.length === 0 || text.length > MAX_LOG_COPY_TEXT) return null;
-    return { type: 'logs.copy', text };
-  }
-  return null;
+  if (typeof text !== 'string') return null;
+  if (text.length === 0 || text.length > MAX_LOG_COPY_TEXT) return null;
+  return text;
 }
 
 /** Current last run, or null. Never throws. */
@@ -546,4 +556,42 @@ export function attachLogsStore(
       // hostile unsubscribe
     }
   };
+}
+
+/**
+ * Trusted studio DOM for the shell body (the exact markup the old
+ * `logs-html.ts` builder emitted between `<body>` and the script tag;
+ * the webview JS depends on those ids/classes).
+ */
+export function buildLogsBody(): string {
+  const emptyCopy = escapeHtmlAttr(LOGS_EMPTY);
+  return `<div id="logs-live" class="logs-live" role="status" aria-live="polite" aria-atomic="true"></div>
+  <section id="logs-root" class="logs-root" data-axis-logs-host="1" aria-label="Script logs">
+    <header class="logs-header">
+      <div class="logs-header__top">
+        <h1 class="logs-title">Logs</h1>
+        <div class="logs-run-wrap">
+          <span id="logs-run" class="logs-run" title="Run id">No run</span>
+          <button type="button" id="logs-run-copy" class="logs-run-copy" hidden title="Copy run id" aria-label="Copy run id">Copy</button>
+        </div>
+        <span id="logs-status" class="logs-status" data-status="" hidden></span>
+        <span id="logs-count" class="logs-count" aria-live="polite">0 / 0</span>
+      </div>
+      <div class="logs-toolbar">
+        <div class="logs-filters" role="group" aria-label="Log level filter">
+          <button type="button" class="logs-chip" data-level="all" aria-pressed="true">All <span class="logs-chip-count" data-count-for="all">0</span></button>
+          <button type="button" class="logs-chip" data-level="error" aria-pressed="false">Error <span class="logs-chip-count" data-count-for="error">0</span></button>
+          <button type="button" class="logs-chip" data-level="warning" aria-pressed="false">Warning <span class="logs-chip-count" data-count-for="warning">0</span></button>
+          <button type="button" class="logs-chip" data-level="info" aria-pressed="false">Info <span class="logs-chip-count" data-count-for="info">0</span></button>
+          <button type="button" class="logs-chip" data-level="debug" aria-pressed="false">Debug <span class="logs-chip-count" data-count-for="debug">0</span></button>
+        </div>
+        <label class="logs-search-wrap" for="logs-search">
+          <span class="logs-search-label">Search</span>
+          <input id="logs-search" class="logs-search" type="search" name="logs-search" placeholder="Filter messages" aria-label="Filter log messages" autocomplete="off" spellcheck="false" />
+        </label>
+      </div>
+    </header>
+    <p id="logs-empty" class="logs-empty">${emptyCopy}</p>
+    <ol id="logs-list" class="logs-list" tabindex="0" role="listbox" aria-label="Log lines" aria-activedescendant=""></ol>
+  </section>`;
 }

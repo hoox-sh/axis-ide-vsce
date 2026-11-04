@@ -17,25 +17,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { encode, HOST_TO_VIEW, VIEW_TO_HOST } from '../protocol';
+import { buildStudioHtml, htmlHasInlineScript } from './studio-html';
 import {
   LOG_ROW_CAP,
   LOGS_EMPTY,
   LOGS_FILTERED_EMPTY,
+  LOGS_STUDIO_VIEW,
   MAX_LOG_COPY_TEXT,
   attachLogsStore,
+  buildLogsBody,
   countLogLevels,
-  encodeLogsSet,
   filterLogs,
   logsEmptyMessage,
   logsFromRun,
+  logsStudioData,
   matchLogQuery,
   parseLogLine,
-  parseLogsWebMessage,
+  parseLogsCopyArgs,
+  parseLogsRevealArgs,
   readLastRun,
   scrubLogMessage,
   type LogRow,
 } from './logs-messages';
-import './logs-html.test';
+
+const CSP_SOURCE = 'https://csp.example.vscode-webview.test';
 
 const HEX20 = '0123456789abcdef0123';
 const HEX19 = '0123456789abcdef012';
@@ -407,26 +413,25 @@ describe('countLogLevels / logsEmptyMessage', () => {
   });
 });
 
-describe('encodeLogsSet / parseLogsWebMessage', () => {
-  test('encodes run id and status without throwing', () => {
-    const encoded = encodeLogsSet({
+describe('logsStudioData / studio.action args', () => {
+  test('logsStudioData encodes run id and status without throwing (old logs.set fields verbatim)', () => {
+    const data = logsStudioData({
       id: 'run-1',
       runId: 'other',
       status: '  error  ',
       logs: ['hi'],
     });
-    expect(encoded).toEqual({
-      type: 'logs.set',
+    expect(data).toEqual({
       rows: [row({ message: 'hi' })],
       runId: 'run-1',
       status: 'error',
     });
-    expect(encodeLogsSet({ runId: 4, status: '   ', logs: [] })).toMatchObject({
+    expect(logsStudioData({ runId: 4, status: '   ', logs: [] })).toMatchObject({
       runId: '4',
       status: null,
       rows: [],
     });
-    expect(encodeLogsSet({ status: 1 })).toMatchObject({ runId: null, status: null, rows: [] });
+    expect(logsStudioData({ status: 1 })).toMatchObject({ runId: null, status: null, rows: [] });
     const boom = new Proxy(
       {},
       {
@@ -435,61 +440,122 @@ describe('encodeLogsSet / parseLogsWebMessage', () => {
         },
       },
     );
-    expect(encodeLogsSet(boom)).toEqual({
-      type: 'logs.set',
+    expect(logsStudioData(boom)).toEqual({
       rows: [],
       runId: null,
       status: null,
     });
   });
 
-  test('parses reveal, filter, copy, and ready', () => {
-    expect(parseLogsWebMessage({ type: 'logs.ready', payload: { line: 1 } })).toEqual({
-      type: 'logs.ready',
+  test('parseLogsRevealArgs keeps the old logs.reveal line validation', () => {
+    expect(parseLogsRevealArgs({ line: 4 })).toBe(4);
+    expect(parseLogsRevealArgs({ line: '8' })).toBe(8);
+    expect(parseLogsRevealArgs({ line: 0 })).toBeNull();
+    expect(parseLogsRevealArgs({ line: 1.5 })).toBeNull();
+    expect(parseLogsRevealArgs({ line: 'line 3' })).toBeNull();
+    expect(parseLogsRevealArgs({})).toBeNull();
+    expect(parseLogsRevealArgs(undefined)).toBeNull();
+    expect(parseLogsRevealArgs(null)).toBeNull();
+    expect(parseLogsRevealArgs('logs.reveal')).toBeNull();
+    expect(parseLogsRevealArgs([])).toBeNull();
+    expect(
+      parseLogsRevealArgs({
+        get line(): number {
+          throw new Error('line');
+        },
+      }),
+    ).toBeNull();
+  });
+
+  test('parseLogsCopyArgs keeps the old logs.copy bounds', () => {
+    expect(parseLogsCopyArgs({ text: 'hello' })).toBe('hello');
+    expect(parseLogsCopyArgs({ text: '' })).toBeNull();
+    expect(parseLogsCopyArgs({ text: 'x'.repeat(MAX_LOG_COPY_TEXT + 1) })).toBeNull();
+    expect(parseLogsCopyArgs({ text: 'x'.repeat(MAX_LOG_COPY_TEXT) })).toBe(
+      'x'.repeat(MAX_LOG_COPY_TEXT),
+    );
+    expect(parseLogsCopyArgs({ text: 1 })).toBeNull();
+    expect(parseLogsCopyArgs({})).toBeNull();
+    expect(parseLogsCopyArgs(undefined)).toBeNull();
+    expect(
+      parseLogsCopyArgs({
+        get text(): string {
+          throw new Error('text');
+        },
+      }),
+    ).toBeNull();
+  });
+
+  test('the old logs.reveal / logs.copy ride studio.action with verbatim args', () => {
+    const reveal = encode(VIEW_TO_HOST.StudioAction, {
+      view: LOGS_STUDIO_VIEW,
+      action: 'reveal',
+      args: { line: 4 },
     });
-    expect(parseLogsWebMessage({ type: 'logs.reveal', line: 4 })).toEqual({
-      type: 'logs.reveal',
-      line: 4,
+    expect(reveal.payload.view).toBe('logs');
+    expect(parseLogsRevealArgs(reveal.payload.args)).toBe(4);
+    const copy = encode(VIEW_TO_HOST.StudioAction, {
+      view: LOGS_STUDIO_VIEW,
+      action: 'copy',
+      args: { text: 'hello' },
     });
-    expect(parseLogsWebMessage({ type: 'logs.reveal', payload: { line: '8' } })).toEqual({
-      type: 'logs.reveal',
-      line: 8,
+    expect(parseLogsCopyArgs(copy.payload.args)).toBe('hello');
+    // studio.init / studio.set carry the old logs.set payload as data
+    const init = encode(HOST_TO_VIEW.StudioInit, {
+      view: LOGS_STUDIO_VIEW,
+      data: logsStudioData({ id: 'run-1', logs: ['hi'] }),
     });
-    expect(parseLogsWebMessage({ type: 'logs.reveal', line: 0 })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'logs.reveal', line: 1.5 })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'logs.filter', level: 'Warning' })).toEqual({
-      type: 'logs.filter',
-      level: 'warning',
+    expect(init.payload.data).toEqual({
+      rows: [row({ message: 'hi' })],
+      runId: 'run-1',
+      status: null,
     });
-    expect(parseLogsWebMessage({ type: 'logs.filter', payload: { level: 'debug' } })).toEqual({
-      type: 'logs.filter',
-      level: 'debug',
+  });
+});
+
+describe('buildLogsBody', () => {
+  test('carries every id/class the webview JS depends on', () => {
+    const body = buildLogsBody();
+    expect(body).toContain('id="logs-root"');
+    expect(body).toContain('id="logs-run"');
+    expect(body).toContain('id="logs-run-copy"');
+    expect(body).toContain('id="logs-status"');
+    expect(body).toContain('id="logs-count"');
+    expect(body).toContain('id="logs-search"');
+    expect(body).toContain('id="logs-live"');
+    expect(body).toContain('aria-live="polite"');
+    expect(body).toContain('aria-label="Log level filter"');
+    expect(body).toContain('data-level="all"');
+    expect(body).toContain('data-level="error"');
+    expect(body).toContain('data-level="warning"');
+    expect(body).toContain('data-level="info"');
+    expect(body).toContain('data-level="debug"');
+    expect(body).toContain('data-count-for="all"');
+    expect(body).toContain('No log lines for the last run');
+    expect(body).toContain('class="logs-header"');
+    expect(htmlHasInlineScript(body)).toBe(false);
+  });
+
+  test('feeds the generic shell: cspSource scripts, connect-src none, theme class', () => {
+    const html = buildStudioHtml({
+      cspSource: CSP_SOURCE,
+      scriptUri: `${CSP_SOURCE}/main.js`,
+      styleUri: `${CSP_SOURCE}/main.css`,
+      bodyClass: 'vscode-dark',
+      bodyHtml: buildLogsBody(),
     });
-    expect(parseLogsWebMessage({ type: 'logs.filter', level: '' })).toEqual({
-      type: 'logs.filter',
-      level: 'all',
-    });
-    expect(parseLogsWebMessage({ type: 'logs.filter', level: 1 })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'logs.filter', level: 'verbose' })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'logs.copy', text: 'hello' })).toEqual({
-      type: 'logs.copy',
-      text: 'hello',
-    });
-    expect(parseLogsWebMessage({ type: 'logs.copy', payload: { text: 'via payload' } })).toEqual({
-      type: 'logs.copy',
-      text: 'via payload',
-    });
-    expect(parseLogsWebMessage({ type: 'logs.copy', text: '' })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'logs.copy', text: 'x'.repeat(MAX_LOG_COPY_TEXT + 1) })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'logs.copy', text: 'x'.repeat(MAX_LOG_COPY_TEXT) })).toEqual({
-      type: 'logs.copy',
-      text: 'x'.repeat(MAX_LOG_COPY_TEXT),
-    });
-    expect(parseLogsWebMessage({ type: 'logs.copy', text: 1 })).toBeNull();
-    expect(parseLogsWebMessage({ type: 'nope' })).toBeNull();
-    expect(parseLogsWebMessage([])).toBeNull();
-    expect(parseLogsWebMessage(null)).toBeNull();
-    expect(parseLogsWebMessage('logs.ready')).toBeNull();
+    // re-homed from logs-html.test.ts (nonce-free builder → nonce-free shell)
+    expect(html).toContain(`script-src ${CSP_SOURCE}`);
+    expect(html).not.toContain("script-src 'unsafe-inline'");
+    expect(html).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
+    expect(html).toContain("connect-src 'none'");
+    expect(html).toContain("default-src 'none'");
+    expect(html).toContain("base-uri 'none'");
+    expect(html).toContain("form-action 'none'");
+    expect(html).toContain('data-axis-logs-host="1"');
+    expect(html).toContain('class="vscode-dark"');
+    expect(html).not.toContain('nonce=');
+    expect(htmlHasInlineScript(html)).toBe(false);
   });
 });
 

@@ -16,6 +16,24 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Panel WebviewView for script logs (`axis.logs`) — a thin shim on the
+ * generic studio provider (enhancement plan §5 Phase 2). Subscribes to
+ * ResultsFocusStore the same way as `attachProfiler`.
+ *
+ * Wire change (old flat → `studio.*`): `logs.ready` → `studio.ready` (the
+ * provider acks with `studio.init` carrying `{ rows, runId, status }` — the
+ * old resolve-time / ready-time `logs.set` payload verbatim);
+ * `logs.reveal` → `studio.action` with `{ line }` in `args`;
+ * `logs.copy` → `studio.action` with `{ text }` in `args`;
+ * `logs.filter` stays local (the old host ignored it).
+ *
+ * Visibility: with `retainContextWhenHidden: false` VS Code re-resolves the
+ * view when it becomes visible again, and the fresh `studio.ready`
+ * handshake delivers the current record — the old panel's extra
+ * `onDidChangeVisibility` repost is covered by that path.
+ */
+
 import { existsSync } from 'node:fs';
 import {
   ColorThemeKind,
@@ -25,14 +43,19 @@ import {
   Selection,
   TextEditorRevealType,
   Uri,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
   env,
   window,
 } from 'vscode';
-import { attachLogsStore, encodeLogsSet, parseLogsWebMessage } from './logs-messages';
-import { buildLogsWebviewHtml } from './logs-html';
+import {
+  LOGS_STUDIO_VIEW,
+  attachLogsStore,
+  buildLogsBody,
+  logsStudioData,
+  parseLogsCopyArgs,
+  parseLogsRevealArgs,
+} from './logs-messages';
+import { registerStudioView, StudioViewProvider, type StudioProviderDeps } from './studio-provider';
+import type { StudioRegistration } from './studio-registry';
 
 export const LOGS_VIEW_ID = 'axis.logs';
 
@@ -63,49 +86,15 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function logsAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'logs', file);
-}
-
-function assertLogsAssets(extensionUri: Uri): void {
-  const mainJs = logsAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  if (!jsPath || !existsSync(jsPath)) {
-    throw new Error(
-      `AXIS logs webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:logs`,
-    );
-  }
-}
-
-function getLogsHtml(webview: Webview, extensionUri: Uri): string {
-  assertLogsAssets(extensionUri);
-  const script = webview.asWebviewUri(logsAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = logsAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildLogsWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** Assemble the injected VS Code surface the generic provider needs. */
+function studioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+  };
 }
 
 function revealLogLine(line: number): void {
@@ -143,62 +132,30 @@ async function copyLogText(text: string): Promise<void> {
 }
 
 /**
- * Panel WebviewViewProvider for script logs (`axis.logs`).
- * Subscribes to ResultsFocusStore the same way as `attachProfiler`.
+ * Panel WebviewView host for script logs (`axis.logs`) on the generic
+ * provider. The results-store subscription re-posts `studio.set` whenever
+ * the last-run record changes; the `studio.ready` handshake carries the
+ * current record as `studio.init` data.
  */
-export class LogsWebviewViewProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+export class LogsWebviewViewProvider {
+  private provider: StudioViewProvider | undefined;
   private record: unknown = null;
   private readonly detachResults: () => void;
 
   constructor(
-    private readonly context: ExtensionContext,
+    context: ExtensionContext,
     resultsStore: unknown,
   ) {
     this.detachResults = attachLogsStore(resultsStore, (record) => {
       this.record = record;
       this.post();
     });
-  }
-
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'logs')],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        void this.onMessage(raw);
-      });
-
-      webviewView.onDidChangeVisibility(() => {
-        try {
-          if (webviewView.visible) this.post();
-        } catch {
-          // disposing
-        }
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getLogsHtml(webview, this.context.extensionUri);
-      } catch (err) {
-        try {
-          webview.html = fallbackHtml(err);
-        } catch {
-          // html setter unavailable
-        }
-      }
-      this.post();
-    } catch {
-      // never throw from resolve
-    }
+    this.provider = registerStudioView(
+      this.registration(),
+      studioDeps(context),
+      window,
+      context,
+    );
   }
 
   /** Test / host helper — drop the results subscription. */
@@ -208,35 +165,33 @@ export class LogsWebviewViewProvider implements WebviewViewProvider {
     } catch {
       // ignore
     }
-    this.view = undefined;
+  }
+
+  private registration(): StudioRegistration {
+    return {
+      id: LOGS_STUDIO_VIEW,
+      title: 'Logs',
+      viewId: LOGS_VIEW_ID,
+      retainContextWhenHidden: false,
+      buildBody: buildLogsBody,
+      actions: {
+        reveal: (args) => {
+          const line = parseLogsRevealArgs(args);
+          if (line == null) return;
+          revealLogLine(line);
+        },
+        copy: (args) => {
+          const text = parseLogsCopyArgs(args);
+          if (text == null) return;
+          void copyLogText(text);
+        },
+      },
+      restore: () => logsStudioData(this.record),
+    };
   }
 
   private post(): void {
-    try {
-      const webview = this.view?.webview;
-      if (!webview) return;
-      void webview.postMessage(encodeLogsSet(this.record));
-    } catch {
-      // disposing
-    }
-  }
-
-  private async onMessage(raw: unknown): Promise<void> {
-    try {
-      const msg = parseLogsWebMessage(raw);
-      if (!msg || msg.type === 'logs.filter') return;
-      if (msg.type === 'logs.ready') {
-        this.post();
-        return;
-      }
-      if (msg.type === 'logs.copy') {
-        await copyLogText(msg.text);
-        return;
-      }
-      revealLogLine(msg.line);
-    } catch {
-      // never throw into the webview host
-    }
+    this.provider?.postStudioSet(logsStudioData(this.record));
   }
 }
 
@@ -250,12 +205,7 @@ export function registerLogsPanel(
 ): LogsWebviewViewProvider | undefined {
   try {
     const provider = new LogsWebviewViewProvider(context, resultsStore);
-    context.subscriptions.push(
-      window.registerWebviewViewProvider(LOGS_VIEW_ID, provider, {
-        webviewOptions: { retainContextWhenHidden: false },
-      }),
-      { dispose: () => provider.dispose() },
-    );
+    context.subscriptions.push({ dispose: () => provider.dispose() });
     return provider;
   } catch {
     return undefined;

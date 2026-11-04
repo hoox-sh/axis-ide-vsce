@@ -17,10 +17,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Logs webview. Filter/search stay in the view; reveal/copy post to host.
+ * AXIS Logs webview on the shared runtime + studio.* protocol:
+ * studio.ready → studio.init / studio.set carrying `{ rows, runId, status }`.
+ * Filter/search stay in the view; reveal/copy post studio.action.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
 import {
   countLogLevels,
   filterLogs,
@@ -28,17 +34,14 @@ import {
   type LogFilter,
   type LogRow,
 } from '../../../src/views/logs-messages';
-import { decodeLogsSet, encodeLogsCopy, encodeLogsReady, encodeLogsReveal } from './protocol';
+import { LOGS_VIEW, decodeLogsSet, encodeLogsCopy, encodeLogsReady, encodeLogsReveal } from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: LOGS_VIEW });
 
 const FILTERS: readonly LogFilter[] = ['all', 'error', 'warning', 'info', 'debug'];
 
-let disposed = false;
 let rows: LogRow[] = [];
 let runId: string | null = null;
 let status: string | null = null;
@@ -47,15 +50,6 @@ let query = '';
 let selectedIndex = -1;
 let stickToBottom = true;
 let lastAnnounce = '';
-
-function post(api: VsCodeApi | null, message: unknown): void {
-  if (disposed || !api) return;
-  try {
-    api.postMessage(message);
-  } catch {
-    // host may be gone
-  }
-}
 
 function chipFilter(value: string | null): LogFilter | null {
   if (
@@ -80,7 +74,7 @@ function announce(text: string): void {
   if (text === lastAnnounce) {
     live.textContent = '';
     window.setTimeout(() => {
-      if (!disposed && live.isConnected) {
+      if (live.isConnected) {
         live.textContent = text;
         lastAnnounce = text;
       }
@@ -91,9 +85,9 @@ function announce(text: string): void {
   lastAnnounce = text;
 }
 
-function copyText(api: VsCodeApi | null, text: string): void {
+function copyText(text: string): void {
   if (!text) return;
-  post(api, encodeLogsCopy(text));
+  studio.post(encodeLogsCopy(text));
   try {
     const clip = navigator.clipboard;
     if (clip && typeof clip.writeText === 'function') {
@@ -107,9 +101,9 @@ function copyText(api: VsCodeApi | null, text: string): void {
   announce('Copied');
 }
 
-function revealRow(api: VsCodeApi | null, row: LogRow | undefined): void {
+function revealRow(row: LogRow | undefined): void {
   if (!row || row.line == null) return;
-  post(api, encodeLogsReveal(row.line));
+  studio.post(encodeLogsReveal(row.line));
 }
 
 function isNearBottom(list: HTMLElement): boolean {
@@ -147,8 +141,7 @@ function updateSelection(list: HTMLElement, visible: LogRow[]): void {
   });
 }
 
-function render(api: VsCodeApi | null): void {
-  if (disposed) return;
+function render(): void {
   const runEl = document.getElementById('logs-run');
   const runCopy = document.getElementById('logs-run-copy');
   const statusEl = document.getElementById('logs-status');
@@ -264,8 +257,6 @@ function render(api: VsCodeApi | null): void {
       // scroll optional
     }
   }
-
-  void api;
 }
 
 function moveSelection(delta: number, list: HTMLElement): void {
@@ -277,13 +268,6 @@ function moveSelection(delta: number, list: HTMLElement): void {
 }
 
 function main(): void {
-  let api: VsCodeApi | null = null;
-  try {
-    api = acquireVsCodeApi();
-  } catch {
-    api = null;
-  }
-
   const filters = document.querySelector('.logs-filters');
   filters?.addEventListener('click', (event) => {
     const target = event.target;
@@ -294,7 +278,7 @@ function main(): void {
     filter = next;
     selectedIndex = 0;
     stickToBottom = true;
-    render(api);
+    render();
     const visible = visibleRows();
     announce(
       logsEmptyMessage(rows.length, visible.length) ||
@@ -308,7 +292,7 @@ function main(): void {
     query = search.value;
     selectedIndex = 0;
     stickToBottom = true;
-    render(api);
+    render();
     const visible = visibleRows();
     announce(
       logsEmptyMessage(rows.length, visible.length) ||
@@ -319,7 +303,7 @@ function main(): void {
   const runCopy = document.getElementById('logs-run-copy');
   runCopy?.addEventListener('click', () => {
     if (!runId) return;
-    copyText(api, runId);
+    copyText(runId);
   });
 
   const list = document.getElementById('logs-list');
@@ -341,10 +325,10 @@ function main(): void {
     const lineBtn = target.closest('button[data-line]');
     if (lineBtn) {
       const line = Number(lineBtn.getAttribute('data-line'));
-      if (Number.isInteger(line) && line >= 1) post(api, encodeLogsReveal(line));
+      if (Number.isInteger(line) && line >= 1) studio.post(encodeLogsReveal(line));
       return;
     }
-    revealRow(api, visible[selectedIndex]);
+    revealRow(visible[selectedIndex]);
   });
 
   list?.addEventListener('dblclick', (event) => {
@@ -354,7 +338,7 @@ function main(): void {
     const rowEl = target.closest('.logs-row');
     if (!(rowEl instanceof HTMLElement)) return;
     const message = rowEl.dataset.message ?? '';
-    copyText(api, message);
+    copyText(message);
   });
 
   list?.addEventListener('keydown', (event) => {
@@ -372,14 +356,14 @@ function main(): void {
     }
     if (key === 'Enter') {
       event.preventDefault();
-      revealRow(api, visibleRows()[selectedIndex]);
+      revealRow(visibleRows()[selectedIndex]);
       return;
     }
     if (key === 'c' && (event.metaKey || event.ctrlKey)) {
       const row = visibleRows()[selectedIndex];
       if (!row) return;
       event.preventDefault();
-      copyText(api, row.message);
+      copyText(row.message);
     }
   });
 
@@ -396,27 +380,18 @@ function main(): void {
     }
   });
 
-  window.addEventListener('message', (event: MessageEvent) => {
-    if (disposed) return;
-    const decoded = decodeLogsSet(event.data);
+  studio.onMessage((message) => {
+    const decoded = decodeLogsSet(message);
     if (!decoded) return;
     rows = decoded.rows;
     runId = decoded.runId;
     status = decoded.status;
     if (selectedIndex >= visibleRows().length) selectedIndex = rows.length > 0 ? 0 : -1;
-    render(api);
+    render();
   });
 
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
-
-  render(api);
-  post(api, encodeLogsReady());
+  render();
+  studio.post(encodeLogsReady());
 }
 
 main();

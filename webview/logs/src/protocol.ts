@@ -17,12 +17,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Host → Logs webview. Local `logs.set` only — not axis.webview.v1.
+ * Logs studio-local protocol layer on the shared `studio.*` namespace of
+ * axis.webview.v1. Envelope encode/decode lives in ONE place —
+ * webview/shared/studio-protocol → src/protocol/codec — shared by host and
+ * view. This file owns the logs `data` shape (`{ rows, runId, status }`
+ * on studio.init / studio.set — the old `logs.set` payload verbatim) and
+ * the frozen action set the host accepts: reveal | copy — nothing else.
+ * Filters stay local (the old `logs.filter` message was host-ignored).
  */
 
+import {
+  decodeStudioData,
+  encodeStudioAction,
+  encodeStudioReady,
+  type AxisEnvelope,
+  type StudioActionPayload,
+  type StudioReadyPayload,
+} from '@axis-shared/studio-protocol';
 import { filterLogs, type LogRow } from '../../../src/views/logs-messages';
 
 export type { LogRow };
+
+/** Studio view id — the `axis.logs` VS Code view (frozen contract). */
+export const LOGS_VIEW = 'logs';
 
 export type LogsViewState = {
   rows: LogRow[];
@@ -40,29 +57,43 @@ function textOrNull(value: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-/** Decode `logs.set`. Invalid envelopes return null. */
-export function decodeLogsSet(raw: unknown): LogsViewState | null {
-  if (!isRecord(raw) || raw.type !== 'logs.set') return null;
-  const payload = isRecord(raw.payload) ? raw.payload : raw;
+/**
+ * Validate the `data` slice of a logs studio.init / studio.set envelope.
+ * Field semantics identical to the previous ad-hoc decode: rows re-validate
+ * individually through `filterLogs`, runId / status trim or drop.
+ */
+function logsStateFrom(value: unknown): LogsViewState | null {
+  if (!isRecord(value)) return null;
   return {
-    rows: filterLogs(payload.rows, 'all'),
-    runId: textOrNull(payload.runId),
-    status: textOrNull(payload.status),
+    rows: filterLogs(value.rows, 'all'),
+    runId: textOrNull(value.runId),
+    status: textOrNull(value.status),
   };
 }
 
-export function encodeLogsReveal(line: number): { type: 'logs.reveal'; line: number } {
-  return { type: 'logs.reveal', line };
+/**
+ * Never-throw decode of studio.init / studio.set envelopes addressed to the
+ * logs view. A data-less studio.init returns null so the caller keeps its
+ * current state (matching the pre-migration flow, where rows only ever
+ * arrived inside a full host payload).
+ */
+export function decodeLogsSet(raw: unknown): LogsViewState | null {
+  const message = decodeStudioData(raw);
+  if (!message || message.view !== LOGS_VIEW || message.data === undefined) return null;
+  return logsStateFrom(message.data);
 }
 
-export function encodeLogsCopy(text: string): { type: 'logs.copy'; text: string } {
-  return { type: 'logs.copy', text };
+/** studio.ready for the logs view — no capabilities, as before. */
+export function encodeLogsReady(): AxisEnvelope<StudioReadyPayload> {
+  return encodeStudioReady(LOGS_VIEW);
 }
 
-export function encodeLogsReady(ts = Date.now()): {
-  type: 'logs.ready';
-  payload: Record<string, never>;
-  ts: number;
-} {
-  return { type: 'logs.ready', payload: {}, ts };
+/** studio.action `reveal` — reveal the 1-based source line (old `logs.reveal`). */
+export function encodeLogsReveal(line: number): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(LOGS_VIEW, 'reveal', { line });
+}
+
+/** studio.action `copy` — copy the message via the host clipboard (old `logs.copy`). */
+export function encodeLogsCopy(text: string): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(LOGS_VIEW, 'copy', { text });
 }
