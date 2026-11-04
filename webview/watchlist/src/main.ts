@@ -17,14 +17,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Watchlist studio: watchlist.ready → watchlist.snapshot.
+ * AXIS Watchlist studio on the shared runtime + studio.* protocol:
+ * studio.ready → studio.init / studio.set carrying the snapshot.
  * Prices are whatever the host formatted. A "placeholder" badge means the
  * mock feed — this view never invents a live tick.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { setHidden, setText } from '@axis-shared/dom';
+import { createStudio } from '@axis-shared/studio';
 import {
-  decodeHostMessage,
+  WATCHLIST_VIEW,
+  decodeWatchlistSet,
   encodeWatchlistAdd,
   encodeWatchlistReady,
   encodeWatchlistRemove,
@@ -33,26 +40,9 @@ import {
   type WatchlistViewSnapshot,
 } from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
-
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
-
-function setText(id: string, text: string): void {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
-}
-
-function setHidden(id: string, hidden: boolean): void {
-  const el = document.getElementById(id);
-  if (el) el.hidden = hidden;
-}
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: WATCHLIST_VIEW });
 
 function liveEl(): HTMLElement | null {
   const el = document.getElementById('watchlist-live');
@@ -64,7 +54,7 @@ function flash(text: string): void {
   if (!el) return;
   el.textContent = '';
   window.setTimeout(() => {
-    if (!disposed && liveEl() === el) el.textContent = text;
+    if (liveEl() === el) el.textContent = text;
   }, 0);
 }
 
@@ -137,7 +127,6 @@ function renderRow(row: WatchlistViewSnapshot['rows'][number]): HTMLLIElement {
 }
 
 function applySnapshot(snap: WatchlistViewSnapshot): void {
-  if (disposed) return;
   setText('watchlist-count', countLabel(snap.count));
   setText('watchlist-selected', selectedLabel(snap));
   setText('watchlist-price', snap.focusPriceText || '—');
@@ -153,24 +142,7 @@ function applySnapshot(snap: WatchlistViewSnapshot): void {
   for (const row of snap.rows) list.append(renderRow(row));
 }
 
-function post(message: unknown): void {
-  if (disposed || !apiRef) return;
-  try {
-    apiRef.postMessage(message);
-  } catch {
-    // host may be gone
-  }
-}
-
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeHostMessage(event.data);
-  if (!decoded.ok) return;
-  applySnapshot(decoded.snapshot);
-}
-
 function onSubmit(event: Event): void {
-  if (disposed) return;
   event.preventDefault();
   const input = document.getElementById('watchlist-symbol-input');
   if (!(input instanceof HTMLInputElement)) return;
@@ -179,12 +151,11 @@ function onSubmit(event: Event): void {
     flash('Could not add');
     return;
   }
-  post(encodeWatchlistAdd(symbol));
+  studio.post(encodeWatchlistAdd(symbol));
   input.value = '';
 }
 
 function onClick(event: Event): void {
-  if (disposed) return;
   const target = event.target;
   if (!(target instanceof Element)) return;
   const button = target.closest('button[data-action]');
@@ -194,36 +165,25 @@ function onClick(event: Event): void {
   const action = button.dataset.action;
   if (action === 'select') {
     flash(`Selected ${symbol}`);
-    post(encodeWatchlistSelect(symbol));
+    studio.post(encodeWatchlistSelect(symbol));
     return;
   }
   if (action === 'remove') {
     flash(`Removed ${symbol}`);
-    post(encodeWatchlistRemove(symbol));
+    studio.post(encodeWatchlistRemove(symbol));
   }
 }
 
 function main(): void {
-  let api: VsCodeApi;
-  try {
-    api = acquireVsCodeApi();
-  } catch {
-    return;
-  }
-  apiRef = api;
-  window.addEventListener('message', onHostMessage);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
   const form = document.getElementById('watchlist-add-form');
   if (form) form.addEventListener('submit', onSubmit);
   const root = document.getElementById('watchlist-root');
   if (root) root.addEventListener('click', onClick);
-  post(encodeWatchlistReady());
+  studio.onMessage((message) => {
+    const snap = decodeWatchlistSet(message);
+    if (snap) applySnapshot(snap);
+  });
+  studio.post(encodeWatchlistReady());
 }
 
 main();

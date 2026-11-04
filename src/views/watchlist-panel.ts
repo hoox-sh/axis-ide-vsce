@@ -17,25 +17,31 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Sidebar WebviewView for `axis.watchlist`.
+ * Sidebar WebviewView for `axis.watchlist` — a thin shim on the generic
+ * studio provider (enhancement plan §5 Phase 2).
  *
  * Does not register `axis.watchlist.add` / `axis.watchlist.remove` — those stay
  * on `registerWatchlist`. Does not create the TreeView. Wiring must call
  * `registerWatchlist(context, { tree: false })` for commands + status bar and
  * `registerWatchlistStudio(context)` for this view. See
  * `watchlist-studio-contributes.fragment.json`.
+ *
+ * Wire change (old flat → `studio.*`): `watchlist.ready` → `studio.ready`
+ * (the provider acks with `studio.init` carrying the current snapshot);
+ * `watchlist.add` / `watchlist.remove` / `watchlist.select` → `studio.action`
+ * with `{ symbol }` in `args`; the snapshot posts as `studio.init` /
+ * `studio.set` data, fields verbatim.
  */
 
 import { existsSync } from 'node:fs';
+import { ColorThemeKind, Uri, window, type ExtensionContext } from 'vscode';
+import { registerStudioView, StudioViewProvider, type StudioProviderDeps } from './studio-provider';
+import type { StudioRegistration } from './studio-registry';
 import {
-  ColorThemeKind,
-  type ExtensionContext,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
-  Uri,
-  window,
-} from 'vscode';
+  WATCHLIST_STUDIO_VIEW,
+  buildWatchlistBody,
+  parseWatchlistSymbolArgs,
+} from './watchlist-messages';
 import {
   WATCHLIST_VIEW_ID,
   addWatchlistSymbol,
@@ -48,12 +54,10 @@ import {
   type WatchlistV1,
   type WorkspaceStateHelpers,
 } from './watchlist';
-import { buildWatchlistWebviewHtml } from './watchlist-html';
 import {
   buildWatchlistSnapshot,
-  encodeWatchlistStudioSnapshot,
-  parseWatchlistStudioMessage,
   type WatchlistQuoteSource,
+  type WatchlistStudioSnapshot,
 } from './watchlist-studio-model';
 
 function themeBodyClass(kind: ColorThemeKind): string {
@@ -77,46 +81,15 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function watchlistAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'watchlist', file);
-}
-
-function getWatchlistHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = watchlistAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS watchlist webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:watchlist`,
-    );
-  }
-  const script = webview.asWebviewUri(watchlistAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = watchlistAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildWatchlistWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** Assemble the injected VS Code surface the generic provider needs. */
+function studioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+  };
 }
 
 export type WatchlistStudioOptions = {
@@ -136,13 +109,17 @@ export type WatchlistStudioOptions = {
   onPersisted?: (state: WatchlistV1) => void;
 };
 
+/** One of the three mutating watchlist actions. */
+type WatchlistMutation = 'add' | 'remove' | 'select';
+
 /**
- * WebviewViewProvider for the Watchlist studio (`axis.watchlist`).
+ * Watchlist studio host (`axis.watchlist`) on the generic provider.
  * Mutates via `addWatchlistSymbol` / `removeWatchlistSymbol` /
- * `selectWatchlistSymbol` + `writeWatchlistV1`. Does not register commands.
+ * `selectWatchlistSymbol` + `writeWatchlistV1`, re-posting the snapshot as
+ * `studio.init` / `studio.set` data. Does not register commands.
  */
-export class WatchlistStudioProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+export class WatchlistStudioProvider {
+  private provider: StudioViewProvider | undefined;
   private feed: QuoteFeed;
   private mock: boolean;
   private readonly helpers: WorkspaceStateHelpers;
@@ -159,59 +136,51 @@ export class WatchlistStudioProvider implements WebviewViewProvider {
       get: <T>(key: string) => this.context.workspaceState.get<T>(key),
       update: (key, value) => this.context.workspaceState.update(key, value),
     };
-  }
-
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'watchlist'),
-        ],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        return this.onMessage(webview, raw);
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getWatchlistHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+    // registerStudioView never throws (uncontributed view id / test host
+    // resolve to undefined and the wrapper methods no-op, matching the old
+    // panel's behavior with an unresolved view).
+    this.provider = registerStudioView(
+      this.registration(),
+      studioDeps(context),
+      window,
+      context,
+    );
   }
 
   /** Replace the quote feed. `mock` defaults to false (a real feed was attached). */
   setQuoteFeed(feed: QuoteFeed, mock = false): void {
     this.feed = feed;
     this.mock = mock;
-    this.postToResolved();
+    this.postSnapshot();
   }
 
   /** Re-read workspaceState and post a snapshot (palette add/remove catch-up). */
   postSnapshot(): void {
-    this.postToResolved();
+    this.provider?.postStudioSet(this.snapshot());
   }
 
   reveal(): void {
     try {
-      this.view?.show?.(true);
+      this.provider?.reveal(true);
     } catch {
       // older hosts / disposing
     }
+  }
+
+  private registration(): StudioRegistration {
+    return {
+      id: WATCHLIST_STUDIO_VIEW,
+      title: 'Watchlist',
+      viewId: WATCHLIST_VIEW_ID,
+      retainContextWhenHidden: true,
+      buildBody: buildWatchlistBody,
+      actions: {
+        add: (args) => this.mutate('add', args),
+        remove: (args) => this.mutate('remove', args),
+        select: (args) => this.mutate('select', args),
+      },
+      restore: () => this.snapshot(),
+    };
   }
 
   private quoteSource(): WatchlistQuoteSource {
@@ -229,39 +198,24 @@ export class WatchlistStudioProvider implements WebviewViewProvider {
     };
   }
 
-  private postSnapshotTo(webview: Webview, state?: WatchlistV1): void {
-    try {
-      const current = state ?? readWatchlistV1(this.helpers);
-      const snapshot = buildWatchlistSnapshot(current, this.quoteSource());
-      void webview.postMessage(encodeWatchlistStudioSnapshot(snapshot));
-    } catch {
-      // disposing
-    }
+  private snapshot(): WatchlistStudioSnapshot {
+    return buildWatchlistSnapshot(readWatchlistV1(this.helpers), this.quoteSource());
   }
 
-  private postToResolved(): void {
-    try {
-      const webview = this.view?.webview;
-      if (!webview) return;
-      this.postSnapshotTo(webview);
-    } catch {
-      // disposing
-    }
+  /** Old `watchlist.add` / `remove` / `select` handling, args moved into `studio.action`. */
+  private mutate(action: WatchlistMutation, args: unknown): void {
+    const symbol = parseWatchlistSymbolArgs(args);
+    if (!symbol) return;
+    void this.persist(action, symbol);
   }
 
-  private async onMessage(webview: Webview, raw: unknown): Promise<void> {
+  private async persist(action: WatchlistMutation, symbol: string): Promise<void> {
     try {
-      const msg = parseWatchlistStudioMessage(raw);
-      if (!msg.ok) return;
-      if (msg.type === 'ready') {
-        this.postSnapshotTo(webview);
-        return;
-      }
       const current = readWatchlistV1(this.helpers);
       let next = current;
-      if (msg.type === 'add') next = addWatchlistSymbol(current, msg.symbol);
-      else if (msg.type === 'remove') next = removeWatchlistSymbol(current, msg.symbol);
-      else next = selectWatchlistSymbol(current, msg.symbol);
+      if (action === 'add') next = addWatchlistSymbol(current, symbol);
+      else if (action === 'remove') next = removeWatchlistSymbol(current, symbol);
+      else next = selectWatchlistSymbol(current, symbol);
       const wrote = await writeWatchlistV1(this.helpers, next);
       if (wrote) {
         try {
@@ -269,10 +223,10 @@ export class WatchlistStudioProvider implements WebviewViewProvider {
         } catch {
           // status bar hook is best-effort
         }
-        this.postSnapshotTo(webview, next);
+        this.provider?.postStudioSet(buildWatchlistSnapshot(next, this.quoteSource()));
         return;
       }
-      this.postSnapshotTo(webview, readWatchlistV1(this.helpers));
+      this.provider?.postStudioSet(this.snapshot());
     } catch {
       // never throw into the webview host
     }
@@ -287,14 +241,5 @@ export function registerWatchlistStudio(
   context: ExtensionContext,
   opts?: WatchlistStudioOptions,
 ): WatchlistStudioProvider {
-  const provider = new WatchlistStudioProvider(context, opts);
-  try {
-    const disp = window.registerWebviewViewProvider(WATCHLIST_VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    });
-    context.subscriptions.push(disp);
-  } catch {
-    // uncontributed view id / test host
-  }
-  return provider;
+  return new WatchlistStudioProvider(context, opts);
 }

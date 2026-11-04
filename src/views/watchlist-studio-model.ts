@@ -17,9 +17,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pure Watchlist studio snapshot + webview message parse.
+ * Pure Watchlist studio snapshot builder.
  * No `vscode` import — host panel applies mutators from `watchlist.ts`.
  * Mock close matches `MOCK_PLACEHOLDER_CLOSE` in watchlist.ts (100).
+ * The old flat wire codec (`watchlist.snapshot` / `watchlist.add` parse)
+ * moved to `watchlist-messages.ts` on the `studio.*` envelopes.
  */
 
 import { formatQuotePrice, resolveDisplayedQuotePrice, type QuoteSnapshot } from '../host/quote';
@@ -60,13 +62,6 @@ export type WatchlistQuoteSource = {
   mock?: boolean;
   getQuote?: (symbol: string) => unknown;
 };
-
-export type ParsedWatchlistStudioMessage =
-  | { ok: true; type: 'ready' }
-  | { ok: true; type: 'add'; symbol: string }
-  | { ok: true; type: 'remove'; symbol: string }
-  | { ok: true; type: 'select'; symbol: string }
-  | { ok: false; reason: string };
 
 /** Upper-case ticker; empty when unusable. Never throws. */
 export function normalizeWatchlistSymbol(raw: unknown): string {
@@ -230,41 +225,4 @@ export function buildWatchlistSnapshot(
   } catch {
     return emptySnapshot();
   }
-}
-
-function messageName(type: string): string {
-  if (type.startsWith('watchlist.')) return type.slice('watchlist.'.length);
-  return type;
-}
-
-/**
- * Parse a webview → host message. Accepts `watchlist.add` or `add`
- * (same for ready / remove / select). Never throws.
- */
-export function parseWatchlistStudioMessage(raw: unknown): ParsedWatchlistStudioMessage {
-  try {
-    if (!isPlainObject(raw)) return { ok: false, reason: 'not-object' };
-    const type = raw.type;
-    if (typeof type !== 'string') return { ok: false, reason: 'bad-type' };
-    if (type.length === 0) return { ok: false, reason: 'bad-type' };
-    const name = messageName(type);
-    if (name === 'ready') return { ok: true, type: 'ready' };
-    if (name !== 'add' && name !== 'remove' && name !== 'select') {
-      return { ok: false, reason: 'unknown-type' };
-    }
-    const symbol = normalizeWatchlistSymbol(raw.symbol);
-    if (!symbol) return { ok: false, reason: 'empty-symbol' };
-    if (name === 'add') return { ok: true, type: 'add', symbol };
-    if (name === 'remove') return { ok: true, type: 'remove', symbol };
-    return { ok: true, type: 'select', symbol };
-  } catch {
-    return { ok: false, reason: 'throw' };
-  }
-}
-
-export function encodeWatchlistStudioSnapshot(snapshot: WatchlistStudioSnapshot): {
-  type: 'watchlist.snapshot';
-  snapshot: WatchlistStudioSnapshot;
-} {
-  return { type: 'watchlist.snapshot', snapshot };
 }

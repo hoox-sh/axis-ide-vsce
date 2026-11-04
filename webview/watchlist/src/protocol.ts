@@ -17,10 +17,29 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Watchlist studio webview protocol.
- * Host posts `{ type: 'watchlist.snapshot', snapshot }`.
- * Webview posts `watchlist.ready` / `watchlist.add` / `watchlist.remove` / `watchlist.select`.
+ * Watchlist studio-local protocol layer on the shared `studio.*` namespace
+ * of axis.webview.v1. Envelope encode/decode lives in ONE place —
+ * webview/shared/studio-protocol → src/protocol/codec — shared by host and
+ * view. This file owns the watchlist `data` shape (the snapshot on
+ * studio.init / studio.set) and the frozen action set the host accepts:
+ * add | remove | select — nothing else.
+ *
+ * Wire mapping: host posts the old `watchlist.snapshot` payload verbatim as
+ * `data`; the old `watchlist.add` / `remove` / `select` symbol field rides
+ * in `studio.action` `args.symbol`.
  */
+
+import {
+  decodeStudioData,
+  encodeStudioAction,
+  encodeStudioReady,
+  type AxisEnvelope,
+  type StudioActionPayload,
+  type StudioReadyPayload,
+} from '@axis-shared/studio-protocol';
+
+/** Studio view id — the `axis.watchlist` VS Code view (frozen contract). */
+export const WATCHLIST_VIEW = 'watchlist';
 
 export type WatchlistRowView = {
   symbol: string;
@@ -37,10 +56,6 @@ export type WatchlistViewSnapshot = {
   placeholder: boolean;
   rows: WatchlistRowView[];
 };
-
-export type WebviewDecodeOk = { ok: true; snapshot: WatchlistViewSnapshot };
-export type WebviewDecodeErr = { ok: false };
-export type WebviewDecodeResult = WebviewDecodeOk | WebviewDecodeErr;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -128,28 +143,33 @@ export function snapshotFromPayload(raw: unknown): WatchlistViewSnapshot {
   }
 }
 
-export function decodeHostMessage(raw: unknown): WebviewDecodeResult {
-  try {
-    if (!isPlainObject(raw)) return { ok: false };
-    if (raw.type !== 'watchlist.snapshot') return { ok: false };
-    return { ok: true, snapshot: snapshotFromPayload(raw.snapshot) };
-  } catch {
-    return { ok: false };
-  }
+/**
+ * Never-throw decode of studio.init / studio.set envelopes addressed to the
+ * watchlist view. A data-less studio.init returns null so the caller keeps
+ * its current state (the old flow only ever applied full snapshots).
+ */
+export function decodeWatchlistSet(raw: unknown): WatchlistViewSnapshot | null {
+  const message = decodeStudioData(raw);
+  if (!message || message.view !== WATCHLIST_VIEW || message.data === undefined) return null;
+  return snapshotFromPayload(message.data);
 }
 
-export function encodeWatchlistReady(): { type: 'watchlist.ready' } {
-  return { type: 'watchlist.ready' };
+/** studio.ready for the watchlist view — no capabilities, as before. */
+export function encodeWatchlistReady(): AxisEnvelope<StudioReadyPayload> {
+  return encodeStudioReady(WATCHLIST_VIEW);
 }
 
-export function encodeWatchlistAdd(symbol: string): { type: 'watchlist.add'; symbol: string } {
-  return { type: 'watchlist.add', symbol };
+/** studio.action `add` — append the normalized ticker (old `watchlist.add`). */
+export function encodeWatchlistAdd(symbol: string): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(WATCHLIST_VIEW, 'add', { symbol });
 }
 
-export function encodeWatchlistRemove(symbol: string): { type: 'watchlist.remove'; symbol: string } {
-  return { type: 'watchlist.remove', symbol };
+/** studio.action `remove` — drop the ticker (old `watchlist.remove`). */
+export function encodeWatchlistRemove(symbol: string): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(WATCHLIST_VIEW, 'remove', { symbol });
 }
 
-export function encodeWatchlistSelect(symbol: string): { type: 'watchlist.select'; symbol: string } {
-  return { type: 'watchlist.select', symbol };
+/** studio.action `select` — make the ticker the status-bar focus. */
+export function encodeWatchlistSelect(symbol: string): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(WATCHLIST_VIEW, 'select', { symbol });
 }

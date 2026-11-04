@@ -20,9 +20,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   WATCHLIST_MOCK_CLOSE,
   buildWatchlistSnapshot,
-  encodeWatchlistStudioSnapshot,
   normalizeWatchlistSymbol,
-  parseWatchlistStudioMessage,
   parseWatchlistStudioState,
   type WatchlistQuoteSource,
 } from './watchlist-studio-model';
@@ -126,85 +124,6 @@ describe('parseWatchlistStudioState', () => {
   });
 });
 
-describe('parseWatchlistStudioMessage', () => {
-  test('rejects non-objects, bad types, and unknown names', () => {
-    expect(parseWatchlistStudioMessage(undefined)).toEqual({ ok: false, reason: 'not-object' });
-    expect(parseWatchlistStudioMessage(null)).toEqual({ ok: false, reason: 'not-object' });
-    expect(parseWatchlistStudioMessage(1)).toEqual({ ok: false, reason: 'not-object' });
-    expect(parseWatchlistStudioMessage('add')).toEqual({ ok: false, reason: 'not-object' });
-    expect(parseWatchlistStudioMessage([])).toEqual({ ok: false, reason: 'not-object' });
-    expect(parseWatchlistStudioMessage({})).toEqual({ ok: false, reason: 'bad-type' });
-    expect(parseWatchlistStudioMessage({ type: 1 })).toEqual({ ok: false, reason: 'bad-type' });
-    expect(parseWatchlistStudioMessage({ type: '' })).toEqual({ ok: false, reason: 'bad-type' });
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.' })).toEqual({
-      ok: false,
-      reason: 'unknown-type',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.nope', symbol: 'BTCUSDT' })).toEqual({
-      ok: false,
-      reason: 'unknown-type',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'nope' })).toEqual({
-      ok: false,
-      reason: 'unknown-type',
-    });
-  });
-
-  test('parses ready, add, remove, and select with or without the prefix', () => {
-    expect(parseWatchlistStudioMessage({ type: 'ready' })).toEqual({ ok: true, type: 'ready' });
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.ready', symbol: 'BTCUSDT' })).toEqual({
-      ok: true,
-      type: 'ready',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.add', symbol: ' btc usdt ' })).toEqual({
-      ok: true,
-      type: 'add',
-      symbol: 'BTCUSDT',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'add', symbol: 'ETHUSDT' })).toEqual({
-      ok: true,
-      type: 'add',
-      symbol: 'ETHUSDT',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.remove', symbol: 'ethusdt' })).toEqual({
-      ok: true,
-      type: 'remove',
-      symbol: 'ETHUSDT',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'remove', symbol: 'SOLUSDT' })).toEqual({
-      ok: true,
-      type: 'remove',
-      symbol: 'SOLUSDT',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.select', symbol: 'solusdt' })).toEqual({
-      ok: true,
-      type: 'select',
-      symbol: 'SOLUSDT',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'select', symbol: 'BTCUSDT' })).toEqual({
-      ok: true,
-      type: 'select',
-      symbol: 'BTCUSDT',
-    });
-  });
-
-  test('rejects an empty symbol and never throws on hostile getters', () => {
-    expect(parseWatchlistStudioMessage({ type: 'watchlist.add', symbol: '   ' })).toEqual({
-      ok: false,
-      reason: 'empty-symbol',
-    });
-    expect(parseWatchlistStudioMessage({ type: 'add', symbol: 1 })).toEqual({
-      ok: false,
-      reason: 'empty-symbol',
-    });
-    expect(parseWatchlistStudioMessage(throwOn('type'))).toEqual({ ok: false, reason: 'throw' });
-    expect(parseWatchlistStudioMessage(throwOn('symbol', { type: 'watchlist.add' }))).toEqual({
-      ok: false,
-      reason: 'throw',
-    });
-  });
-});
-
 describe('buildWatchlistSnapshot', () => {
   test('mock feed shows placeholder close and does not read ticks', () => {
     let reads = 0;
@@ -232,7 +151,6 @@ describe('buildWatchlistSnapshot', () => {
       placeholder: true,
     });
     expect(snap.rows[1]?.selected).toBe(true);
-    expect(encodeWatchlistStudioSnapshot(snap).type).toBe('watchlist.snapshot');
   });
 
   test('omitted quotes and mock omitted are the placeholder feed', () => {
