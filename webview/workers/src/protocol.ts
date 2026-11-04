@@ -17,55 +17,74 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Workers webview codec. Message shapes live in the pure host model.
+ * Workers studio-local protocol layer on the shared `studio.*` namespace of
+ * axis.webview.v1. Envelope encode/decode lives in ONE place —
+ * webview/shared/studio-protocol → src/protocol/codec — shared by host and
+ * view. The `data` validation (cards / counts / probed — the exact fields
+ * the old flat workers.init / workers.state messages carried) lives in the
+ * host model and is imported cross-boundary, following the logs/alerts
+ * pattern. Frozen action set: probe | probeAll — nothing else.
  */
 
 import {
-  encodeWorkersProbe,
-  encodeWorkersProbeAll,
-  encodeWorkersReady,
-  parseWorkersStudioMessage,
+  decodeStudioData,
+  encodeStudioAction,
+  encodeStudioReady,
+  type AxisEnvelope,
+  type StudioActionPayload,
+  type StudioReadyPayload,
+} from '../../shared/studio-protocol';
+import {
+  WORKERS_STUDIO_VIEW,
+  parseWorkersStudioData,
   type WorkerStudioCard,
   type WorkersStudioCounts,
-} from '../../../src/views/workers-studio-model';
+  type WorkersStudioSnapshot,
+} from '../../../src/views/workers-messages';
 
-export {
-  encodeWorkersProbe,
-  encodeWorkersProbeAll,
-  encodeWorkersReady,
-  parseWorkersStudioMessage,
-};
-export type { WorkerStudioCard, WorkersStudioCounts };
+export { WORKERS_STUDIO_VIEW };
+export type { WorkerStudioCard, WorkersStudioCounts, WorkersStudioSnapshot };
 
-export const PROTOCOL_VERSION = 1 as const;
-
-export type WebviewDecodeOk = {
-  ok: true;
-  type: 'workers.init' | 'workers.state';
+/** One decoded studio.init / studio.set addressed to the workers view. */
+export interface WorkersStudioState {
+  kind: 'init' | 'set';
   cards: WorkerStudioCard[];
   counts: WorkersStudioCounts;
   probed: boolean;
-};
+}
 
-export type WebviewDecodeErr = { ok: false; error: string };
-export type WebviewDecodeResult = WebviewDecodeOk | WebviewDecodeErr;
-
-/** Never-throw decode of untrusted host postMessage data. */
-export function decodeHostMessage(raw: unknown): WebviewDecodeResult {
-  try {
-    const msg = parseWorkersStudioMessage(raw);
-    if (!msg || (msg.type !== 'workers.init' && msg.type !== 'workers.state')) {
-      return { ok: false, error: 'unexpected type' };
-    }
-    return {
-      ok: true,
-      type: msg.type,
-      cards: msg.cards,
-      counts: msg.counts,
-      probed: msg.probed,
-    };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: `decode failed: ${message}` };
+/**
+ * Never-throw decode of studio.init / studio.set envelopes addressed to the
+ * workers view. Spoofed counts are ignored — counts are derived from cards
+ * by the shared model validator. Null for foreign views, decode failures,
+ * and hostile data.
+ */
+export function decodeWorkersStudioData(raw: unknown): WorkersStudioState | null {
+  const message = decodeStudioData(raw);
+  if (!message || message.view !== WORKERS_STUDIO_VIEW || message.data === undefined) {
+    return null;
   }
+  const snapshot: WorkersStudioSnapshot | null = parseWorkersStudioData(message.data);
+  if (!snapshot) return null;
+  return {
+    kind: message.kind,
+    cards: snapshot.cards,
+    counts: snapshot.counts,
+    probed: snapshot.probed,
+  };
+}
+
+/** studio.ready for the workers view — no capabilities, as before. */
+export function encodeWorkersReady(): AxisEnvelope<StudioReadyPayload> {
+  return encodeStudioReady(WORKERS_STUDIO_VIEW);
+}
+
+/** studio.action `probeAll` — probe every catalog worker (no args, as before). */
+export function encodeWorkersProbeAll(): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(WORKERS_STUDIO_VIEW, 'probeAll');
+}
+
+/** studio.action `probe` — the old flat `id` field rides `args`. */
+export function encodeWorkersProbe(id: string): AxisEnvelope<StudioActionPayload> {
+  return encodeStudioAction(WORKERS_STUDIO_VIEW, 'probe', { id });
 }

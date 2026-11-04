@@ -17,9 +17,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Workers studio messages (`axis.workers` webview).
- * Pure — no `vscode` import. Never throws.
+ * Workers studio pure model (`axis.workers` studio on `studio.*`).
+ * Pure — no `vscode` import, no host command imports. Never throws.
  * Cards expose status, latency, endpoint host, and a short error label only.
+ * The `studio.*` wire layer lives in the sibling messages module.
  */
 
 export const WORKERS_STUDIO_STATUSES = [
@@ -51,22 +52,15 @@ export type WorkersStudioCounts = {
   unknown: number;
 };
 
+/**
+ * `studio.init` / `studio.set` data — the exact `cards` / `counts` / `probed`
+ * fields the old flat `workers.init` / `workers.state` messages carried.
+ */
 export type WorkersStudioSnapshot = {
   cards: WorkerStudioCard[];
   counts: WorkersStudioCounts;
   probed: boolean;
 };
-
-export type WorkersHostToWeb =
-  | ({ type: 'workers.init' } & WorkersStudioSnapshot)
-  | ({ type: 'workers.state' } & WorkersStudioSnapshot);
-
-export type WorkersWebToHost =
-  | { type: 'workers.ready' }
-  | { type: 'workers.probeAll' }
-  | { type: 'workers.probe'; id: string };
-
-export type WorkersStudioMessage = WorkersHostToWeb | WorkersWebToHost;
 
 const STATUS_SET = new Set<string>(WORKERS_STUDIO_STATUSES);
 const SECRET_RE = /token|secret|password|api[_-]?key|authorization|bearer/i;
@@ -271,42 +265,8 @@ export function workersStudioSnapshot(
   };
 }
 
-function hostMessage(
-  type: 'workers.init' | 'workers.state',
-  catalog: unknown,
-  snapshot: unknown,
-): WorkersHostToWeb {
-  const view = workersStudioSnapshot(catalog, snapshot);
-  return type === 'workers.init'
-    ? { type: 'workers.init', ...view }
-    : { type: 'workers.state', ...view };
-}
-
-/** Encode `workers.init` (never throws). */
-export function encodeWorkersInit(catalog: unknown, snapshot: unknown): WorkersHostToWeb {
-  return hostMessage('workers.init', catalog, snapshot);
-}
-
-/** Encode `workers.state` (never throws). */
-export function encodeWorkersState(catalog: unknown, snapshot: unknown): WorkersHostToWeb {
-  return hostMessage('workers.state', catalog, snapshot);
-}
-
-export function encodeWorkersReady(): WorkersWebToHost {
-  return { type: 'workers.ready' };
-}
-
-export function encodeWorkersProbeAll(): WorkersWebToHost {
-  return { type: 'workers.probeAll' };
-}
-
-export function encodeWorkersProbe(id: unknown): WorkersWebToHost | null {
-  const text = readString(id, MAX_ID);
-  if (!text || !/^[A-Za-z0-9._-]+$/.test(text)) return null;
-  return { type: 'workers.probe', id: text };
-}
-
-function parseHostCards(raw: unknown): WorkerStudioCard[] | null {
+/** Validate a raw `cards` array (the old `parseHostCards`). Null when not an array. */
+function parseWorkersCards(raw: unknown): WorkerStudioCard[] | null {
   try {
     if (!Array.isArray(raw)) return null;
     const out: WorkerStudioCard[] = [];
@@ -337,45 +297,21 @@ function parseHostCards(raw: unknown): WorkerStudioCard[] | null {
   }
 }
 
-function parseProbeId(raw: Record<string, unknown>): string | null {
-  try {
-    const payload = isPlainObject(raw.payload) ? raw.payload : undefined;
-    const idRaw = raw.id ?? payload?.id;
-    const encoded = encodeWorkersProbe(idRaw);
-    return encoded && encoded.type === 'workers.probe' ? encoded.id : null;
-  } catch {
-    return null;
-  }
-}
-
 /**
- * Parse a workers studio postMessage (either direction). Never throws.
- * Spoofed counts are ignored — counts are derived from cards.
+ * Validate the `data` slice of a workers studio.init / studio.set envelope
+ * (the old flat `workers.init` / `workers.state` message body). Spoofed
+ * counts are ignored — counts are derived from cards. Never throws.
  */
-export function parseWorkersStudioMessage(raw: unknown): WorkersStudioMessage | null {
+export function parseWorkersStudioData(data: unknown): WorkersStudioSnapshot | null {
   try {
-    if (!isPlainObject(raw)) return null;
-    const type = raw.type;
-    if (type === 'workers.ready') return { type: 'workers.ready' };
-    if (type === 'workers.probeAll') return { type: 'workers.probeAll' };
-    if (type === 'workers.probe') {
-      const id = parseProbeId(raw);
-      if (!id) return null;
-      return { type: 'workers.probe', id };
-    }
-    if (type === 'workers.init' || type === 'workers.state') {
-      const cards = parseHostCards(raw.cards);
-      if (!cards) return null;
-      const view: WorkersStudioSnapshot = {
-        cards,
-        counts: countsFromWorkerCards(cards),
-        probed: raw.probed === true,
-      };
-      return type === 'workers.init'
-        ? { type: 'workers.init', ...view }
-        : { type: 'workers.state', ...view };
-    }
-    return null;
+    if (!isPlainObject(data)) return null;
+    const cards = parseWorkersCards(data.cards);
+    if (!cards) return null;
+    return {
+      cards,
+      counts: countsFromWorkerCards(cards),
+      probed: data.probed === true,
+    };
   } catch {
     return null;
   }

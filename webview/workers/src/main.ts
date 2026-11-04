@@ -17,12 +17,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Workers webview: workers.ready → workers.init / workers.state.
+ * AXIS Workers studio on the shared runtime + studio.* protocol.
+ * Host posts studio.init / studio.set with data `{ cards, counts, probed }`;
+ * buttons post studio.action probe / probeAll.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
+import { createStudio } from '@axis-shared/studio';
+import { setText } from '@axis-shared/dom';
 import {
-  decodeHostMessage,
+  WORKERS_STUDIO_VIEW,
+  decodeWorkersStudioData,
   encodeWorkersProbe,
   encodeWorkersProbeAll,
   encodeWorkersReady,
@@ -30,36 +38,16 @@ import {
   type WorkersStudioCounts,
 } from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: WORKERS_STUDIO_VIEW });
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
 let awaitingAll = false;
-
-function setText(id: string, text: string): void {
-  const el = document.getElementById(id);
-  if (el) el.textContent = text;
-}
 
 function setLive(text: string): void {
   setText('workers-live', text);
-}
-
-function post(message: unknown): void {
-  if (disposed || !apiRef || !message) return;
-  try {
-    apiRef.postMessage(message);
-  } catch {
-    // host may be gone
-  }
 }
 
 function statusDot(): SVGElement {
@@ -129,7 +117,7 @@ function renderCard(card: WorkerStudioCard): HTMLElement {
   button.textContent = 'Probe';
   button.setAttribute('aria-label', `Probe ${card.name}`);
   button.addEventListener('click', () => {
-    post(encodeWorkersProbe(card.id));
+    studio.post(encodeWorkersProbe(card.id));
   });
   row.append(button);
   article.append(row);
@@ -167,49 +155,37 @@ function applyView(
   cards: readonly WorkerStudioCard[],
   counts: WorkersStudioCounts,
   probed: boolean,
-  type: 'workers.init' | 'workers.state',
+  kind: 'init' | 'set',
 ): void {
-  if (disposed) return;
   setText('workers-phase', probed ? 'Last probe' : 'Idle — not probed');
   renderCounts(counts);
   renderCards(cards, probed);
-  if (awaitingAll && type === 'workers.state') {
+  if (awaitingAll && kind === 'set') {
     awaitingAll = false;
     setLive(`Probe finished — ${counts.healthy} healthy`);
   }
 }
 
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeHostMessage(event.data);
-  if (!decoded.ok) return;
-  applyView(decoded.cards, decoded.counts, decoded.probed, decoded.type);
+function onHostMessage(message: unknown): void {
+  const decoded = decodeWorkersStudioData(message);
+  if (!decoded) return;
+  applyView(decoded.cards, decoded.counts, decoded.probed, decoded.kind);
 }
 
 function bindProbeAll(): void {
   const button = document.getElementById('workers-probe-all');
   if (!(button instanceof HTMLButtonElement)) return;
   button.addEventListener('click', () => {
-    if (disposed) return;
     awaitingAll = true;
     setLive('Probing…');
-    post(encodeWorkersProbeAll());
+    studio.post(encodeWorkersProbeAll());
   });
 }
 
 function main(): void {
-  const api = acquireVsCodeApi();
-  apiRef = api;
   bindProbeAll();
-  window.addEventListener('message', onHostMessage);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
-  post(encodeWorkersReady());
+  studio.onMessage(onHostMessage);
+  studio.post(encodeWorkersReady());
 }
 
 main();

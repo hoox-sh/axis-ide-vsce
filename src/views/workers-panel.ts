@@ -16,22 +16,35 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Workers studio shim (`axis.workers`) on the generic studio provider
+ * (enhancement plan §5 Phase 2). This file keeps the historical export
+ * surface (`registerWorkersStudio`, `WorkersStudioWebviewProvider`) and
+ * owns only the probe orchestration; the shell, the `studio.ready`
+ * handshake, message routing, and `studio.*` encoding live in the generic
+ * provider, and the pure payload builders / body / registration live in
+ * `workers-messages.ts` + `workers-studio-model.ts`.
+ */
+
 import { existsSync } from 'node:fs';
 import {
   ColorThemeKind,
   type ExtensionContext,
-  type Webview,
   type WebviewView,
   type WebviewViewProvider,
   Uri,
   window,
 } from 'vscode';
-import { buildWorkersWebviewHtml } from './workers-html';
 import {
-  encodeWorkersInit,
-  encodeWorkersState,
-  parseWorkersStudioMessage,
-} from './workers-studio-model';
+  workersStudioData,
+  workersStudioRegistration,
+} from './workers-messages';
+import type { StudioRegistration } from './studio-registry';
+import {
+  registerStudioView,
+  StudioViewProvider,
+  type StudioProviderDeps,
+} from './studio-provider';
 import {
   WORKERS_VIEW_ID,
   formatWorkerProbeDescription,
@@ -69,46 +82,15 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function workersAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'workers', file);
-}
-
-function getWorkersHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = workersAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS workers webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
-    );
-  }
-  const script = webview.asWebviewUri(workersAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = workersAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildWorkersWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** `StudioProviderDeps` assembled from the real vscode surface (no nonce). */
+function workersStudioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => currentThemeBodyClass(),
+  };
 }
 
 /** Drop response bodies before they reach the webview model. */
@@ -140,67 +122,55 @@ function presentSnapshot(
 }
 
 /**
- * Sidebar WebviewViewProvider for Workers (`axis.workers`).
- * Posts `workers.init` / `workers.state`. Probe calls never throw.
+ * Sidebar Workers studio (`axis.workers`) on the generic provider.
+ * The registered `WebviewViewProvider` is the generic `StudioViewProvider`;
+ * this class keeps the historical surface (probe orchestration with the
+ * sequence guard, `postSnapshot` for palette-command wiring, reveal) and
+ * forwards `resolveWebviewView` to the generic provider.
  */
 export class WorkersStudioWebviewProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+  private readonly entry: StudioRegistration;
+  private readonly deps: StudioProviderDeps;
+  private studio: StudioViewProvider | undefined;
   private cache: WorkersOverviewSnapshot | null = null;
   private seq = 0;
 
-  constructor(private readonly context: ExtensionContext) {}
+  constructor(private readonly context: ExtensionContext) {
+    this.entry = workersStudioRegistration({
+      probe: (id) => {
+        void this.probeOne(id).catch(() => {
+          // hostile probe host — never throw into the router
+        });
+      },
+      probeAll: () => {
+        void this.probeAll().catch(() => {
+          // hostile probe host — never throw into the router
+        });
+      },
+      state: () => this.presentData(),
+    });
+    this.deps = workersStudioDeps(context);
+  }
+
+  /** Wire `axis.workers` through the generic provider. Idempotent; never throws. */
+  register(): this {
+    if (this.studio) return this;
+    this.studio = registerStudioView(this.entry, this.deps, window, this.context);
+    return this;
+  }
 
   resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'workers'),
-        ],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        return this.onMessage(webview, raw);
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getWorkersHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+    this.studio?.resolveWebviewView(webviewView);
   }
 
   /** Push a probe snapshot into the resolved webview (palette command wiring). */
   postSnapshot(snap: WorkersOverviewSnapshot | null): void {
-    try {
-      this.cache = snap;
-      const webview = this.view?.webview;
-      if (!webview) return;
-      this.post(webview, 'workers.state');
-    } catch {
-      // disposing
-    }
+    this.cache = snap;
+    this.pushSet();
   }
 
   reveal(): void {
-    try {
-      this.view?.show?.(true);
-    } catch {
-      // older hosts / disposing
-    }
+    this.studio?.reveal(true);
   }
 
   private currentSnapshot(): WorkersOverviewSnapshot | null {
@@ -212,23 +182,18 @@ export class WorkersStudioWebviewProvider implements WebviewViewProvider {
     }
   }
 
-  private post(webview: Webview, kind: 'workers.init' | 'workers.state'): void {
+  private presentData() {
+    let catalog: unknown = [];
     try {
-      let catalog: unknown = [];
-      try {
-        catalog = listWorkerCatalog();
-      } catch {
-        catalog = [];
-      }
-      const snap = presentSnapshot(this.currentSnapshot());
-      const msg =
-        kind === 'workers.init'
-          ? encodeWorkersInit(catalog, snap)
-          : encodeWorkersState(catalog, snap);
-      void webview.postMessage(msg);
+      catalog = listWorkerCatalog();
     } catch {
-      // disposing
+      catalog = [];
     }
+    return workersStudioData(catalog, presentSnapshot(this.currentSnapshot()));
+  }
+
+  private pushSet(): void {
+    this.studio?.postStudioSet(this.presentData());
   }
 
   private mergeResult(result: WorkerProbeResult): void {
@@ -265,49 +230,29 @@ export class WorkersStudioWebviewProvider implements WebviewViewProvider {
     };
   }
 
-  private async probeAll(webview: Webview): Promise<void> {
+  private async probeAll(): Promise<void> {
     const seq = ++this.seq;
     try {
       const snap = await probeAllWorkers({ timeoutMs: PROBE_TIMEOUT_MS });
       if (seq !== this.seq) return;
       this.cache = snap;
-      this.post(webview, 'workers.state');
+      this.pushSet();
     } catch {
       if (seq !== this.seq) return;
-      this.post(webview, 'workers.state');
+      this.pushSet();
     }
   }
 
-  private async probeOne(webview: Webview, id: string): Promise<void> {
+  private async probeOne(id: string): Promise<void> {
     const seq = ++this.seq;
     try {
       const result = await probeWorker(id as WorkerId, { timeoutMs: PROBE_TIMEOUT_MS });
       if (seq !== this.seq) return;
       this.mergeResult(result);
-      this.post(webview, 'workers.state');
+      this.pushSet();
     } catch {
       if (seq !== this.seq) return;
-      this.post(webview, 'workers.state');
-    }
-  }
-
-  private async onMessage(webview: Webview, raw: unknown): Promise<void> {
-    try {
-      const msg = parseWorkersStudioMessage(raw);
-      if (!msg) return;
-      if (msg.type === 'workers.ready') {
-        this.post(webview, 'workers.init');
-        return;
-      }
-      if (msg.type === 'workers.probeAll') {
-        await this.probeAll(webview);
-        return;
-      }
-      if (msg.type === 'workers.probe') {
-        await this.probeOne(webview, msg.id);
-      }
-    } catch {
-      // never throw into the webview host
+      this.pushSet();
     }
   }
 }
@@ -316,13 +261,6 @@ export function registerWorkersStudio(
   context: ExtensionContext,
 ): WorkersStudioWebviewProvider {
   const provider = new WorkersStudioWebviewProvider(context);
-  try {
-    const disp = window.registerWebviewViewProvider(WORKERS_STUDIO_VIEW_ID, provider, {
-      webviewOptions: { retainContextWhenHidden: true },
-    });
-    context.subscriptions.push(disp);
-  } catch {
-    // uncontributed view id / test host
-  }
+  provider.register();
   return provider;
 }

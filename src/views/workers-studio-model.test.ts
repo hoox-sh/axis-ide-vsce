@@ -22,12 +22,7 @@ import {
   buildWorkersCards,
   countsFromWorkerCards,
   displayWorkerEndpoint,
-  encodeWorkersInit,
-  encodeWorkersProbe,
-  encodeWorkersProbeAll,
-  encodeWorkersReady,
-  encodeWorkersState,
-  parseWorkersStudioMessage,
+  parseWorkersStudioData,
   shortWorkerErrorLabel,
   workersStudioSnapshot,
 } from './workers-studio-model';
@@ -85,10 +80,7 @@ describe('workers studio model', () => {
     const view = workersStudioSnapshot(CATALOG, null);
     expect(view.probed).toBe(false);
     expect(view.counts).toEqual({ healthy: 0, degraded: 0, down: 0, unknown: 3 });
-    const init = encodeWorkersInit(CATALOG, undefined);
-    expect(init.type).toBe('workers.init');
-    expect(init.probed).toBe(false);
-    expect(init.cards.every((c) => c.status === 'unknown')).toBe(true);
+    expect(view.cards.every((c) => c.status === 'unknown')).toBe(true);
   });
 
   test('buildWorkersCards maps probe results and drops bodies', () => {
@@ -141,8 +133,7 @@ describe('workers studio model', () => {
       endpoint: 'worker.axis.hoox.sh',
     });
     expect(JSON.stringify(cards)).not.toContain('Bearer');
-    const state = encodeWorkersState(CATALOG, snap);
-    expect(state.type).toBe('workers.state');
+    const state = workersStudioSnapshot(CATALOG, snap);
     expect(state.probed).toBe(true);
     expect(state.counts).toEqual({ healthy: 1, degraded: 0, down: 1, unknown: 1 });
     expect(countsFromWorkerCards(cards)).toEqual(state.counts);
@@ -207,40 +198,20 @@ describe('workers studio model', () => {
       },
     });
     expect(buildWorkersCards(hostileCatalog, null)).toEqual([]);
-    expect(() => encodeWorkersInit(hostileCatalog, boom)).not.toThrow();
-    expect(encodeWorkersState(null, null).cards).toEqual([]);
+    expect(() => workersStudioSnapshot(hostileCatalog, boom)).not.toThrow();
+    expect(workersStudioSnapshot(null, null).cards).toEqual([]);
     expect(workersStudioSnapshot(CATALOG, []).probed).toBe(false);
   });
 
-  test('parseWorkersStudioMessage never throws', () => {
-    expect(parseWorkersStudioMessage({ type: 'workers.ready' })).toEqual({
-      type: 'workers.ready',
-    });
-    expect(parseWorkersStudioMessage(encodeWorkersProbeAll())).toEqual({
-      type: 'workers.probeAll',
-    });
-    expect(parseWorkersStudioMessage(encodeWorkersReady())).toEqual({ type: 'workers.ready' });
-    expect(parseWorkersStudioMessage({ type: 'workers.probe', id: 'pyne-pro' })).toEqual({
-      type: 'workers.probe',
-      id: 'pyne-pro',
-    });
-    expect(
-      parseWorkersStudioMessage({ type: 'workers.probe', payload: { id: 'axis-worker' } }),
-    ).toEqual({ type: 'workers.probe', id: 'axis-worker' });
-    expect(parseWorkersStudioMessage({ type: 'workers.probe' })).toBeNull();
-    expect(parseWorkersStudioMessage({ type: 'workers.probe', id: '' })).toBeNull();
-    expect(parseWorkersStudioMessage({ type: 'workers.probe', id: 'has space' })).toBeNull();
-    expect(encodeWorkersProbe('')).toBeNull();
-    expect(encodeWorkersProbe('nope/id')).toBeNull();
-    expect(parseWorkersStudioMessage(null)).toBeNull();
-    expect(parseWorkersStudioMessage([])).toBeNull();
-    expect(parseWorkersStudioMessage({ type: '' })).toBeNull();
-    expect(parseWorkersStudioMessage({ type: 'workers.other' })).toBeNull();
-    expect(parseWorkersStudioMessage({ type: 'workers.init' })).toBeNull();
-    expect(parseWorkersStudioMessage({ type: 'workers.state', cards: 'nope' })).toBeNull();
+  test('parseWorkersStudioData never throws', () => {
+    expect(parseWorkersStudioData(null)).toBeNull();
+    expect(parseWorkersStudioData(undefined)).toBeNull();
+    expect(parseWorkersStudioData([])).toBeNull();
+    expect(parseWorkersStudioData('nope')).toBeNull();
+    expect(parseWorkersStudioData({})).toBeNull();
+    expect(parseWorkersStudioData({ cards: 'nope' })).toBeNull();
 
-    const parsed = parseWorkersStudioMessage({
-      type: 'workers.init',
+    const parsed = parseWorkersStudioData({
       probed: true,
       counts: { healthy: 50, degraded: 0, down: 0, unknown: 0 },
       cards: [
@@ -257,19 +228,16 @@ describe('workers studio model', () => {
         { id: '../x', name: 'nope', status: 'down' },
       ],
     });
-    expect(parsed?.type).toBe('workers.init');
-    if (parsed && parsed.type === 'workers.init') {
-      expect(parsed.probed).toBe(true);
-      expect(parsed.counts).toEqual({ healthy: 1, degraded: 0, down: 0, unknown: 0 });
-      expect(parsed.cards).toHaveLength(1);
-      expect(parsed.cards[0]?.endpoint).toBe('worker.axis.hoox.sh');
-      expect(parsed.cards[0]?.detail).toBe('');
-      expect(JSON.stringify(parsed)).not.toContain('hide-me');
-      expect(JSON.stringify(parsed)).not.toContain('token');
-    }
+    expect(parsed?.probed).toBe(true);
+    expect(parsed?.counts).toEqual({ healthy: 1, degraded: 0, down: 0, unknown: 0 });
+    expect(parsed?.cards).toHaveLength(1);
+    expect(parsed?.cards[0]?.endpoint).toBe('worker.axis.hoox.sh');
+    expect(parsed?.cards[0]?.detail).toBe('');
+    expect(JSON.stringify(parsed)).not.toContain('hide-me');
+    expect(JSON.stringify(parsed)).not.toContain('token');
 
-    const down = parseWorkersStudioMessage({
-      type: 'workers.state',
+    const down = parseWorkersStudioData({
+      probed: false,
       cards: [
         {
           id: 'axis-worker',
@@ -283,17 +251,13 @@ describe('workers studio model', () => {
         },
       ],
     });
-    if (down && down.type === 'workers.state') {
-      expect(down.probed).toBe(false);
-      expect(down.cards[0]).toMatchObject({
-        status: 'down',
-        latencyMs: null,
-        detail: 'HTTP 500',
-      });
-      expect(down.counts.down).toBe(1);
-    } else {
-      throw new Error('expected workers.state');
-    }
+    expect(down?.probed).toBe(false);
+    expect(down?.cards[0]).toMatchObject({
+      status: 'down',
+      latencyMs: null,
+      detail: 'HTTP 500',
+    });
+    expect(down?.counts.down).toBe(1);
 
     const hostile = new Proxy(
       {},
@@ -303,8 +267,8 @@ describe('workers studio model', () => {
         },
       },
     );
-    expect(parseWorkersStudioMessage(hostile)).toBeNull();
-    expect(() => parseWorkersStudioMessage(hostile)).not.toThrow();
+    expect(parseWorkersStudioData(hostile)).toBeNull();
+    expect(() => parseWorkersStudioData(hostile)).not.toThrow();
 
     const badStatus = buildWorkersCards(
       [{ id: 'axis-worker', name: 'AXIS', summary: '', probe: 'none', defaultEndpoint: '' }],
@@ -362,8 +326,8 @@ describe('workers studio model', () => {
       },
     });
     expect(
-      parseWorkersStudioMessage({ type: 'workers.init', cards: throwingCardList, probed: false }),
-    ).toMatchObject({ type: 'workers.init', cards: [] });
+      parseWorkersStudioData({ cards: throwingCardList, probed: false }),
+    ).toMatchObject({ cards: [] });
 
     const badList = new Proxy([] as unknown[], {
       get(target, prop) {
@@ -371,13 +335,13 @@ describe('workers studio model', () => {
         return Reflect.get(target, prop);
       },
     });
-    expect(parseWorkersStudioMessage({ type: 'workers.state', cards: badList })).toBeNull();
+    expect(parseWorkersStudioData({ cards: badList })).toBeNull();
 
     expect(
-      parseWorkersStudioMessage({
-        type: 'workers.probe',
-        get id() {
-          throw new Error('id');
+      parseWorkersStudioData({
+        probed: true,
+        get cards() {
+          throw new Error('cards');
         },
       }),
     ).toBeNull();
