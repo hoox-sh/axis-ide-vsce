@@ -14,6 +14,14 @@ with its commit history preserved.
   workflow with optional Marketplace / Open VSX publishing.
 - Dependabot, issue templates, PR template, CODEOWNERS, security and
   contribution docs.
+- `webview/shared/` source-only webview runtime and design system
+  (Phase 0 groundwork, no behavior change): `--axis-*` design tokens with
+  VS Code semantic variables first, base theme/motion/component CSS layers,
+  a typed `acquireVsCodeApi()` singleton, DOM/announce/clipboard/filter
+  helpers, the `createStudio()` lifecycle runtime, first-pass `ax-*`
+  component builders, and a shared
+  `createStudioViteConfig()` factory. The Colors studio pilots the
+  `@axis-shared` alias (inert until a studio imports it).
 
 ### Fixed
 

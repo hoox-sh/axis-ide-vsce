@@ -1,0 +1,119 @@
+/*
+ * Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * AXIS motion layer: signature keyframes, the message-rise utility, the
+ * chrome-only interactive transition, and the global
+ * prefers-reduced-motion guard. Import after tokens.css (durations and
+ * easings) and before components.css (component rules may re-apply
+ * animations — the reduce guards colocated there must stay last).
+ */
+
+/* Live dot: 1.6s opacity breathe. */
+@keyframes axis-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* 180ms dock-edge slide + fade — compositor-only properties (transform, opacity).
+ * Studios override --axis-panel-in-from to change the dock edge (e.g. -6px). */
+@keyframes axis-panel-in {
+  from {
+    opacity: 0;
+    transform: translate(0, var(--axis-panel-in-from, 6px));
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+/* 180ms tick flash — color-mix background tint keyed off a value change. */
+@keyframes axis-wl-flash-up {
+  from {
+    background-color: color-mix(in oklch, var(--axis-up) 32%, transparent);
+  }
+
+  to {
+    background-color: transparent;
+  }
+}
+
+@keyframes axis-wl-flash-down {
+  from {
+    background-color: color-mix(in oklch, var(--axis-down) 28%, transparent);
+  }
+
+  to {
+    background-color: transparent;
+  }
+}
+
+/* 3px rise for incoming rows/messages. */
+@keyframes ax-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Message-rise utility class (applied by builders/studios). */
+.ax-msg-in {
+  animation: ax-msg-in var(--axis-dur-base) var(--axis-ease);
+}
+
+/*
+ * Chrome-only interactive transition. NEVER a global `*` rule — the chart
+ * canvas must never pay a paint tax for chrome hover states. Only the
+ * interactive ax-* classes are listed.
+ */
+.ax-chip,
+.ax-tabs__tab,
+.ax-row,
+.ax-row__actions,
+.ax-search,
+.ax-field__label,
+.ax-field__input,
+.ax-swatch,
+.ax-glyph,
+.ax-empty__action {
+  transition:
+    background-color 150ms ease-out,
+    color 150ms ease-out,
+    border-color 150ms ease-out,
+    opacity 150ms ease-out;
+}
+
+/* Global guard: collapse all motion to 0.01ms under reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: canonical reduced-motion guard — must override author animations */
+    animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: canonical reduced-motion guard — must override author animations */
+    animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: canonical reduced-motion guard — must override author transitions */
+    transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: canonical reduced-motion guard — must override author scroll behavior */
+    scroll-behavior: auto !important;
+  }
+
+  .ax-msg-in {
+    animation: none;
+  }
+}

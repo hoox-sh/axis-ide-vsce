@@ -1,0 +1,55 @@
+/*
+ * Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/* AXIS void-minimalism token layer — VS Code semantics first, AXIS hexes last. */
+:root {
+  /* Surfaces */
+  --axis-bg:        var(--vscode-panel-background, #0c0e14);
+  --axis-bg-elev:   var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #10131b));
+  --axis-bg-hover:  var(--vscode-list-hoverBackground, var(--vscode-toolbar-hoverBackground, #161a24));
+  /* Hairlines — always 1px */
+  --axis-border:        var(--vscode-panel-border, #1c2230);
+  --axis-border-soft:   var(--vscode-widget-border, #151922);
+  --axis-border-w: 1px;
+  /* Text */
+  --axis-text:  var(--vscode-foreground, #e8eaee);
+  --axis-dim:    var(--vscode-descriptionForeground, #9aa3b2);
+  --axis-faint:  color-mix(in oklch, var(--vscode-descriptionForeground, #9aa3b2) 70%, transparent);
+  /* Accent + market semantics */
+  --axis-accent:        var(--vscode-focusBorder, var(--vscode-button-background, #8b9cff));
+  --axis-accent-hover:  var(--vscode-button-hoverBackground, #7488f0);
+  --axis-up:    var(--vscode-testing-iconPassed, var(--vscode-charts-green, #3ddc97));
+  --axis-down:  var(--vscode-errorForeground, var(--vscode-charts-red, #f07178));
+  --axis-warn:  var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow, #e8b84a));
+  --axis-info:  var(--vscode-charts-blue, var(--vscode-textLink-foreground, #6ee7f5));
+  /* Typography — figures stay sans + tabular-nums; codes/HUD/timestamps mono */
+  --axis-font:      var(--vscode-font-family, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif);
+  --axis-font-mono: var(--vscode-editor-font-family, var(--vscode-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace));
+  --axis-font-base: var(--vscode-font-size, 13px);
+  --axis-label: 11px;
+  --axis-label-tracking: 0.06em;
+  --axis-label-weight: 600;
+  --axis-capsule-font: 10px;
+  /* Radii (hard rule): chip 2px · input 4px · panel 6px; pills/dots only 999px/50% */
+  --axis-radius-chip: 2px;
+  --axis-radius-input: 4px;
+  --axis-radius-panel: 6px;
+  /* Spacing & density */
+  --axis-gap-xs: 4px;
+  --axis-gap: 8px;
+  --axis-panel-pad: 12px;
+  --axis-control-h: 28px;
+  --axis-row-h: 22px;
+  --axis-capsule-h: 18px;
+  --axis-bar-h: 4px;
+  /* Focus — thin accent ring only, never an outer halo */
+  --axis-focus-ring: 0 0 0 1px color-mix(in oklch, var(--axis-accent) 40%, transparent);
+  /* Motion */
+  --axis-dur-fast: 120ms;
+  --axis-dur-base: 200ms;
+  --axis-dur-slow: 350ms;
+  --axis-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --axis-ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+}

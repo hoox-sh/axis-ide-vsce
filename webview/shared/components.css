@@ -1,0 +1,529 @@
+/*
+ * Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * AXIS curated component classes (§4 catalog). Class names are the frozen
+ * contract with components.ts builders. Colors flow through --axis-* tokens
+ * (tokens.css); the few VS Code-only semantics (badge, input, link, scrollbar)
+ * map here with literal fallbacks. Import after tokens.css, theme.css and
+ * motion.css — per-component reduced-motion guards must stay after the
+ * animated rules in this same file.
+ */
+
+/* 1 · ax-panel — elevated surface */
+.ax-panel {
+  background: var(--axis-bg-elev);
+  border: var(--axis-border-w) solid var(--axis-border);
+  border-radius: var(--axis-radius-panel);
+  box-shadow: 0 8px 28px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.48));
+}
+
+.ax-panel--in {
+  animation: axis-panel-in 180ms var(--axis-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ax-panel--in {
+    animation: none;
+  }
+}
+
+/* 2 · ax-header — sticky header + optional count pill */
+.ax-header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--axis-gap);
+  margin: 0 0 6px;
+  padding-bottom: 6px;
+  background: var(--axis-bg);
+}
+
+.ax-header__title {
+  flex: none;
+  margin: 0;
+  font-size: var(--axis-label);
+  font-weight: var(--axis-label-weight);
+  letter-spacing: var(--axis-label-tracking);
+  text-transform: uppercase;
+  color: var(--axis-dim);
+}
+
+.ax-header__count {
+  flex: none;
+  min-height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--vscode-badge-background, #616161);
+  color: var(--vscode-badge-foreground, #ffffff);
+  font-family: var(--axis-font-mono);
+  font-size: 10px;
+  line-height: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 3 · ax-tabs — segmented control (Run Output / Toolbox) */
+.ax-tabs {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  border: var(--axis-border-w) solid var(--axis-border);
+  border-radius: 999px;
+  background: transparent;
+}
+
+.ax-tabs__tab {
+  margin: 0;
+  padding: 0 12px;
+  min-height: var(--axis-control-h);
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--axis-dim);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ax-tabs__tab:hover {
+  background: var(--axis-bg-hover);
+  color: var(--axis-text);
+}
+
+.ax-tabs__tab[aria-selected='true'] {
+  background: color-mix(in oklch, var(--axis-accent) 18%, transparent);
+  color: var(--axis-text);
+  box-shadow: inset 0 -1px 0 var(--axis-accent);
+}
+
+/* 4 · ax-row — hairline-separated list row */
+.ax-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--axis-gap-xs);
+  min-height: var(--axis-row-h);
+  margin: 0;
+  padding: 0 var(--axis-gap-xs) 0 calc(var(--axis-gap-xs) + 2px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.ax-row + .ax-row {
+  border-top: var(--axis-border-w) solid var(--axis-border-soft);
+}
+
+.ax-row:hover {
+  background: var(--axis-bg-hover);
+}
+
+.ax-row.is-active {
+  background: var(--axis-bg-hover);
+  box-shadow: inset 2px 0 0 var(--axis-accent);
+}
+
+/* Hover actions fade in over a right-edge gradient scrim. */
+.ax-row__scrim {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 40%;
+  pointer-events: none;
+  background: linear-gradient(to right, transparent, var(--axis-bg-hover) 30%);
+  opacity: 0;
+}
+
+.ax-row:hover .ax-row__scrim,
+.ax-row:focus-within .ax-row__scrim {
+  opacity: 1;
+}
+
+.ax-row__actions {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--axis-gap-xs);
+  margin-left: auto;
+  opacity: 0;
+}
+
+.ax-row:hover .ax-row__actions,
+.ax-row:focus-within .ax-row__actions {
+  opacity: 1;
+}
+
+/* 5 · ax-chip — 2px filter chip / toggle-group member */
+.ax-chip {
+  margin: 0;
+  padding: 1px 8px;
+  min-height: 18px;
+  border: var(--axis-border-w) solid var(--vscode-contrastBorder, transparent);
+  border-radius: var(--axis-radius-chip);
+  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
+  color: var(--vscode-button-secondaryForeground, var(--axis-text));
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+}
+
+.ax-chip[aria-pressed='true'] {
+  background: color-mix(in oklch, var(--axis-accent) 18%, transparent);
+  border-color: color-mix(in oklch, var(--axis-accent) 40%, transparent);
+  color: var(--axis-text);
+}
+
+/* 6 · ax-kpi — stat tile */
+.ax-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: var(--axis-border-w) solid var(--axis-border-soft);
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-bg-elev);
+}
+
+.ax-kpi__label {
+  font-size: 10px;
+  font-weight: var(--axis-label-weight);
+  letter-spacing: var(--axis-label-tracking);
+  text-transform: uppercase;
+  color: var(--axis-dim);
+}
+
+.ax-kpi__value {
+  font-family: var(--axis-font);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums lining-nums;
+  color: var(--axis-text);
+}
+
+/* 7 · ax-capsule — 18px status capsule */
+.ax-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--axis-capsule-h);
+  padding: 0 8px;
+  border: var(--axis-border-w) solid var(--axis-border-soft);
+  border-radius: 999px;
+  background: var(--axis-bg-elev);
+  color: var(--axis-dim);
+  font-family: var(--axis-font-mono);
+  font-size: var(--axis-capsule-font);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.ax-capsule--active {
+  box-shadow: inset 0 0 0 1px var(--axis-accent);
+}
+
+.ax-capsule__code {
+  text-transform: uppercase;
+  color: var(--axis-faint);
+}
+
+.ax-capsule__value {
+  font-variant-numeric: tabular-nums;
+  color: var(--axis-dim);
+}
+
+/* 8 · ax-status-dot — 6px dot + word */
+.ax-status-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--axis-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.ax-status-dot__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--axis-faint);
+}
+
+.ax-status-dot--idle .ax-status-dot__dot {
+  background: var(--axis-faint);
+}
+
+.ax-status-dot--ok .ax-status-dot__dot {
+  background: var(--axis-up);
+}
+
+.ax-status-dot--warn .ax-status-dot__dot {
+  background: var(--axis-warn);
+}
+
+.ax-status-dot--err .ax-status-dot__dot {
+  background: var(--axis-down);
+}
+
+.ax-status-dot--live .ax-status-dot__dot {
+  background: var(--axis-up);
+  animation: axis-live-pulse 1.6s var(--axis-ease) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ax-status-dot--live .ax-status-dot__dot {
+    animation: none;
+  }
+}
+
+/* 9 · ax-search — search input */
+.ax-search {
+  width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  border: var(--axis-border-w) solid var(--vscode-input-border, var(--axis-border));
+  border-radius: var(--axis-radius-input);
+  background: var(--vscode-input-background, var(--axis-bg-elev));
+  color: var(--vscode-input-foreground, var(--axis-text));
+  font: inherit;
+  font-size: 12px;
+}
+
+.ax-search::placeholder {
+  color: var(--vscode-input-placeholderForeground, var(--axis-dim));
+}
+
+/* Search input signals focus with the border only — no outline halo. */
+.ax-search:focus-visible {
+  outline: none;
+}
+
+.ax-search:focus {
+  border-color: var(--axis-accent);
+}
+
+/* 10 · ax-field — floating-label input */
+.ax-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--axis-gap-xs);
+}
+
+.ax-field__label {
+  color: var(--axis-dim);
+  font-size: var(--axis-label);
+  font-weight: var(--axis-label-weight);
+  letter-spacing: var(--axis-label-tracking);
+  text-transform: uppercase;
+}
+
+.ax-field:focus-within .ax-field__label {
+  color: var(--axis-accent);
+}
+
+.ax-field__input {
+  width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  border: var(--axis-border-w) solid var(--vscode-input-border, var(--axis-border));
+  border-radius: var(--axis-radius-input);
+  background: var(--vscode-input-background, var(--axis-bg-elev));
+  color: var(--vscode-input-foreground, var(--axis-text));
+  font: inherit;
+  font-size: 12px;
+}
+
+.ax-field--mono .ax-field__input {
+  font-family: var(--axis-font-mono);
+}
+
+/* Field input signals focus with the border only — no outline halo. */
+.ax-field__input:focus-visible {
+  outline: none;
+}
+
+.ax-field__input:focus {
+  border-color: var(--axis-accent);
+}
+
+/* 11 · ax-kbd — mono kbd chip */
+.ax-kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border: var(--axis-border-w) solid var(--axis-border);
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-bg-elev);
+  color: var(--axis-dim);
+  font-family: var(--axis-font-mono);
+  font-size: 0.72em;
+  line-height: 1.5;
+}
+
+/* 12 · ax-empty — empty state */
+.ax-empty {
+  margin: var(--axis-gap) var(--axis-gap-xs);
+  color: var(--axis-faint);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ax-empty__action {
+  display: inline-block;
+  margin: var(--axis-gap-xs) 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--vscode-textLink-foreground, var(--axis-accent));
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* 13 · ax-flash — 180ms tick flash keyed off a value change */
+.ax-flash {
+  font-variant-numeric: tabular-nums;
+}
+
+.ax-flash--up {
+  animation: axis-wl-flash-up 180ms var(--axis-ease);
+}
+
+.ax-flash--down {
+  animation: axis-wl-flash-down 180ms var(--axis-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ax-flash--up,
+  .ax-flash--down {
+    animation: none;
+  }
+}
+
+/* 14 · ax-bar — profiler timing bar */
+.ax-bar {
+  display: flex;
+  gap: 1px;
+  min-height: var(--axis-bar-h);
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-border-soft);
+  overflow: hidden;
+}
+
+.ax-bar__segment {
+  flex: 0 0 auto;
+  min-width: 1px;
+  background: var(--axis-info);
+}
+
+.ax-bar__segment--up {
+  background: var(--axis-up);
+}
+
+.ax-bar__segment--down {
+  background: var(--axis-down);
+}
+
+.ax-bar__segment--warn {
+  background: var(--axis-warn);
+}
+
+.ax-bar__segment--accent {
+  background: var(--axis-accent);
+}
+
+.ax-bar__segment--info {
+  background: var(--axis-info);
+}
+
+/* 15 · ax-swatch — color-literal chip */
+.ax-swatch {
+  display: inline-grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: var(--axis-row-h);
+  margin: 0;
+  padding: 1px 4px;
+  border: var(--axis-border-w) solid transparent;
+  border-radius: var(--axis-radius-chip);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ax-swatch:hover {
+  background: var(--axis-bg-hover);
+}
+
+.ax-swatch__paint {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, rgba(127, 127, 127, 0.55)));
+  background: transparent;
+}
+
+.ax-swatch__paint--raw {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--vscode-descriptionForeground, #888888) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+.ax-swatch__code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--axis-font-mono);
+  font-size: 12px;
+}
+
+/* 16 · ax-glyph — symbol grid cell */
+.ax-glyph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border: var(--axis-border-w) solid transparent;
+  border-radius: var(--axis-radius-chip);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.ax-glyph:hover {
+  background: var(--axis-bg-hover);
+}
+
+.ax-glyph__char {
+  color: var(--axis-text);
+  font-family: var(--axis-font-mono);
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.ax-glyph__name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--axis-faint);
+  font-size: 10px;
+}

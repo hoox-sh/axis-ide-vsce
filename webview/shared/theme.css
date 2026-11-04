@@ -1,0 +1,123 @@
+/*
+ * Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * AXIS base layer: reset, body typography on --axis-* tokens, the single
+ * focus-visible rule, 6px transparent-track scrollbars, and the
+ * high-contrast contract. Import after tokens.css.
+ */
+
+html,
+body {
+  border: 0;
+  outline: 0;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--axis-bg);
+  color: var(--axis-text);
+  font-family: var(--axis-font);
+  font-size: var(--axis-font-base);
+  line-height: 1.4;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* [hidden] always wins over component display rules. */
+[hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: standard reset — [hidden] must override any component display rule */
+  display: none !important;
+}
+
+/* Single focus-visible rule for every studio: thin accent outline, no halo.
+ * Inputs opt out below (components.css): they signal focus via border-color. */
+:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+/* 6px scrollbars, transparent track, thumb on the hairline token. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--vscode-scrollbarSlider-background, var(--axis-border));
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground, var(--axis-border));
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------------ *
+ * High-contrast contract: force 1px borders on borderless surfaces,
+ * kill shadows and color-mix tints. Scoped to the VS Code body classes
+ * so the overrides ride on specificity, never import order.
+ * ------------------------------------------------------------------ */
+
+body.vscode-high-contrast,
+body.vscode-high-contrast-light {
+  /* Replace color-mix-derived tokens with solid values. */
+  --axis-faint: var(--vscode-descriptionForeground, #9aa3b2);
+  --axis-focus-ring: 0 0 0 1px var(--vscode-contrastBorder, var(--axis-accent));
+}
+
+/* Borderless / transparent-bordered surfaces get a visible 1px edge. */
+body.vscode-high-contrast .ax-row,
+body.vscode-high-contrast-light .ax-row,
+body.vscode-high-contrast .ax-swatch,
+body.vscode-high-contrast-light .ax-swatch,
+body.vscode-high-contrast .ax-glyph,
+body.vscode-high-contrast-light .ax-glyph,
+body.vscode-high-contrast .ax-tabs__tab,
+body.vscode-high-contrast-light .ax-tabs__tab,
+body.vscode-high-contrast .ax-chip,
+body.vscode-high-contrast-light .ax-chip,
+body.vscode-high-contrast .ax-empty__action,
+body.vscode-high-contrast-light .ax-empty__action {
+  border: var(--axis-border-w) solid var(--vscode-contrastBorder, var(--axis-accent));
+}
+
+/* Kill elevation shadows. */
+body.vscode-high-contrast .ax-panel,
+body.vscode-high-contrast-light .ax-panel,
+body.vscode-high-contrast .ax-kpi,
+body.vscode-high-contrast-light .ax-kpi {
+  box-shadow: none;
+}
+
+/* Replace color-mix active tints with solid contrast fills. */
+body.vscode-high-contrast .ax-tabs__tab[aria-selected='true'],
+body.vscode-high-contrast-light .ax-tabs__tab[aria-selected='true'],
+body.vscode-high-contrast .ax-chip[aria-pressed='true'],
+body.vscode-high-contrast-light .ax-chip[aria-pressed='true'] {
+  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
+  color: var(--vscode-button-secondaryForeground, var(--axis-text));
+  border-color: var(--vscode-contrastActiveBorder, var(--axis-accent));
+}
+
+/* Tick flashes are color-mix tints — disable them entirely. */
+body.vscode-high-contrast .ax-flash--up,
+body.vscode-high-contrast-light .ax-flash--up,
+body.vscode-high-contrast .ax-flash--down,
+body.vscode-high-contrast-light .ax-flash--down {
+  animation: none;
+}
