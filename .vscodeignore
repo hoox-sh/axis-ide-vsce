@@ -100,10 +100,13 @@ biome.json
 .editorconfig
 .gitattributes
 AGENTS.md
+DESIGN.md
 CHANGELOG.md
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
 SECURITY.md
 PUBLISH.md
+opencode.json
+okf/
 *-contributes.fragment.json
 *.fragment.md

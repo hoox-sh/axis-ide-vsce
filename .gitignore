@@ -45,6 +45,8 @@ bun.lockb
 
 # Local agent / session data
 .opencode/
+opencode.json
+okf/
 .tmp/
 .agent-sync/
 .agent-sync-notice.md
