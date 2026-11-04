@@ -22,7 +22,6 @@ import {
   ALERTS_TITLE_REQUIRED,
   buildAlertsSnapshot,
   formatAlertsSummary,
-  parseAlertsStudioMessage,
 } from './alerts-studio-model';
 
 const EMPTY = {
@@ -111,101 +110,5 @@ describe('buildAlertsSnapshot', () => {
     expect(Array.isArray(entries)).toBe(true);
     expect(() => buildAlertsSnapshot(entries)).not.toThrow();
     expect(buildAlertsSnapshot(entries)).toEqual(EMPTY);
-  });
-});
-
-describe('parseAlertsStudioMessage', () => {
-  test('ready, add, toggle, and remove', () => {
-    expect(parseAlertsStudioMessage({ type: 'alerts.ready', extra: 1 })).toEqual({
-      type: 'alerts.ready',
-    });
-    const bare = Object.create(null) as { type: string };
-    bare.type = 'alerts.ready';
-    expect(parseAlertsStudioMessage(bare)).toEqual({ type: 'alerts.ready' });
-
-    const titled = parseAlertsStudioMessage({ type: 'alerts.add', title: ' T ' });
-    expect(titled).toEqual({ type: 'alerts.add', title: 'T' });
-    expect(titled && 'condition' in titled).toBe(false);
-
-    expect(
-      parseAlertsStudioMessage({
-        type: 'alerts.add',
-        title: ' BTC ',
-        condition: ' close > 1 ',
-      }),
-    ).toEqual({ type: 'alerts.add', title: 'BTC', condition: 'close > 1' });
-
-    const blankCond = parseAlertsStudioMessage({
-      type: 'alerts.add',
-      title: 'X',
-      condition: '   ',
-    });
-    expect(blankCond).toEqual({ type: 'alerts.add', title: 'X' });
-    expect(blankCond && 'condition' in blankCond).toBe(false);
-
-    const numCond = parseAlertsStudioMessage({
-      type: 'alerts.add',
-      title: 'X',
-      condition: 1,
-    });
-    expect(numCond).toEqual({ type: 'alerts.add', title: 'X' });
-
-    expect(parseAlertsStudioMessage({ type: 'alerts.add', title: 5 })).toEqual({
-      type: 'alerts.add',
-      title: '',
-    });
-    expect(parseAlertsStudioMessage({ type: 'alerts.add', title: '   ' })).toEqual({
-      type: 'alerts.add',
-      title: '',
-    });
-    expect(parseAlertsStudioMessage({ type: 'alerts.add' })).toEqual({
-      type: 'alerts.add',
-      title: '',
-    });
-
-    expect(parseAlertsStudioMessage({ type: 'alerts.toggle', id: ' a1 ' })).toEqual({
-      type: 'alerts.toggle',
-      id: 'a1',
-    });
-    expect(parseAlertsStudioMessage({ type: 'alerts.remove', id: 'a1' })).toEqual({
-      type: 'alerts.remove',
-      id: 'a1',
-    });
-  });
-
-  test('drops junk and never throws', () => {
-    expect(parseAlertsStudioMessage(null)).toBeNull();
-    expect(parseAlertsStudioMessage(undefined)).toBeNull();
-    expect(parseAlertsStudioMessage(1)).toBeNull();
-    expect(parseAlertsStudioMessage('alerts.add')).toBeNull();
-    expect(parseAlertsStudioMessage([])).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 'alerts.set' })).toBeNull();
-    expect(parseAlertsStudioMessage({ type: '' })).toBeNull();
-    expect(parseAlertsStudioMessage({})).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 1 })).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 'alerts.toggle' })).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 'alerts.toggle', id: '  ' })).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 'alerts.toggle', id: 4 })).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 'alerts.remove', id: '' })).toBeNull();
-    expect(parseAlertsStudioMessage({ type: 'alerts.remove', id: 2 })).toBeNull();
-
-    const boom = new Proxy(
-      {},
-      {
-        get() {
-          throw new Error('boom');
-        },
-      },
-    );
-    expect(() => parseAlertsStudioMessage(boom)).not.toThrow();
-    expect(parseAlertsStudioMessage(boom)).toBeNull();
-
-    const titleBoom = {
-      type: 'alerts.add',
-      get title(): string {
-        throw new Error('title');
-      },
-    };
-    expect(parseAlertsStudioMessage(titleBoom)).toBeNull();
   });
 });

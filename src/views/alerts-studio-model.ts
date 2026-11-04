@@ -17,10 +17,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pure Alerts studio snapshot + webview messages.
+ * Pure Alerts studio snapshot model, shared by the host panel and the
+ * webview (the webview imports this module directly).
  * Does not import alerts.ts (that module loads vscode).
  * Row rules match sanitizeAlertEntry: trim id/title, drop blanks and duplicate ids,
  * condition only when a non-empty string, enabled is false only when strictly false.
+ * The studio.* action args validation lives in alerts-messages.ts.
  */
 
 export const ALERTS_TITLE_REQUIRED = 'Title required';
@@ -40,12 +42,6 @@ export type AlertsSnapshot = {
   summary: string;
   entries: AlertsStudioEntry[];
 };
-
-export type AlertsStudioMessage =
-  | { type: 'alerts.ready' }
-  | { type: 'alerts.add'; title: string; condition?: string }
-  | { type: 'alerts.toggle'; id: string }
-  | { type: 'alerts.remove'; id: string };
 
 export function formatAlertsSummary(total: number, enabled: number): string {
   return `${total} alerts, ${enabled} enabled`;
@@ -109,39 +105,5 @@ export function buildAlertsSnapshot(entries: unknown): AlertsSnapshot {
     };
   } catch {
     return emptyAlertsSnapshot();
-  }
-}
-
-function readTrimmed(row: Record<string, unknown>, key: string): string {
-  const value = row[key];
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-/**
- * Webview → host message. Never throws.
- * Empty add titles are returned (title `''`) so the panel can flash without writing.
- * Blank toggle/remove ids are dropped.
- */
-export function parseAlertsStudioMessage(raw: unknown): AlertsStudioMessage | null {
-  try {
-    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
-    const rec = raw as Record<string, unknown>;
-    const type = rec.type;
-    if (type === 'alerts.ready') return { type: 'alerts.ready' };
-    if (type === 'alerts.add') {
-      const title = readTrimmed(rec, 'title');
-      const condition = readTrimmed(rec, 'condition');
-      if (condition) return { type: 'alerts.add', title, condition };
-      return { type: 'alerts.add', title };
-    }
-    if (type === 'alerts.toggle' || type === 'alerts.remove') {
-      const id = readTrimmed(rec, 'id');
-      if (!id) return null;
-      if (type === 'alerts.toggle') return { type: 'alerts.toggle', id };
-      return { type: 'alerts.remove', id };
-    }
-    return null;
-  } catch {
-    return null;
   }
 }

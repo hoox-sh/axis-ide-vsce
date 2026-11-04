@@ -17,16 +17,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Alerts studio: alerts.ready → alerts.set.
- * Add / toggle / remove post back to the host. Empty titles never post.
+ * AXIS Alerts studio webview on the shared runtime + studio.* protocol.
+ * Host posts studio.init / studio.set carrying the alerts snapshot and
+ * studio.notice for flashes. Add / toggle / remove post back to the host;
+ * empty titles never post. Optimistic toggle/remove keep the list snappy.
  */
 
+import '@axis-shared/tokens.css';
+import '@axis-shared/theme.css';
+import '@axis-shared/components.css';
 import './style.css';
-import { buildAlertsSnapshot, type AlertsStudioEntry } from '../../../src/views/alerts-studio-model';
+import { createStudio } from '@axis-shared/studio';
+import { setHidden, setText } from '@axis-shared/dom';
+import {
+  buildAlertsSnapshot,
+  type AlertsStudioEntry,
+} from '../../../src/views/alerts-studio-model';
 import {
   ALERTS_REMOVED,
   ALERTS_TITLE_REQUIRED,
-  decodeHostMessage,
+  ALERTS_VIEW,
+  decodeAlertsNotice,
+  decodeAlertsSnapshot,
   encodeAlertsAdd,
   encodeAlertsReady,
   encodeAlertsRemove,
@@ -34,20 +46,14 @@ import {
   type AlertsSnapshot,
 } from './protocol';
 
-interface VsCodeApi {
-  postMessage(message: unknown): void;
-  getState(): unknown;
-  setState(state: unknown): void;
-}
-
-declare function acquireVsCodeApi(): VsCodeApi;
+// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
+// message subscription, safe posting, and disposal on pagehide.
+const studio = createStudio({ view: ALERTS_VIEW });
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const BELL_D =
   'M8 1.75a.75.75 0 0 1 .75.75v.41A4.5 4.5 0 0 1 12.5 7.25v2.1l.9 1.35a.75.75 0 0 1-.62 1.15H3.22a.75.75 0 0 1-.62-1.15l.9-1.35v-2.1A4.5 4.5 0 0 1 7.25 2.91V2.5A.75.75 0 0 1 8 1.75zM6.5 12.75a1.5 1.5 0 0 0 3 0h-3z';
 
-let disposed = false;
-let apiRef: VsCodeApi | null = null;
 let snapshot: AlertsSnapshot = buildAlertsSnapshot(undefined);
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -134,13 +140,10 @@ function renderRow(entry: AlertsStudioEntry): HTMLLIElement {
 }
 
 function paint(): void {
-  if (disposed) return;
-  const summary = document.getElementById('alerts-summary');
-  if (summary) summary.textContent = snapshot.summary;
-  const empty = document.getElementById('alerts-empty');
-  const list = document.getElementById('alerts-list');
+  setText('alerts-summary', snapshot.summary);
   const has = snapshot.entries.length > 0;
-  if (empty) empty.hidden = has;
+  setHidden('alerts-empty', has);
+  const list = document.getElementById('alerts-list');
   if (list) {
     list.hidden = !has;
     list.replaceChildren(...snapshot.entries.map(renderRow));
@@ -155,21 +158,11 @@ function flash(text: string, kind: 'error' | 'info'): void {
   if (flashTimer !== undefined) clearTimeout(flashTimer);
   flashTimer = setTimeout(() => {
     flashTimer = undefined;
-    if (disposed) return;
     const live = document.getElementById('alerts-live');
     if (!live) return;
     live.textContent = '';
     live.classList.remove('alerts-live--error');
   }, 2400);
-}
-
-function post(message: unknown): void {
-  if (disposed || !apiRef) return;
-  try {
-    apiRef.postMessage(message);
-  } catch {
-    // host may be gone
-  }
 }
 
 function onAdd(): void {
@@ -185,7 +178,7 @@ function onAdd(): void {
     return;
   }
   titleEl.removeAttribute('aria-invalid');
-  post(encodeAlertsAdd(title, condition || undefined));
+  studio.post(encodeAlertsAdd(title, condition || undefined));
   titleEl.value = '';
   if (condEl instanceof HTMLInputElement) condEl.value = '';
 }
@@ -197,18 +190,17 @@ function onToggle(id: string): void {
     ),
   );
   paint();
-  post(encodeAlertsToggle(id));
+  studio.post(encodeAlertsToggle(id));
 }
 
 function onRemove(id: string): void {
   snapshot = buildAlertsSnapshot(snapshot.entries.filter((entry) => entry.id !== id));
   paint();
   flash(ALERTS_REMOVED, 'info');
-  post(encodeAlertsRemove(id));
+  studio.post(encodeAlertsRemove(id));
 }
 
 function onClick(event: Event): void {
-  if (disposed) return;
   const origin =
     event.target instanceof Element
       ? event.target
@@ -231,42 +223,33 @@ function onClick(event: Event): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (disposed || event.key !== 'Enter') return;
+  if (event.key !== 'Enter') return;
   if (!(event.target instanceof HTMLInputElement)) return;
   if (event.target.id !== 'alerts-title' && event.target.id !== 'alerts-condition') return;
   event.preventDefault();
   onAdd();
 }
 
-function onHostMessage(event: MessageEvent): void {
-  if (disposed) return;
-  const decoded = decodeHostMessage(event.data);
-  if (!decoded.ok) return;
-  if (decoded.type === 'alerts.set') {
-    snapshot = decoded.snapshot;
+function onHostMessage(message: unknown): void {
+  const next = decodeAlertsSnapshot(message);
+  if (next) {
+    snapshot = next;
     paint();
     return;
   }
-  if (!decoded.text) return;
-  flash(decoded.text, decoded.text === ALERTS_TITLE_REQUIRED ? 'error' : 'info');
+  const notice = decodeAlertsNotice(message);
+  if (notice) {
+    flash(notice.message, notice.level === 'error' ? 'error' : 'info');
+  }
 }
 
 function main(): void {
-  const api = acquireVsCodeApi();
-  apiRef = api;
   const root = document.getElementById('alerts-root');
-  window.addEventListener('message', onHostMessage);
-  window.addEventListener(
-    'pagehide',
-    () => {
-      disposed = true;
-    },
-    { once: true },
-  );
+  studio.onMessage(onHostMessage);
   root?.addEventListener('click', onClick);
   root?.addEventListener('keydown', onKeyDown);
   paint();
-  post(encodeAlertsReady());
+  studio.post(encodeAlertsReady());
 }
 
 main();

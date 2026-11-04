@@ -16,16 +16,19 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Sidebar Alerts studio (`axis.alerts`) — thin shim over the generic studio
+ * provider (enhancement plan §5 Phase 2). Commands stay on
+ * `registerAlertsView`; this module only owns the webview registration and
+ * the add/toggle/remove actions. The first `studio.ready` handshake is
+ * answered with `studio.init` carrying the snapshot (the old flow answered
+ * `alerts.ready` with a flat `alerts.set`); flashes became `studio.notice`.
+ * vscode glue only — the pure logic lives in `alerts-studio-model.ts`,
+ * `alerts-messages.ts`, and `alerts-studio.ts`.
+ */
+
 import { existsSync } from 'node:fs';
-import {
-  ColorThemeKind,
-  type ExtensionContext,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
-  Uri,
-  window,
-} from 'vscode';
+import { ColorThemeKind, type ExtensionContext, Uri, window } from 'vscode';
 import {
   addAlert,
   ALERTS_VIEW_ID,
@@ -37,13 +40,22 @@ import {
   type AlertEntry,
   type WorkspaceStateHelpers,
 } from './alerts';
-import { buildAlertsWebviewHtml } from './alerts-html';
+import { ALERTS_REMOVED, ALERTS_TITLE_REQUIRED, buildAlertsSnapshot } from './alerts-studio-model';
 import {
-  ALERTS_REMOVED,
-  ALERTS_TITLE_REQUIRED,
-  buildAlertsSnapshot,
-  parseAlertsStudioMessage,
-} from './alerts-studio-model';
+  ALERTS_NOTICE_ERROR,
+  ALERTS_NOTICE_INFO,
+  ALERTS_STUDIO_VIEW,
+  alertsAddFromArgs,
+  alertsIdFromArgs,
+} from './alerts-messages';
+import { buildAlertsStudioBody } from './alerts-studio';
+import type { StudioRegistration } from './studio-registry';
+import {
+  registerStudioView,
+  type StudioProviderDeps,
+  type StudioViewHost,
+  type StudioViewProvider,
+} from './studio-provider';
 
 export const ALERTS_STUDIO_VIEW_ID = ALERTS_VIEW_ID;
 
@@ -68,53 +80,27 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function alertsAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'alerts', file);
+/** `StudioProviderDeps` assembled from the vscode API, alerts-panel pattern. */
+function alertsStudioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...segments) => Uri.joinPath(base as Uri, ...segments),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: currentThemeBodyClass,
+  };
 }
 
-function getAlertsHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = alertsAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
-  try {
-    jsPath = mainJs.fsPath;
-  } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS alerts webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:alerts`,
-    );
-  }
-  const script = webview.asWebviewUri(alertsAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = alertsAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
-    }
-  } catch {
-    style = '';
-  }
-  return buildAlertsWebviewHtml({
-    cspSource: webview.cspSource,
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
+/** Structural `window.registerWebviewViewProvider` forwarded to the shim. */
+function studioViewHost(): StudioViewHost {
+  return {
+    registerWebviewViewProvider: (viewId, provider, options) =>
+      window.registerWebviewViewProvider(viewId, provider, options),
+  };
 }
 
 /** Flip `enabled` on one stored row. Unknown ids are a no-op. Never throws. */
-async function toggleAlertEnabled(
-  state: WorkspaceStateHelpers,
-  id: string,
-): Promise<boolean> {
+async function toggleAlertEnabled(state: WorkspaceStateHelpers, id: string): Promise<boolean> {
   try {
     const list = readAlertsV1(state);
     let found = false;
@@ -141,121 +127,92 @@ async function toggleAlertEnabled(
 }
 
 /**
- * Sidebar WebviewViewProvider for Alerts (`axis.alerts`).
- * Commands stay on `registerAlertsView`; this provider only owns the webview.
+ * Sidebar facade for Alerts (`axis.alerts`). Commands stay on
+ * `registerAlertsView`; the facade only owns the generic-provider
+ * registration and the add/toggle/remove action glue. The shim keeps the
+ * historical class shape (`new AlertsStudioWebviewViewProvider(context,
+ * state)`) so `registerAlertsStudio` stays unchanged for extension.ts.
  */
-export class AlertsStudioWebviewViewProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+export class AlertsStudioWebviewViewProvider {
+  private readonly provider: StudioViewProvider | undefined;
 
   constructor(
-    private readonly context: ExtensionContext,
+    context: ExtensionContext,
     private readonly state: WorkspaceStateHelpers,
-  ) {}
-
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [
-          Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'alerts'),
-        ],
-      };
-
-      let messageSub: { dispose(): void } | undefined;
-      try {
-        messageSub = webview.onDidReceiveMessage((raw) => {
-          void this.onMessage(webview, raw);
-        });
-      } catch {
-        messageSub = undefined;
-      }
-
-      webviewView.onDidDispose(() => {
-        try {
-          messageSub?.dispose();
-        } catch {
-          // already disposed
-        }
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getAlertsHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-    } catch {
-      // never throw from resolve
-    }
+  ) {
+    const entry: StudioRegistration = {
+      id: ALERTS_STUDIO_VIEW,
+      title: 'Alerts',
+      viewId: ALERTS_STUDIO_VIEW_ID,
+      retainContextWhenHidden: true,
+      buildBody: buildAlertsStudioBody,
+      actions: {
+        add: (args) => {
+          void this.handleAdd(args);
+        },
+        toggle: (args) => {
+          void this.handleToggle(args);
+        },
+        remove: (args) => {
+          void this.handleRemove(args);
+        },
+      },
+      restore: () => buildAlertsSnapshot(readAlertsV1(this.state)),
+    };
+    this.provider = registerStudioView(entry, alertsStudioDeps(context), studioViewHost(), context);
   }
 
-  /** Push `alerts.set` when the view is resolved (best-effort). */
+  /** The generic provider registered for `axis.alerts` (tests / diagnostics). */
+  get studioProvider(): StudioViewProvider | undefined {
+    return this.provider;
+  }
+
+  /** Push the stored snapshot as `studio.set` (tree refresh / actions). */
   postSnapshot(): void {
     try {
-      const webview = this.view?.webview;
-      if (!webview) return;
-      this.postSnapshotTo(webview);
+      this.provider?.postStudioSet(buildAlertsSnapshot(readAlertsV1(this.state)));
     } catch {
       // disposing
     }
   }
 
-  private postSnapshotTo(webview: Webview): void {
+  private async handleAdd(args: Record<string, unknown> | undefined): Promise<void> {
     try {
-      void webview.postMessage({
-        type: 'alerts.set',
-        payload: buildAlertsSnapshot(readAlertsV1(this.state)),
-      });
+      const input = alertsAddFromArgs(args);
+      if (!input) return;
+      if (!input.title) {
+        this.provider?.postStudioNotice(ALERTS_NOTICE_ERROR, ALERTS_TITLE_REQUIRED);
+        return;
+      }
+      const created = await addAlert(
+        this.state,
+        input.condition ? { title: input.title, condition: input.condition } : { title: input.title },
+      );
+      if (!created) return;
+      this.postSnapshot();
     } catch {
-      // disposing
+      // never throw into the webview host
     }
   }
 
-  private postFlash(webview: Webview, text: string): void {
+  private async handleToggle(args: Record<string, unknown> | undefined): Promise<void> {
     try {
-      void webview.postMessage({ type: 'alerts.flash', text });
+      const id = alertsIdFromArgs(args);
+      if (id === null) return;
+      await toggleAlertEnabled(this.state, id);
+      this.postSnapshot();
     } catch {
-      // disposing
+      // never throw into the webview host
     }
   }
 
-  private async onMessage(webview: Webview, raw: unknown): Promise<void> {
+  private async handleRemove(args: Record<string, unknown> | undefined): Promise<void> {
     try {
-      const msg = parseAlertsStudioMessage(raw);
-      if (!msg) return;
-      if (msg.type === 'alerts.ready') {
-        this.postSnapshotTo(webview);
-        return;
-      }
-      if (msg.type === 'alerts.add') {
-        if (!msg.title) {
-          this.postFlash(webview, ALERTS_TITLE_REQUIRED);
-          return;
-        }
-        const created = await addAlert(this.state, {
-          title: msg.title,
-          ...(msg.condition ? { condition: msg.condition } : {}),
-        });
-        if (!created) return;
-        this.postSnapshotTo(webview);
-        return;
-      }
-      if (msg.type === 'alerts.toggle') {
-        await toggleAlertEnabled(this.state, msg.id);
-        this.postSnapshotTo(webview);
-        return;
-      }
-      if (msg.type === 'alerts.remove') {
-        const ok = await removeAlert(this.state, msg.id);
-        this.postSnapshotTo(webview);
-        if (ok) this.postFlash(webview, ALERTS_REMOVED);
-      }
+      const id = alertsIdFromArgs(args);
+      if (id === null) return;
+      const ok = await removeAlert(this.state, id);
+      this.postSnapshot();
+      if (ok) this.provider?.postStudioNotice(ALERTS_NOTICE_INFO, ALERTS_REMOVED);
     } catch {
       // never throw into the webview host
     }
@@ -281,14 +238,5 @@ export function registerAlertsStudio(
     }
     provider.postSnapshot();
   };
-  try {
-    context.subscriptions.push(
-      window.registerWebviewViewProvider(ALERTS_STUDIO_VIEW_ID, provider, {
-        webviewOptions: { retainContextWhenHidden: true },
-      }),
-    );
-  } catch {
-    // uncontributed view id / test host
-  }
   return provider;
 }
