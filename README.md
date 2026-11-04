@@ -54,7 +54,7 @@ This is the **0.1.0** extension:
 - Plot/drawing overlays from engine results are carried on `chart.full.plots`; webview plot paint is candle-first
 - Typed host↔webview envelope codecs under `src/protocol/` (coverage-gated)
 - Worker (`pn_…`) / Pro (`pyn_…`) keys via `axis.secrets.*` → `ExtensionContext.secrets` only
-- MCP server definition provider + Copilot language-model tools (soft-fail unless the AXIS CLI resolves)
+- MCP server definition provider + Copilot language-model tools (soft-fail unless the AXIS CLI resolves; the MCP provider itself needs a VS Code build with `lm.registerMcpServerDefinitionProvider`, otherwise activation skips it)
 
 ## Activation
 
