@@ -16,6 +16,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+/**
+ * Bottom-panel Colors view (`axis.colors`) — thin shim over the generic
+ * studio provider (enhancement plan §5 Phase 2). The registration carries
+ * the colors body markup and the reveal/copy/refresh actions; the first
+ * `studio.ready` handshake is answered with `studio.init` carrying the
+ * `restore()` scan, and editor events push fresh scans as `studio.set`.
+ * vscode glue only — the pure logic lives in `colors-messages.ts` and
+ * `colors-studio.ts`.
+ */
+
 import { existsSync } from 'node:fs';
 import {
   ColorThemeKind,
@@ -28,23 +38,29 @@ import {
   workspace,
   type ExtensionContext,
   type TextDocument,
-  type Webview,
-  type WebviewView,
-  type WebviewViewProvider,
 } from 'vscode';
-import { logProtocolReject } from '../host/logger';
-import { getColorsHtml } from './colors-html';
 import {
-  encodeColorsInit,
-  encodeColorsSet,
-  handleColorsWebviewMessage,
+  COLORS_STUDIO_VIEW,
+  colorsCopyTextFromArgs,
+  colorsRevealLineFromArgs,
   isPineEditorLanguage,
-  pineSourceLabel,
-  scanColors,
-  type ColorHit,
 } from './colors-messages';
+import {
+  buildColorsStudioBody,
+  colorsDataFromEditor,
+  colorsDocumentTriggersRefresh,
+  colorsRevealIndex,
+  COLORS_STUDIO_VIEW_ID,
+} from './colors-studio';
+import type { StudioRegistration } from './studio-registry';
+import {
+  registerStudioView,
+  type StudioProviderDeps,
+  type StudioViewHost,
+  type StudioViewProvider,
+} from './studio-provider';
 
-export const COLORS_VIEW_ID = 'axis.colors';
+export const COLORS_VIEW_ID = COLORS_STUDIO_VIEW_ID;
 
 const NONCE_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -77,145 +93,89 @@ function currentThemeBodyClass(): string {
   }
 }
 
-function colorsAssetPath(extensionUri: Uri, file: string): Uri {
-  return Uri.joinPath(extensionUri, 'dist', 'webview', 'colors', file);
+/** `StudioProviderDeps` assembled from the vscode API, colors-panel pattern. */
+function colorsStudioDeps(context: ExtensionContext): StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...segments) => Uri.joinPath(base as Uri, ...segments),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: currentThemeBodyClass,
+    createNonce,
+  };
 }
 
-function getColorsWebviewHtml(webview: Webview, extensionUri: Uri): string {
-  const mainJs = colorsAssetPath(extensionUri, 'main.js');
-  let jsPath = '';
+/** Structural `window.registerWebviewViewProvider` forwarded to the shim. */
+function studioViewHost(): StudioViewHost {
+  return {
+    registerWebviewViewProvider: (viewId, provider, options) =>
+      window.registerWebviewViewProvider(viewId, provider, options),
+  };
+}
+
+function revealLine(line: number): void {
+  const editor = window.activeTextEditor;
+  if (!editor || !isPineEditorLanguage(editor.document.languageId)) return;
+  const index = colorsRevealIndex(line, editor.document.lineCount);
+  const textLine = editor.document.lineAt(index);
+  const range = new Range(textLine.range.start, textLine.range.end);
+  editor.selection = new Selection(range.start, range.end);
+  editor.revealRange(range, TextEditorRevealType.InCenter);
+}
+
+async function copyText(text: string): Promise<void> {
   try {
-    jsPath = mainJs.fsPath;
+    await env.clipboard.writeText(text);
   } catch {
-    jsPath = '';
-  }
-  const hasJs = Boolean(jsPath) && existsSync(jsPath);
-  if (!hasJs) {
-    throw new Error(
-      `AXIS colors webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
-    );
-  }
-  const script = webview.asWebviewUri(colorsAssetPath(extensionUri, 'main.js'));
-  const scriptStr = script.toString();
-  const styleUri = colorsAssetPath(extensionUri, 'main.css');
-  let style = '';
-  try {
-    if (existsSync(styleUri.fsPath)) {
-      style = webview.asWebviewUri(styleUri).toString();
+    try {
+      void window.showWarningMessage('AXIS: Could not copy the color.');
+    } catch {
+      // window unavailable
     }
-  } catch {
-    style = '';
   }
-  return getColorsHtml({
-    cspSource: webview.cspSource,
-    nonce: createNonce(),
-    scriptUri: scriptStr,
-    styleUri: style || scriptStr.replace(/main\.js$/, 'main.css'),
-    bodyClass: currentThemeBodyClass(),
-  });
-}
-
-function fallbackHtml(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return `<!DOCTYPE html><html><body><p>${message.replace(/[<>&]/g, '')}</p></body></html>`;
 }
 
 /**
- * Bottom-panel Colors view (`axis.colors`).
- * Scans the active Pine editor and posts `studio.init` on resolve, then
- * `studio.set` on ready / editor changes / refresh actions.
+ * Bottom-panel Colors view (`axis.colors`). Facade over the generic
+ * `StudioViewProvider` created by `registerStudioView`; the shim keeps the
+ * historical class shape (`new ColorsPanelProvider(context)`) so the
+ * registration and editor-event wiring stay unchanged for extension.ts.
  */
-export class ColorsPanelProvider implements WebviewViewProvider {
-  private view: WebviewView | undefined;
+export class ColorsPanelProvider {
+  private readonly provider: StudioViewProvider | undefined;
 
-  constructor(private readonly context: ExtensionContext) {}
-
-  resolveWebviewView(webviewView: WebviewView): void {
-    try {
-      this.view = webviewView;
-      const { webview } = webviewView;
-      webview.options = {
-        enableScripts: true,
-        localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'colors')],
-      };
-
-      webview.onDidReceiveMessage((raw) => {
-        try {
-          const handle = handleColorsWebviewMessage(raw);
-          if (handle.kind === 'reject') {
-            logProtocolReject(handle.error, 'colors');
-            return;
-          }
-          if (handle.kind === 'ready' || handle.kind === 'refresh') {
-            this.refresh();
-            return;
-          }
-          if (handle.kind === 'reveal') {
-            this.revealLine(handle.line);
-            return;
-          }
-          if (handle.kind === 'copy') {
-            void this.copyText(handle.text);
-          }
-        } catch {
-          // untrusted message / disposing
-        }
-      });
-
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
-
-      try {
-        webview.html = getColorsWebviewHtml(webview, this.context.extensionUri);
-      } catch (e) {
-        try {
-          webview.html = fallbackHtml(e);
-        } catch {
-          // html setter unavailable
-        }
-      }
-
-      this.postInit();
-    } catch {
-      // never throw from resolve
-    }
+  constructor(context: ExtensionContext) {
+    const entry: StudioRegistration = {
+      id: COLORS_STUDIO_VIEW,
+      title: 'Colors',
+      viewId: COLORS_STUDIO_VIEW_ID,
+      retainContextWhenHidden: false,
+      buildBody: buildColorsStudioBody,
+      actions: {
+        copy: (args) => {
+          const text = colorsCopyTextFromArgs(args);
+          if (text !== null) void copyText(text);
+        },
+        reveal: (args) => {
+          const line = colorsRevealLineFromArgs(args);
+          if (line !== null) revealLine(line);
+        },
+        refresh: () => this.refresh(),
+      },
+      restore: () => colorsDataFromEditor(window.activeTextEditor),
+    };
+    this.provider = registerStudioView(entry, colorsStudioDeps(context), studioViewHost(), context);
   }
 
-  /** Scan the active editor (empty colors when it is not Pine). */
-  private scanActive(): { colors: ColorHit[]; sourceLabel: string } {
-    const editor = window.activeTextEditor;
-    const pine =
-      editor && isPineEditorLanguage(editor.document.languageId) ? editor : undefined;
-    const source = pine ? pine.document.getText() : '';
-    const sourceLabel = pine
-      ? pineSourceLabel(pine.document.fileName || pine.document.uri.fsPath)
-      : 'No Pine editor';
-    return { colors: scanColors(source), sourceLabel };
-  }
-
-  /**
-   * Post the first-load scan as `studio.init` (the old panel posted a flat
-   * `colors.set` at resolve time).
-   */
-  private postInit(): void {
-    const view = this.view;
-    if (!view) return;
-    try {
-      const { colors, sourceLabel } = this.scanActive();
-      void view.webview.postMessage(encodeColorsInit(colors, sourceLabel));
-    } catch {
-      // disposing or unreadable document
-    }
+  /** The generic provider registered for `axis.colors` (tests / diagnostics). */
+  get studioProvider(): StudioViewProvider | undefined {
+    return this.provider;
   }
 
   /** Rescan the active Pine editor, or clear the list when it is not Pine. */
   refresh(): void {
-    const view = this.view;
-    if (!view) return;
     try {
-      const { colors, sourceLabel } = this.scanActive();
-      void view.webview.postMessage(encodeColorsSet(colors, sourceLabel));
+      this.provider?.postStudioSet(colorsDataFromEditor(window.activeTextEditor));
     } catch {
       // disposing or unreadable document
     }
@@ -224,56 +184,31 @@ export class ColorsPanelProvider implements WebviewViewProvider {
   /** Document edits refresh only the active Pine editor. */
   refreshIfDocument(document: TextDocument): void {
     try {
-      const editor = window.activeTextEditor;
-      if (!editor || editor.document !== document) return;
-      if (!isPineEditorLanguage(editor.document.languageId)) return;
-      this.refresh();
+      if (colorsDocumentTriggersRefresh(window.activeTextEditor, document)) {
+        this.refresh();
+      }
     } catch {
       // editor host unavailable
-    }
-  }
-
-  private revealLine(line: number): void {
-    const editor = window.activeTextEditor;
-    if (!editor || !isPineEditorLanguage(editor.document.languageId)) return;
-    const last = Math.max(0, editor.document.lineCount - 1);
-    const index = Math.min(Math.max(0, line - 1), last);
-    const textLine = editor.document.lineAt(index);
-    const range = new Range(textLine.range.start, textLine.range.end);
-    editor.selection = new Selection(range.start, range.end);
-    editor.revealRange(range, TextEditorRevealType.InCenter);
-  }
-
-  private async copyText(text: string): Promise<void> {
-    try {
-      await env.clipboard.writeText(text);
-    } catch {
-      try {
-        void window.showWarningMessage('AXIS: Could not copy the color.');
-      } catch {
-        // window unavailable
-      }
     }
   }
 }
 
 /** Register `axis.colors` in the panel container. `retainContextWhenHidden` is false. */
 export function registerColorsPanel(context: ExtensionContext): ColorsPanelProvider {
-  const provider = new ColorsPanelProvider(context);
-  try {
-    context.subscriptions.push(
-      window.registerWebviewViewProvider(COLORS_VIEW_ID, provider, {
-        webviewOptions: { retainContextWhenHidden: false },
-      }),
-      window.onDidChangeActiveTextEditor(() => {
-        provider.refresh();
-      }),
-      workspace.onDidChangeTextDocument((event) => {
-        provider.refreshIfDocument(event.document);
-      }),
-    );
-  } catch {
-    // uncontributed view id / test host
+  const panel = new ColorsPanelProvider(context);
+  if (panel.studioProvider) {
+    try {
+      context.subscriptions.push(
+        window.onDidChangeActiveTextEditor(() => {
+          panel.refresh();
+        }),
+        workspace.onDidChangeTextDocument((event) => {
+          panel.refreshIfDocument(event.document);
+        }),
+      );
+    } catch {
+      // editor host unavailable
+    }
   }
-  return provider;
+  return panel;
 }

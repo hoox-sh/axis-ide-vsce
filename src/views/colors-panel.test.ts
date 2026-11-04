@@ -38,10 +38,15 @@ type TestEditor = {
   revealRange: (range: unknown, type: unknown) => void;
 };
 
+type RegisteredProvider = {
+  resolveWebviewView(view: unknown): void;
+};
+
 type G = {
   __axisColorsRegistrations?: Array<{
     id: string;
     options?: { webviewOptions?: { retainContextWhenHidden?: boolean } };
+    provider?: RegisteredProvider;
   }>;
   __axisColorsRegisterThrow?: boolean;
   __axisColorsThemeKind?: number;
@@ -118,11 +123,11 @@ const vscodeApi = {
     },
     registerWebviewViewProvider: (
       id: string,
-      _provider: unknown,
+      provider: unknown,
       options?: { webviewOptions?: { retainContextWhenHidden?: boolean } },
     ) => {
       if (g().__axisColorsRegisterThrow) throw new Error('register');
-      g().__axisColorsRegistrations?.push({ id, options });
+      g().__axisColorsRegistrations?.push({ id, options, provider: provider as RegisteredProvider });
       return { dispose() {} };
     },
     onDidChangeActiveTextEditor: (cb: () => void) => {
@@ -170,7 +175,7 @@ type PanelMod = typeof import('./colors-panel');
 let panel: PanelMod;
 
 beforeAll(async () => {
-  // Quiet protocol-reject logging for the hostile-input cases below.
+  // Quiet router/provider logging for the hostile-input cases below.
   setLogSink(() => {});
   panel = await import('./colors-panel');
 });
@@ -179,7 +184,7 @@ beforeAll(async () => {
 type PostedEnvelope = {
   v: number;
   type: string;
-  payload: { view: string; data: { colors: unknown[]; sourceLabel: string } };
+  payload: { view: string; data?: { colors: unknown[]; sourceLabel: string } };
 };
 
 function posted(bucket: unknown[]): PostedEnvelope[] {
@@ -268,6 +273,14 @@ function makeContext(root: string) {
   return { subscriptions: [] as Array<{ dispose(): void }>, extensionUri: Uri.file(root) };
 }
 
+/** Build one panel and return the generic provider VS Code would hold. */
+function makePanel(root: string) {
+  const context = makeContext(root);
+  const colors = new panel.ColorsPanelProvider(context as never);
+  const provider = g().__axisColorsRegistrations?.at(-1)?.provider;
+  return { context, colors, provider };
+}
+
 beforeEach(() => {
   revealed = [];
   activeEditorCb = undefined;
@@ -282,7 +295,7 @@ beforeEach(() => {
   g().__axisColorsWarnings = [];
 });
 
-describe('ColorsPanelProvider', () => {
+describe('ColorsPanelProvider registration', () => {
   test('view id and register wiring (retainContextWhenHidden false)', () => {
     expect(panel.COLORS_VIEW_ID).toBe('axis.colors');
     const context = makeContext('/tmp');
@@ -293,20 +306,24 @@ describe('ColorsPanelProvider', () => {
     expect(
       g().__axisColorsRegistrations?.[0]?.options?.webviewOptions?.retainContextWhenHidden,
     ).toBe(false);
+    // 1 provider registration (registerStudioView) + 2 editor events.
     expect(context.subscriptions).toHaveLength(3);
     expect(activeEditorCb).toBeTypeOf('function');
     expect(docChangeCb).toBeTypeOf('function');
 
     g().__axisColorsRegisterThrow = true;
-    expect(() => panel.registerColorsPanel(makeContext('/tmp') as never)).not.toThrow();
+    const failedContext = makeContext('/tmp');
+    expect(() => panel.registerColorsPanel(failedContext as never)).not.toThrow();
+    expect(failedContext.subscriptions).toHaveLength(0);
     g().__axisColorsRegisterThrow = false;
   });
+});
 
-  test('resolve posts studio.init with the active Pine scan', () => {
-    g().__axisColorsEditor = makeEditor('pinescript', 'color.red\n#fff');
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+describe('ColorsPanelProvider resolve + handshake', () => {
+  test('resolve builds the nonce shell; nothing posts before studio.ready', () => {
+    const { provider } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    expect(() => provider?.resolveWebviewView(w.view)).not.toThrow();
     expect(w.order[0]).toBe('onDidReceiveMessage');
     expect(w.order[1]).toBe('html');
     expect(w.webview.options.enableScripts).toBe(true);
@@ -315,10 +332,23 @@ describe('ColorsPanelProvider', () => {
     );
     expect(w.webview.html).toContain('id="colors-root"');
     expect(w.webview.html).toContain("connect-src 'none'");
+    expect(w.webview.html).toContain("script-src 'nonce-");
+    expect(w.out).toHaveLength(0);
+  });
+
+  test('studio.ready handshake answers with studio.init carrying the scan', () => {
+    g().__axisColorsEditor = makeEditor('pinescript', 'color.red\n#fff');
+    const { provider } = makePanel(makeAssets());
+    const w = makeWebview();
+    provider?.resolveWebviewView(w.view);
+    const handler = w.getHandler();
+    expect(handler).toBeTypeOf('function');
+
+    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
     expect(w.out).toHaveLength(1);
     const first = posted(w.out)[0];
     expect(first.v).toBe(1);
-    expect(first.type).toBe('studio.init');
+    expect(first.type).toBe(HOST_TO_VIEW.StudioInit);
     expect(first.payload.view).toBe('colors');
     expect(first.payload.data).toEqual({
       colors: [
@@ -329,27 +359,51 @@ describe('ColorsPanelProvider', () => {
     });
     // the posted envelope is codec-valid (webview decode side)
     expect(decode(w.out[0]).ok).toBe(true);
+
+    // capabilities are accepted without changing behavior
+    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors', capabilities: ['copy'] }));
+    expect(w.out).toHaveLength(2);
+    expect(posted(w.out)[1]?.type).toBe(HOST_TO_VIEW.StudioInit);
+
+    // another studio's ready never refreshes this panel
+    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'watchlist' }));
+    expect(w.out).toHaveLength(2);
   });
 
-  test('resolve without a Pine editor posts an empty init', () => {
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+  test('ready without a Pine editor posts an empty init', () => {
+    const { provider } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
+    w.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
     const first = posted(w.out)[0];
-    expect(first.type).toBe('studio.init');
+    expect(first.type).toBe(HOST_TO_VIEW.StudioInit);
     expect(first.payload.data).toEqual({ colors: [], sourceLabel: 'No Pine editor' });
 
     g().__axisColorsEditor = makeEditor('python', 'x = "#fff"');
     const w2 = makeWebview();
-    provider.resolveWebviewView(w2.view as never);
+    provider?.resolveWebviewView(w2.view);
+    w2.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
     expect(posted(w2.out)[0]?.payload.data).toEqual({
       colors: [],
       sourceLabel: 'No Pine editor',
     });
   });
 
+  test('a restore() failure acks data-less and never throws', () => {
+    g().__axisColorsEditorThrow = true;
+    const { provider } = makePanel(makeAssets());
+    const w = makeWebview();
+    provider?.resolveWebviewView(w.view);
+    expect(() =>
+      w.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' })),
+    ).not.toThrow();
+    expect(w.out).toHaveLength(1);
+    expect(posted(w.out)[0]?.payload).toEqual({ view: 'colors' });
+    g().__axisColorsEditorThrow = false;
+  });
+
   test('theme kinds map to html body classes', () => {
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider } = makePanel(makeAssets());
     for (const [kind, body] of [
       [ColorThemeKind.Light, 'vscode-light'],
       [ColorThemeKind.HighContrast, 'vscode-high-contrast'],
@@ -359,68 +413,44 @@ describe('ColorsPanelProvider', () => {
     ] as const) {
       g().__axisColorsThemeKind = kind;
       const w = makeWebview();
-      provider.resolveWebviewView(w.view as never);
+      provider?.resolveWebviewView(w.view);
       expect(w.webview.html).toContain(`class="${body}"`);
     }
   });
+});
 
-  test('studio.ready handshake answers with studio.set', () => {
-    g().__axisColorsEditor = makeEditor('pinescript', 'color.red');
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
-    const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
-    expect(w.out).toHaveLength(1);
-    const handler = w.getHandler();
-    expect(handler).toBeTypeOf('function');
-
-    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
-    expect(w.out).toHaveLength(2);
-    const second = posted(w.out)[1];
-    expect(second.type).toBe('studio.set');
-    expect(second.payload.view).toBe('colors');
-    expect(second.payload.data).toEqual({
-      colors: [{ line: 1, column: 1, raw: 'color.red', swatch: '#FF0000' }],
-      sourceLabel: 'rsi.pyne',
-    });
-
-    // capabilities are accepted without changing behavior
-    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors', capabilities: ['copy'] }));
-    expect(w.out).toHaveLength(3);
-
-    // another studio's ready never refreshes this panel
-    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'watchlist' }));
-    expect(w.out).toHaveLength(3);
-  });
-
+describe('ColorsPanelProvider actions', () => {
   test('studio.action refresh rescans and posts studio.set', () => {
     g().__axisColorsEditor = makeEditor('pinescript', 'color.red');
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
     const handler = w.getHandler();
+    handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
+    expect(w.out).toHaveLength(1);
 
     g().__axisColorsEditor = makeEditor('pinescript', '#abc');
     handler?.(encode(VIEW_TO_HOST.StudioAction, { view: 'colors', action: 'refresh' }));
     expect(w.out).toHaveLength(2);
     const last = posted(w.out)[1];
-    expect(last.type).toBe('studio.set');
+    expect(last.type).toBe(HOST_TO_VIEW.StudioSet);
+    expect(last.payload.view).toBe('colors');
     expect(last.payload.data).toEqual({
       colors: [{ line: 1, column: 1, raw: '#abc', swatch: '#abc' }],
       sourceLabel: 'rsi.pyne',
     });
 
-    // wrong view is ignored
+    // wrong view and unknown actions never reach the handlers
     handler?.(encode(VIEW_TO_HOST.StudioAction, { view: 'symbols', action: 'refresh' }));
-    // unknown action is ignored
     handler?.(encode(VIEW_TO_HOST.StudioAction, { view: 'colors', action: 'nope' }));
     expect(w.out).toHaveLength(2);
   });
 
   test('studio.action reveal routes args.line into the active Pine editor', () => {
     g().__axisColorsEditor = makeEditor('pinescript', 'color.red\n#fff\nplot(close)');
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
     const handler = w.getHandler();
 
     handler?.(
@@ -465,9 +495,9 @@ describe('ColorsPanelProvider', () => {
   });
 
   test('studio.action copy routes args.text to the host clipboard', async () => {
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
     const handler = w.getHandler();
 
     handler?.(
@@ -507,13 +537,12 @@ describe('ColorsPanelProvider', () => {
     g().__axisColorsClipboardThrow = false;
   });
 
-  test('decode failures never crash the handler and post nothing', () => {
+  test('decode failures and junk never crash the handler and post nothing', () => {
     g().__axisColorsEditor = makeEditor('pinescript', 'color.red');
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
     const handler = w.getHandler();
-    expect(w.out).toHaveLength(1);
 
     // old flat wire (unknown types now)
     handler?.({ type: 'colors.ready' });
@@ -542,27 +571,30 @@ describe('ColorsPanelProvider', () => {
       },
     );
     expect(() => handler?.(hostile)).not.toThrow();
-    // echoed host→view envelope is rejected too
+    // echoed host→view envelope is ignored by the router
     handler?.(encode(HOST_TO_VIEW.StudioSet, { view: 'colors', data: null }));
     // unrelated view→host types are ignored
     handler?.(encode(VIEW_TO_HOST.ResultsFocus, { runId: 'r1' }));
     handler?.(encode(VIEW_TO_HOST.WebviewReady, { view: 'chart', capabilities: [] }));
 
-    expect(w.out).toHaveLength(1);
+    expect(w.out).toHaveLength(0);
     expect(revealed).toHaveLength(0);
     expect(g().__axisColorsClipboard).toEqual([]);
   });
 
   test('editor and document change events rescan through studio.set', () => {
     g().__axisColorsEditor = makeEditor('pinescript', 'color.red');
-    const provider = panel.registerColorsPanel(makeContext(makeAssets()) as never);
+    const context = makeContext(makeAssets());
+    const colors = panel.registerColorsPanel(context as never);
+    const provider = g().__axisColorsRegistrations?.[0]?.provider;
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
+    w.getHandler()?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
     expect(w.out).toHaveLength(1);
 
     activeEditorCb?.();
     expect(w.out).toHaveLength(2);
-    expect(posted(w.out)[1]?.type).toBe('studio.set');
+    expect(posted(w.out)[1]?.type).toBe(HOST_TO_VIEW.StudioSet);
 
     docChangeCb?.({ document: g().__axisColorsEditor?.document });
     expect(w.out).toHaveLength(3);
@@ -582,49 +614,57 @@ describe('ColorsPanelProvider', () => {
     g().__axisColorsEditorThrow = true;
     expect(() => activeEditorCb?.()).not.toThrow();
     expect(() => docChangeCb?.({ document: {} })).not.toThrow();
+    expect(() => colors.refreshIfDocument({} as never)).not.toThrow();
     g().__axisColorsEditorThrow = false;
   });
 
   test('dispose clears the view; later messages and refreshes are no-ops', () => {
     g().__axisColorsEditor = makeEditor('pinescript', 'color.red');
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider, colors } = makePanel(makeAssets());
     const w = makeWebview();
-    provider.resolveWebviewView(w.view as never);
+    provider?.resolveWebviewView(w.view);
     const handler = w.getHandler();
     w.dispose();
     const before = w.out.length;
 
     handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }));
-    provider.refresh();
-    provider.refreshIfDocument({} as never);
+    colors.refresh();
+    colors.refreshIfDocument({} as never);
     expect(w.out.length).toBe(before);
   });
 
   test('missing assets and html failures never throw', () => {
-    const provider = new panel.ColorsPanelProvider(
-      makeContext('/no-such-axis-colors-assets') as never,
-    );
+    const missing = makePanel('/no-such-axis-colors-assets');
     const w = makeWebview();
-    expect(() => provider.resolveWebviewView(w.view as never)).not.toThrow();
+    expect(() => missing.provider?.resolveWebviewView(w.view)).not.toThrow();
     expect(w.webview.html).toContain('assets missing');
-    expect(w.out).toHaveLength(1);
+    expect(w.out).toHaveLength(0);
 
-    const ok = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
-    expect(() => ok.resolveWebviewView(null as never)).not.toThrow();
+    expect(() => missing.provider?.resolveWebviewView(null)).not.toThrow();
 
     const boom = makeWebview({ asWebviewUriThrow: 'nope <&>' });
-    const okProv = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
-    expect(() => okProv.resolveWebviewView(boom.view as never)).not.toThrow();
+    const ok = makePanel(makeAssets());
+    expect(() => ok.provider?.resolveWebviewView(boom.view)).not.toThrow();
     expect(boom.webview.html).toContain('nope');
     expect(boom.webview.html).not.toContain('<&>');
   });
 
   test('throwing postMessage never escapes resolve or the message handler', () => {
-    const provider = new panel.ColorsPanelProvider(makeContext(makeAssets()) as never);
+    const { provider, colors } = makePanel(makeAssets());
     const w = makeWebview({ postThrow: true });
-    expect(() => provider.resolveWebviewView(w.view as never)).not.toThrow();
+    expect(() => provider?.resolveWebviewView(w.view)).not.toThrow();
     const handler = w.getHandler();
     expect(() => handler?.(encode(VIEW_TO_HOST.StudioReady, { view: 'colors' }))).not.toThrow();
-    expect(() => provider.refresh()).not.toThrow();
+    expect(() => colors.refresh()).not.toThrow();
+  });
+
+  test('an unregistered panel (view id not contributed) no-ops safely', () => {
+    g().__axisColorsRegisterThrow = true;
+    const context = makeContext('/tmp');
+    const colors = new panel.ColorsPanelProvider(context as never);
+    expect(colors.studioProvider).toBeUndefined();
+    expect(() => colors.refresh()).not.toThrow();
+    expect(context.subscriptions).toHaveLength(0);
+    g().__axisColorsRegisterThrow = false;
   });
 });

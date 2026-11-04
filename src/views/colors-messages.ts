@@ -17,38 +17,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pine color scan + Colors studio messages on `axis.webview.v1` `studio.*`
- * envelopes (frozen Phase-1 contract, shared with the Colors webview).
- * Pure — no vscode.
+ * Pine color scan + Colors studio data builders on the `axis.webview.v1`
+ * `studio.*` envelopes (frozen Phase-1 contract, shared with the Colors
+ * webview). Pure — no vscode.
  *
- * Host → view: `studio.init` / `studio.set` carrying
- * `{ view: 'colors', data: { colors, sourceLabel } }` — the exact payload
- * shape the old flat `colors.set` message carried, preserved verbatim.
- * View → host: `studio.ready` `{ view: 'colors', capabilities? }` and
- * `studio.action` `{ view: 'colors', action, args? }` — the old flat
- * `colors.reveal` / `colors.copy` / `colors.refresh` payload fields moved
- * into `args`.
+ * Host → view: the generic studio provider encodes `studio.init` /
+ * `studio.set` carrying `{ view: 'colors', data }` where `data` is
+ * `{ colors, sourceLabel }` — the exact payload shape the old flat
+ * `colors.set` message carried, preserved verbatim (built by
+ * `colorsStudioData` / `colorsDataFromEditor`).
+ * View → host: the shared router decodes `studio.ready` / `studio.action`;
+ * the reveal/copy action `args` keep the old flat-message validation
+ * (`colorsRevealLineFromArgs` / `colorsCopyTextFromArgs`).
  *
  * Named hex values match pyne `builtins/color.py` / editor color tools.
  */
-
-import {
-  HOST_TO_VIEW,
-  HOST_TO_VIEW_TYPES,
-  PROTOCOL_ERROR_CODES,
-  VIEW_TO_HOST,
-  decode,
-  encode,
-  type AxisEnvelope,
-  type PayloadByType,
-  type ProtocolError,
-} from '../protocol';
-
-/** Payload shapes for the `studio.*` namespace, keyed off the frozen types. */
-type StudioInitPayload = PayloadByType[typeof HOST_TO_VIEW.StudioInit];
-type StudioSetPayload = PayloadByType[typeof HOST_TO_VIEW.StudioSet];
-type StudioReadyPayload = PayloadByType[typeof VIEW_TO_HOST.StudioReady];
-type StudioActionPayload = PayloadByType[typeof VIEW_TO_HOST.StudioAction];
 
 /** Language ids: PYNE contributes `pinescript`; `pine` is also accepted. */
 export const PINE_EDITOR_LANGUAGE_IDS = ['pinescript', 'pine'] as const;
@@ -142,28 +125,6 @@ export function colorsStudioData(
   return { colors: list, sourceLabel };
 }
 
-/** Encode `studio.init` — first-load state; data shape matches `studio.set`. */
-export function encodeColorsInit(
-  colors: readonly ColorHit[],
-  sourceLabel: string,
-): AxisEnvelope<StudioInitPayload> {
-  return encode(HOST_TO_VIEW.StudioInit, {
-    view: COLORS_STUDIO_VIEW,
-    data: colorsStudioData(colors, sourceLabel),
-  });
-}
-
-/** Encode `studio.set` — the old `colors.set` payload, wrapped verbatim. */
-export function encodeColorsSet(
-  colors: readonly ColorHit[],
-  sourceLabel: string,
-): AxisEnvelope<StudioSetPayload> {
-  return encode(HOST_TO_VIEW.StudioSet, {
-    view: COLORS_STUDIO_VIEW,
-    data: colorsStudioData(colors, sourceLabel),
-  });
-}
-
 /**
  * Classify a scanned raw literal for the All / Hex / Named / rgb-new chips.
  * Non-strings are treated as named. Never throws.
@@ -176,85 +137,41 @@ export function colorKind(raw: unknown): ColorKind {
   return 'named';
 }
 
-/** One decoded Colors view → host intent. */
-export type ColorsMessageHandle =
-  | { kind: 'reject'; error: ProtocolError }
-  | { kind: 'ignore' }
-  | { kind: 'ready' }
-  | { kind: 'refresh' }
-  | { kind: 'reveal'; line: number }
-  | { kind: 'copy'; text: string };
-
 /**
- * Old `parseColorsReveal` validation, moved into `args`: 1-based integer
- * line. Invalid args are ignored exactly like the old parser returned null.
+ * Old `parseColorsReveal` validation, moved into `studio.action` `args`:
+ * a 1-based integer `line`. Invalid args are null — ignored by the action
+ * handler exactly like the old parser returned null. Never throws.
  */
-function revealFromArgs(args: unknown): ColorsMessageHandle {
-  if (!isPlainObject(args)) return { kind: 'ignore' };
-  const line = args.line;
-  if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) {
-    return { kind: 'ignore' };
-  }
-  return { kind: 'reveal', line };
-}
-
-/** Old `parseColorsCopy` validation, moved into `args`: bounded string. */
-function copyFromArgs(args: unknown): ColorsMessageHandle {
-  if (!isPlainObject(args)) return { kind: 'ignore' };
-  const text = args.text;
-  if (typeof text !== 'string') return { kind: 'ignore' };
-  if (text.length === 0 || text.length > MAX_COLORS_COPY_TEXT) {
-    return { kind: 'ignore' };
-  }
-  return { kind: 'copy', text };
-}
-
-/**
- * Decode and route one untrusted Colors webview → host message
- * (`axis.webview.v1` envelopes). Never throws: decode failures and echoed
- * host→view types become 'reject' (loggable); other studios' views, unknown
- * actions, and invalid args are ignored — mirroring the results panel handle
- * and the old null-returning flat parsers.
- */
-export function handleColorsWebviewMessage(raw: unknown): ColorsMessageHandle {
+export function colorsRevealLineFromArgs(args: unknown): number | null {
   try {
-    const decoded = decode(raw);
-    if (!decoded.ok) {
-      return { kind: 'reject', error: decoded.error };
+    if (!isPlainObject(args)) return null;
+    const line = args.line;
+    if (typeof line !== 'number' || !Number.isInteger(line) || line < 1) {
+      return null;
     }
-    const { type, payload } = decoded.envelope;
-    if (HOST_TO_VIEW_TYPES.has(type)) {
-      return {
-        kind: 'reject',
-        error: {
-          code: PROTOCOL_ERROR_CODES.BAD_TYPE,
-          message: `colors panel rejected host→view type: ${type}`,
-        },
-      };
+    return line;
+  } catch {
+    // hostile args getters — drop the action
+    return null;
+  }
+}
+
+/**
+ * Old `parseColorsCopy` validation, moved into `studio.action` `args`: a
+ * bounded non-empty `text`. Invalid args are null. Never throws.
+ */
+export function colorsCopyTextFromArgs(args: unknown): string | null {
+  try {
+    if (!isPlainObject(args)) return null;
+    const text = args.text;
+    if (typeof text !== 'string') return null;
+    if (text.length === 0 || text.length > MAX_COLORS_COPY_TEXT) {
+      return null;
     }
-    if (type === VIEW_TO_HOST.StudioReady) {
-      const studio = payload as StudioReadyPayload;
-      return studio.view === COLORS_STUDIO_VIEW ? { kind: 'ready' } : { kind: 'ignore' };
-    }
-    if (type === VIEW_TO_HOST.StudioAction) {
-      const studio = payload as StudioActionPayload;
-      if (studio.view !== COLORS_STUDIO_VIEW) return { kind: 'ignore' };
-      if (studio.action === 'reveal') return revealFromArgs(studio.args);
-      if (studio.action === 'copy') return copyFromArgs(studio.args);
-      if (studio.action === 'refresh') return { kind: 'refresh' };
-      return { kind: 'ignore' };
-    }
-    // webview.ready / chart.* / results.* — not for this panel.
-    return { kind: 'ignore' };
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return {
-      kind: 'reject',
-      error: {
-        code: PROTOCOL_ERROR_CODES.BAD_ENVELOPE,
-        message: `colors message handle failed: ${message}`,
-      },
-    };
+    return text;
+  } catch {
+    // hostile args getters — drop the action
+    return null;
   }
 }
 
