@@ -15,14 +15,14 @@
     "theme": "dark"
   },
   "homepage": "https://hoox.sh/axis",
-  "qna": "https://github.com/hoox-sh/axis/issues",
+  "qna": "https://github.com/hoox-sh/axis-ide-vsce/discussions",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hoox-sh/axis.git",
-    "directory": "packages/vscode-axis-pack"
+    "url": "https://github.com/hoox-sh/axis-ide-vsce.git",
+    "directory": "pack"
   },
   "bugs": {
-    "url": "https://github.com/hoox-sh/axis/issues"
+    "url": "https://github.com/hoox-sh/axis-ide-vsce/issues"
   },
   "engines": {
     "vscode": "^1.95.0"
@@ -45,7 +45,8 @@
     "hoox-sh.axis-ide"
   ],
   "scripts": {
-    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-'+v+'.vsix',{stdio:'inherit'})\""
+    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-'+v+'.vsix',{stdio:'inherit'})\"",
+    "ls": "npx --yes @vscode/vsce ls --no-dependencies"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.3.2"

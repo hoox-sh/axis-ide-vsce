@@ -1,0 +1,40 @@
+{
+  "id": "axis-vscode-ext-06",
+  "seq": "06",
+  "title": "CustomEditorProvider chart + CSP webview shell (KD-4)",
+  "status": "completed",
+  "depends_on": [
+    "01",
+    "03"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "started_at": "2026-11-02T06:30:00Z",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    ".opencode/plans/axis-vscode-extension-research/vscode-apis.md"
+  ],
+  "acceptance_criteria": [
+    "*.axis.json opens viewType axis.chart via CustomEditorProvider (not Readonly)",
+    "Dirty/save/revert stubs work for document content changes",
+    "webview.ready handshake over axis.webview.v1",
+    "CSP template uses webview.cspSource; no inline script"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/editors/chart-editor.ts",
+    "packages/vscode-axis-ide/webview/chart/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run compile",
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Remove customEditors contribution and editors/webview chart entries.",
+  "agent_id": null,
+  "completed_at": "2026-11-02T05:13:00Z",
+  "completion_summary": "Shipped editable CustomEditorProvider axis.chart for *.axis.json with save/revert/backup stubs, Vite CSP chart webview shell (placeholder #chart-host, no LWC yet), webview.ready→chart.init handshake, fixture, unit+electron+coverage gate green."
+}

@@ -1,12 +1,12 @@
 # Inline debug chips (parent wiring)
 
 Do not import the PWA modules `src/results/inline-debug.ts` or `src/editor/inline-debug.ts`.
-The VS Code collector is `packages/vscode-axis-ide/src/host/inline-debug.ts`
+The VS Code collector is `./src/host/inline-debug.ts`
 (`collectInlineDebug`, `parseSourceLine`, `truncateInlineDebugChip`, `redactInlineDebugText`).
 
 ## activate
 
-In `packages/vscode-axis-ide/src/extension.ts` `activate`, after `resultsStore` exists
+In `./src/extension.ts` `activate`, after `resultsStore` exists
 (next to `registerProfilerView(context, resultsStore)`):
 
 ```ts
@@ -22,7 +22,7 @@ the run has no annotations. Dispose is pushed on `context.subscriptions`.
 
 ## Coverage gate
 
-In `packages/vscode-axis-ide/scripts/check-coverage.mjs` `EXCLUDE`, add:
+In `./scripts/check-coverage.mjs` `EXCLUDE`, add:
 
 ```js
 'host/inline-debug-decorations.ts',

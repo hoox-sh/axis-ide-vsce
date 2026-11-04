@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-05",
+  "seq": "05",
+  "title": "SecretStorage + /^pn_[a-f0-9]{48}$/ + Pro regex",
+  "status": "completed",
+  "depends_on": [
+    "01"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "started_at": "2026-11-02T05:30:00Z",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/engine/live-ticket.ts",
+    "src/storage/vault.ts"
+  ],
+  "acceptance_criteria": [
+    "WORKER_API_KEY_RE rejects pn_oops; accepts valid pn_ + 48 hex",
+    "PRO_API_KEY_RE requires pyn_ prefix + minimum length",
+    "No axis.worker.apiKey / axis.pro.apiKey configuration properties",
+    "Electron expected-commands array extended with axis.secrets.*",
+    "Status shows key set/missing, never the value"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/secrets/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Revert src/secrets/ and remove axis.secrets.* command registrations.",
+  "agent_id": null,
+  "completed_at": "2026-11-02T03:38:10Z",
+  "completion_summary": "Added src/secrets/ (slots, validate, AxisSecretStorage + memory mock), axis.secrets.* commands, StatusBar set/missing tooltips, Bun + electron tests; coverage gate 100%."
+}

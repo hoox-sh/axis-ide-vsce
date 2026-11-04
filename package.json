@@ -3,6 +3,7 @@
   "displayName": "AXIS IDE",
   "description": "AXIS chart IDE for VS Code — run Pine Script™ beside the editor with charts, results, and live sessions. Depends on PYNE Language Support (hoox-sh.pyne). Part of the HOOX open trading stack. Unofficial — not affiliated with TradingView, Inc.",
   "version": "0.1.0",
+  "packageManager": "bun@1.4.3",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
   "author": {
@@ -15,14 +16,13 @@
     "theme": "dark"
   },
   "homepage": "https://hoox.sh/axis",
-  "qna": "https://github.com/hoox-sh/axis/issues",
+  "qna": "https://github.com/hoox-sh/axis-ide-vsce/discussions",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hoox-sh/axis.git",
-    "directory": "packages/vscode-axis-ide"
+    "url": "https://github.com/hoox-sh/axis-ide-vsce.git"
   },
   "bugs": {
-    "url": "https://github.com/hoox-sh/axis/issues"
+    "url": "https://github.com/hoox-sh/axis-ide-vsce/issues"
   },
   "engines": {
     "vscode": "^1.95.0"
@@ -496,7 +496,9 @@
           "axis.engine.id": {
             "type": "string",
             "default": "server",
-            "enum": ["server"],
+            "enum": [
+              "server"
+            ],
             "markdownDescription": "Active calculation engine id. PR-06 supports **`server`** (Pro `/run`) only; `pyne-worker` lands in a later task."
           },
           "axis.engine.endpoint": {
@@ -524,7 +526,11 @@
           },
           "axis.run.onSave": {
             "type": "string",
-            "enum": ["off", "evaluate", "run"],
+            "enum": [
+              "off",
+              "evaluate",
+              "run"
+            ],
             "default": "off",
             "markdownDescription": "After saving a Pine Script™ file: **off** (default), **evaluate** (silent interpret, no Results steal), or **run** (full Run Script with chart paint)."
           },
@@ -709,15 +715,22 @@
     "watch:all": "npm run watch & npm run watch:webview",
     "compile-tests": "tsc -p tsconfig.tests.json",
     "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
-    "test:unit": "bun test",
-    "test:coverage": "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
+    "test:unit": "bun test --isolate",
+    "test:coverage": "bun test --isolate --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",
-    "test": "npm run compile-tests && npm run compile && node out/test/runTest.js"
+    "test": "npm run compile-tests && npm run compile && node out/test/runTest.js",
+    "pack:package": "bun run --cwd pack package",
+    "pack:ls": "bun run --cwd pack ls",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write --unsafe .",
+    "verify": "bun run check && bun run test:coverage:gate",
+    "ls": "npx --yes @vscode/vsce ls --no-dependencies"
   },
   "dependencies": {
     "lightweight-charts": "^5.2.0"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.13.10",
     "@types/vscode": "^1.95.0",

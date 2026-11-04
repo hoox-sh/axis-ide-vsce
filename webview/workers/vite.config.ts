@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-/** Workers webview → packages/vscode-axis-ide/dist/webview/workers/ */
+/** Workers webview → ./dist/webview/workers/ */
 export default defineConfig({
   root: resolve(__dirname),
   base: './',

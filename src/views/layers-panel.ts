@@ -263,7 +263,7 @@ function getLayersHtml(webview: Webview, extensionUri: Uri): string {
   const hasJs = Boolean(jsPath) && existsSync(jsPath);
   if (!hasJs) {
     throw new Error(
-      `AXIS layers webview assets missing at ${jsPath || 'unknown'}. Run: bun run --cwd packages/vscode-axis-ide compile:webview`,
+      `AXIS layers webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview`,
     );
   }
   const script = webview.asWebviewUri(layersAssetPath(extensionUri, 'main.js'));

@@ -1,0 +1,38 @@
+{
+  "id": "axis-vscode-ext-03",
+  "seq": "03",
+  "title": "Protocol axis.webview.v1 codecs + 100% round-trips",
+  "status": "completed",
+  "depends_on": [
+    "01"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    ".opencode/plans/final/plan.mdx",
+    "src/streams/stream-live.ts"
+  ],
+  "acceptance_criteria": [
+    "Envelope {v:1, type, payload, ts, id?} encode/decode for every chart/results message type in design §6",
+    "Unknown type / bad version rejected with loggable error (no throw into host crash)",
+    "Protocol unit tests at 100% for codecs + round-trips"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/protocol/",
+    "packages/vscode-axis-ide/src/protocol/*.test.ts"
+  ],
+  "validation_commands": [
+    "bun run --cwd packages/vscode-axis-ide test:unit"
+  ],
+  "rollback_notes": "Revert src/protocol/; drop protocol from coverage INCLUDE until re-landed.",
+  "agent_id": null,
+  "started_at": "2026-11-02T04:30:00Z",
+  "completed_at": "2026-11-02T05:15:00Z",
+  "completion_summary": "Added axis.webview.v1 under packages/vscode-axis-ide/src/protocol/ (types, encode/decode, direction helpers) plus src/host/logger.ts. All 15 design §6 message types round-trip; decode never throws (BAD_VERSION/UNKNOWN_TYPE/BAD_PAYLOAD). Unit suite 28 pass; protocol line coverage 100%."
+}

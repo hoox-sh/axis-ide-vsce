@@ -1,0 +1,40 @@
+{
+  "id": "axis-vscode-ext-15",
+  "seq": "15",
+  "title": "LiveSessionBridge via /api/ws/live tickets",
+  "status": "completed",
+  "depends_on": [
+    "05",
+    "09"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/engine/live-ticket.ts",
+    "worker/tests/live-proxy.test.ts"
+  ],
+  "acceptance_criteria": [
+    "Mints GET /api/ws/live?issue=ticket with Authorization Bearer pn_",
+    "Upgrades WS to /api/ws/live?ticket= (never ?key=; never long-lived pn_ on URL)",
+    "Does not wire Live to /api/mcp/bridge",
+    "StatusBar shows live/degraded/off",
+    "Mock WS unit tests cover mint + connect"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/live/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Revert src/live/; remove axis.liveStart/Stop; leave secrets intact.",
+  "agent_id": null,
+  "started_at": "2026-11-02T11:00:00Z",
+  "completed_at": "2026-11-02T12:30:00Z",
+  "completion_summary": "Added packages/vscode-axis-ide/src/live/**: ticket mint (GET /api/ws/live?issue=ticket + Bearer pn_), WS connect (?ticket= only; never ?key=/pn_/MCP bridge), status live/degraded/off helpers, createLiveSessionBridge + registerLiveCommands, contributes fragment for axis.liveStart/Stop + axis.live.enabled + axis.worker.url. Task 16 hooks left for chart.delta/resume. package.json/extension.ts not wired. Unit 34 live + full suite 266; coverage gate 100%."
+}

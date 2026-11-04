@@ -67,7 +67,7 @@ function getSymbolsHtml(webview: Webview, extensionUri: Uri): string {
   const hasJs = Boolean(jsPath) && existsSync(jsPath);
   if (!hasJs) {
     throw new Error(
-      `AXIS symbols webview assets missing at ${jsPath || 'unknown'}. Run: bun run --cwd packages/vscode-axis-ide compile:webview:symbols`,
+      `AXIS symbols webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:symbols`,
     );
   }
   const script = webview.asWebviewUri(symbolsAssetPath(extensionUri, 'main.js'));

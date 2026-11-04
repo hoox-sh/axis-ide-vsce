@@ -92,7 +92,7 @@ function getWatchlistHtml(webview: Webview, extensionUri: Uri): string {
   const hasJs = Boolean(jsPath) && existsSync(jsPath);
   if (!hasJs) {
     throw new Error(
-      `AXIS watchlist webview assets missing at ${jsPath || 'unknown'}. Run: bun run --cwd packages/vscode-axis-ide compile:webview:watchlist`,
+      `AXIS watchlist webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:watchlist`,
     );
   }
   const script = webview.asWebviewUri(watchlistAssetPath(extensionUri, 'main.js'));

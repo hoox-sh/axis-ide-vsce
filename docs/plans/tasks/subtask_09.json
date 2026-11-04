@@ -1,0 +1,43 @@
+{
+  "id": "axis-vscode-ext-09",
+  "seq": "09",
+  "title": "RunOrchestrator with epoch + Pro /run adapter (mock bars)",
+  "status": "completed",
+  "depends_on": [
+    "05",
+    "07"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "started_at": "2026-11-02T05:04:15Z",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/indicators/runner.ts",
+    "src/engines/catalog.ts",
+    "packages/vscode-axis-ide/src/secrets/slots.ts"
+  ],
+  "acceptance_criteria": [
+    "Monotonic epoch drops stale completions",
+    "Authorization Bearer uses SecretStorage pyn_ key when present",
+    "Run uses mock/fixture bars until task 11 HistoryClient lands",
+    "Unit tests cover success, HTTP error, and stale epoch"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/run/orchestrator.ts",
+    "packages/vscode-axis-ide/src/run/engine-http.ts",
+    "packages/vscode-axis-ide/src/run/orchestrator.test.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit",
+    "bun --cwd packages/vscode-axis-ide run compile"
+  ],
+  "rollback_notes": "Revert run/ folder and remove axis.runScript wiring from extension.ts.",
+  "agent_id": null,
+  "completed_at": "2026-11-02T05:04:15Z",
+  "completion_summary": "RunOrchestrator + engine-http Pro /run adapter with mock bars, epoch drop, Bearer from SecretStorage, unit tests for success/HTTP error/stale epoch."
+}

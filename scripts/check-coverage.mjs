@@ -3,7 +3,7 @@
  * Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Parse Bun lcov and enforce coverage floors for packages/vscode-axis-ide.
+ * Parse Bun lcov and enforce coverage floors for this repository.
  *
  * Usage:
  *   bun scripts/check-coverage.mjs [minPercent] [lcovPath]

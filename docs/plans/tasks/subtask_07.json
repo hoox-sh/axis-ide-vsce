@@ -1,0 +1,37 @@
+{
+  "id": "axis-vscode-ext-07",
+  "seq": "07",
+  "title": "Mock/fixture bars chart.full paint",
+  "status": "completed",
+  "depends_on": [
+    "06"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "started_at": "2026-11-02T07:30:00Z",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/vscode-axis-ide/src/protocol/"
+  ],
+  "acceptance_criteria": [
+    "Host session generates or loads mock/fixture OHLCV bars",
+    "chart.full round-trip applies bars in webview reducer",
+    "No venue/fetchHistorical required for exit criteria"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/host/chart-session.ts",
+    "packages/vscode-axis-ide/webview/chart/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Revert mock bar session wiring; keep empty chart shell.",
+  "agent_id": null,
+  "completed_at": "2026-11-02T08:30:00Z",
+  "completion_summary": "Mock OHLCV chart-session + chart.full webview reducer/LWC paint; settings useMockBars/historyBars."
+}

@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-24",
+  "seq": "24",
+  "title": "GHA: bun unit + electron + BASELINE gate + VSIX",
+  "status": "completed",
+  "depends_on": [
+    "04",
+    "02",
+    "10"
+  ],
+  "parallel": false,
+  "suggested_agent": "BuildAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    ".github/workflows",
+    "packages/vscode-axis-ide/scripts/check-coverage.mjs"
+  ],
+  "acceptance_criteria": [
+    "Workflow runs test:coverage:gate and electron tests (xvfb on Linux)",
+    "Fails on BASELINE regression",
+    "Uploads VSIX artifact on tag or main package job"
+  ],
+  "deliverables": [
+    ".github/workflows/vscode-axis-ide.yml"
+  ],
+  "validation_commands": [
+    "true  # validated in CI"
+  ],
+  "rollback_notes": "Delete workflow file; local gates remain.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:49:10Z",
+  "completion_summary": "Added .github/workflows/vscode-axis-ide.yml: Bun 1.4.3 + Node 22, bun install --frozen-lockfile in packages/vscode-axis-ide, test:coverage:gate (BASELINE fail), xvfb-run electron with Open VSX hoox-sh.pyne VSIX via AXIS_IDE_PYNE_VSIX, package job uploads axis-ide-*.vsix on main/tags/workflow_dispatch."
+}

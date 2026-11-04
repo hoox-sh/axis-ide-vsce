@@ -1,0 +1,40 @@
+{
+  "id": "axis-vscode-ext-12",
+  "seq": "12",
+  "title": "Results/Strategy views + §7.1 focus rules",
+  "status": "completed",
+  "depends_on": [
+    "03",
+    "09"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/store/index.ts",
+    "tests/run-results-focus.test.ts"
+  ],
+  "acceptance_criteria": [
+    "focus:true (user Run) publishes lastRun + resultsFocusId",
+    "Silent/live (focus:false) does not steal Results focus when already focused",
+    "First run ever publishes regardless of focus flag",
+    "axis.focusResults / tree select retargets panel"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/views/results*.ts",
+    "packages/vscode-axis-ide/webview/results/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Remove Results/Strategy WebviewView providers and contributions.",
+  "agent_id": null,
+  "started_at": "2026-11-02T10:30:00Z",
+  "completed_at": "2026-11-02T14:30:00Z",
+  "completion_summary": "Results/Strategy panel webviews + §7.1 ResultsFocusStore (focus true/false/first-ever/focusResults); axis.focusResults; unit 232 + coverage 100%; merged trees fragment; watchlist absent."
+}

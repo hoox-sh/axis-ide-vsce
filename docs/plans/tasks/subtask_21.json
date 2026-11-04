@@ -1,0 +1,37 @@
+{
+  "id": "axis-vscode-ext-21",
+  "seq": "21",
+  "title": "MCP provider + CLI resolution soft-fail (KD-9)",
+  "status": "completed",
+  "depends_on": [
+    "05"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/cli/src/commands/mcp.ts"
+  ],
+  "acceptance_criteria": [
+    "Resolution order: axis.mcp.command \u2192 which axis \u2192 allowNpx?npx:null",
+    "axis.mcp.allowNpx default false; soft-fail returns empty defs + warning + showConfig path",
+    "Stdio definition uses env AXIS_API_KEY only (never --key)",
+    "Unit tests cover all three resolution branches + soft-fail"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/mcp/provider.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Unregister mcpServerDefinitionProviders; remove axis.mcp.* settings.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:50:47Z",
+  "completion_summary": "MCP provider + CLI soft-fail (KD-9). resolve-cli.ts: axis.mcp.command \u2192 which axis \u2192 allowNpx? npx -y @hoox-sh/axis-cli : null. provider.ts: registerMcpProvider(context), stdio defs with env AXIS_API_KEY only (never --key), soft-fail empty defs + one-shot warning + Show MCP Config \u2192 axis.mcp.showConfig. Fragment mcp-contributes.fragment.json (stdio/command/allowNpx + mcpServerDefinitionProviders + showConfig). Bun unit tests: 19 pass (3 resolution branches + soft-fail). Did not edit package.json/extension.ts or lm-tools (Task 22)."
+}

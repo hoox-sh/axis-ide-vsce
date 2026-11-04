@@ -1,0 +1,41 @@
+{
+  "id": "axis-vscode-ext-25",
+  "seq": "25",
+  "title": "CSP audit + NOTICE (LWC Apache-2.0) + README",
+  "status": "completed",
+  "depends_on": [
+    "06",
+    "15"
+  ],
+  "parallel": true,
+  "suggested_agent": "DocWriter",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "NOTICE",
+    "public/_headers"
+  ],
+  "acceptance_criteria": [
+    "Package NOTICE lists Lightweight Charts Apache-2.0",
+    "Headers AGPL-3.0-only exact; no \"or later\"",
+    "README documents recommended PYNE ≥0.5.4 and secret UX",
+    "CSP matrix documented for chart webview"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/README.md",
+    "packages/vscode-axis-ide/NOTICE"
+  ],
+  "validation_commands": [
+    "test -f packages/vscode-axis-ide/NOTICE",
+    "test -f packages/vscode-axis-ide/README.md"
+  ],
+  "rollback_notes": "Docs-only revert; no runtime impact.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:49:17.349Z",
+  "completion_summary": "NOTICE lists LWC Apache-2.0; README PYNE≥0.5.4 + secrets + CSP; docs/csp-matrix.md; AGPL-only headers clean."
+}

@@ -1,0 +1,36 @@
+{
+  "id": "axis-vscode-ext-19",
+  "seq": "19",
+  "title": "MVP alerts TreeView CRUD",
+  "status": "completed",
+  "depends_on": [
+    "13"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [],
+  "acceptance_criteria": [
+    "Add/remove alerts persisted in workspaceState",
+    "TreeView axis.alerts lists entries",
+    "MVP only — not full PWA alerts parity"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/views/alerts.ts",
+    "packages/vscode-axis-ide/src/views/alerts.test.ts",
+    "packages/vscode-axis-ide/src/views/alerts-contributes.fragment.json"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Remove alerts TreeView and workspaceState key.",
+  "agent_id": null,
+  "started_at": "2026-11-02T12:00:00Z",
+  "completed_at": "2026-11-02T14:30:00Z",
+  "completion_summary": "MVP alerts TreeView CRUD under packages/vscode-axis-ide/src/views/alerts.ts. Persists AlertEntry[] { id, title, condition?, enabled } in workspaceState key axis.alerts.v1. Commands axis.alerts.add (InputBox title + optional condition) and axis.alerts.remove (QuickPick). registerAlertsView(context) creates TreeView axis.alerts and registers both commands. alerts-contributes.fragment.json for wiring agent (view + commands + activationEvents). Bun unit tests with mock Memento (createMemoryWorkspaceState): 6 pass. Did not edit package.json or extension.ts; completed_count left unchanged."
+}

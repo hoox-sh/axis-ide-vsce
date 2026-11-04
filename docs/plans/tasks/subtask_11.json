@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-11",
+  "seq": "11",
+  "title": "HistoryClient + seriesKey + datafeed/source fetch (implements PR-06b)",
+  "status": "completed",
+  "depends_on": [
+    "10"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/engine/frames.ts",
+    "packages/datafeed",
+    "src/plugins/types.ts"
+  ],
+  "acceptance_criteria": [
+    "Canonical seriesKey exchange|market|SYMBOL|interval",
+    "fetchHistorical via source adapter or axis-datafeed :5003",
+    "Run/chart use real bars when axis.chart.useMockBars is false",
+    "Fixture HTTP unit tests cover success and failure paths"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/host/history-client.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Leave useMockBars default true; revert HistoryClient wiring.",
+  "agent_id": null,
+  "started_at": "2026-11-02T09:30:00Z",
+  "completed_at": "2026-11-02T12:00:00Z",
+  "completion_summary": "HistoryClient + series-key (pair-form) + axis.datafeed.url; chart/run use real bars when useMockBars false; unit+coverage 100%."
+}

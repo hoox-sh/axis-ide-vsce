@@ -2,15 +2,15 @@ AXIS IDE — NOTICE
 ==================
 
 Copyright (c) 2026 HOOX · AXIS · hoox-sh
-https://github.com/hoox-sh/axis
-Package: packages/vscode-axis-ide (extension id hoox-sh.axis-ide)
+https://github.com/hoox-sh/axis-ide-vsce
+Package: AXIS IDE (extension id hoox-sh.axis-ide)
 
 License
 -------
 This package is licensed under the GNU Affero General Public License
 **version 3 only** (SPDX: AGPL-3.0-only).
 
-Full text: LICENSE (this package) and the AXIS monorepo root LICENSE.
+Full text: LICENSE in this repository.
 
 There is no AGPL version 4. Do not use AGPL-3.0-or-later for AXIS IDE.
 (The sister extension hoox-sh.pyne remains AGPL-3.0-or-later; do not relicense it.)
@@ -19,8 +19,8 @@ Source files should carry:
   SPDX-License-Identifier: AGPL-3.0-only
 Header text must say “version 3 of the License only” — never “or later”.
 
-This VSIX NOTICE is assembled for the IDE package (design Q6 / KD-3) even if
-the monorepo root NOTICE lags on third-party charting attributions.
+This VSIX NOTICE is assembled for the IDE package (design Q6 / KD-3) so the
+packaged extension always carries current third-party charting attributions.
 
 Third-party software
 --------------------

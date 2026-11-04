@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-/** Profiler webview → packages/vscode-axis-ide/dist/webview/profiler/ */
+/** Profiler webview → ./dist/webview/profiler/ */
 export default defineConfig({
   root: resolve(__dirname),
   base: './',

@@ -1,0 +1,33 @@
+{
+  "id": "axis-vscode-ext",
+  "name": "AXIS VS Code Extension (AXIS IDE)",
+  "status": "active",
+  "objective": "Ship hoox-sh.axis-ide as a native-first VS Code clone of the AXIS PWA chart/run/live/results/MCP surface, hard-dependent on hoox-sh.pyne, with SecretStorage keys and Bun coverage ratchet.",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "../pynescript/vscode-extension/package.json",
+    "src/plugins/types.ts",
+    "src/engine/live-ticket.ts",
+    "packages/cli",
+    "packages/datafeed"
+  ],
+  "exit_criteria": [
+    "VSIX installs with hoox-sh.pyne and opens axis.chart via CustomEditorProvider",
+    "Run from pinescript TextEditor paints chart (mock then HistoryClient) and updates Results per design \u00a77.1",
+    "Live path uses GET /api/ws/live tickets; secrets only in SecretStorage with WORKER_API_KEY_RE",
+    "MCP provider soft-fails unless axis on PATH, axis.mcp.command set, or axis.mcp.allowNpx; LM tools registered",
+    "Coverage BASELINE gate green; protocol 100%; TARGET 90/80 printed",
+    "Extension pack hoox-sh.axis listed",
+    "All 27 subtasks completed; bun --cwd packages/vscode-axis-ide test + test:coverage:gate green"
+  ],
+  "subtask_count": 27,
+  "completed_count": 27,
+  "created_at": "2026-11-02T00:00:00Z",
+  "completed_at": null,
+  "rollback_notes": "Uninstall VSIX; feature flags / mock bars default. Remove packages/vscode-axis-ide and packages/vscode-axis-pack; drop workflow; no PWA runtime impact."
+}

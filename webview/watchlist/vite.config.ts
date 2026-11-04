@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-/** Watchlist webview → packages/vscode-axis-ide/dist/webview/watchlist/ */
+/** Watchlist webview → ./dist/webview/watchlist/ */
 export default defineConfig({
   root: resolve(__dirname),
   base: './',

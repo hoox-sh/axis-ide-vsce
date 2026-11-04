@@ -1,0 +1,145 @@
+# Copyright (c) 2026 HOOX · AXIS · hoox-sh (jango_blockchained)
+#
+# This file is part of axis.
+#
+# axis is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, version 3 of the License only.
+#
+# axis is distributed in the hope that it is useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with axis.  If not, see <https://www.gnu.org/licenses/>.
+#
+# SPDX-License-Identifier: AGPL-3.0-only
+
+---
+title: AXIS VS Code Extension (AXIS IDE) — tasklist
+description: Human tasklist for hoox-sh.axis-ide. Status pending|in_progress|completed|blocked. Maps PR-01..PR-15 to machine seqs 01–27 under .opencode/tmp/tasks/axis-vscode-ext/.
+---
+
+# AXIS VS Code Extension (AXIS IDE) — tasklist
+
+> **Authoritative.** Plan: [`.opencode/plans/axis-vscode-extension-plan.mdx`](./axis-vscode-extension-plan.mdx).  
+> Design: [`.opencode/plans/axis-vscode-extension-design.md`](./axis-vscode-extension-design.md) (run `118d12d1`).  
+> Machine tracker: `.opencode/tmp/tasks/axis-vscode-ext/` (`task.json` + `subtask_01..27.json`).  
+> Status values: `pending` | `in_progress` | `completed` | `blocked`.
+
+**Seq rules:** machine `seq` is `/^\d{2}$/` only (`01`–`27`). PR titles may keep `PR-06b` / `PR-08b`; HistoryClient = **11**, watchlist = **20**.
+
+## 1. PR → task map
+
+| PR | Phase | Tasks (seq) |
+| --- | --- | --- |
+| PR-01 | P0 | 01, 02 |
+| PR-02 | P0 | 03, 04 |
+| PR-03 | P0/P3 prep | 05 |
+| PR-04 | P1 | 06 |
+| PR-05 | P1 | 07, 08 |
+| PR-06 | P1 | 09, 10 |
+| PR-06b | P1b | **11** |
+| PR-07 | P2 | 12 |
+| PR-08 | P2 | 13, 14 |
+| PR-08b | P4 | **20** |
+| PR-09 | P3 | 15, 16 |
+| PR-10 | P4 | 17 |
+| PR-11 | P4 | 18, 19 |
+| PR-12 | P5 | 21, 22 |
+| PR-13 | P5 | 23 |
+| PR-14 | P6 | 24, 25, 26 |
+| PR-15 | P6 | 27 |
+
+## 2. Tasklist
+
+### Phase P0 — Scaffold + protocol + secrets harness
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 01 | Scaffold `packages/vscode-axis-ide` + AGPL-3.0-only headers + esbuild | pending | — | — | `bun run --cwd packages/vscode-axis-ide compile` |
+| 02 | Electron smoke for **P0** contributes + activation (KD-14) | pending | 01 | — | `bun run --cwd packages/vscode-axis-ide test` |
+| 03 | Protocol `axis.webview.v1` codecs + 100% round-trips | pending | 01 | ✓ | `bun run --cwd packages/vscode-axis-ide test:unit` |
+| 04 | Coverage ratchet script (BASELINE fail / TARGET print) | pending | 03 | — | `bun run --cwd packages/vscode-axis-ide test:coverage:gate` |
+| 05 | SecretStorage + `/^pn_[a-f0-9]{48}$/` + Pro regex | completed | 01 | ✓ | `test:unit` |
+
+### Phase P1 — Chart shell + mock bars + Run
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 06 | `CustomEditorProvider` chart + CSP webview shell (KD-4) | completed | 01, 03 | — | `compile` + unit |
+| 07 | Mock/fixture bars `chart.full` paint | pending | 06 | — | `test:unit` |
+| 08 | `axis.openChart` + pinescript title actions; extend electron inventory | pending | 07 | — | `test` |
+| 09 | RunOrchestrator epoch + Pro `/run` on **mock bars** | pending | 05, 07 | — | `test:unit` |
+| 10 | Wire `axis.runScript` keybinding → chart (mock) | pending | 08, 09 | — | `test` |
+
+### Phase P1b — HistoryClient (PR-06b)
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 11 | HistoryClient + seriesKey + datafeed/source fetch (**PR-06b**) | pending | 10 | — | `test:unit` |
+
+### Phase P2 — Results + TreeViews
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 12 | Results/Strategy views + §7.1 focus rules | pending | 03, 09 | — | `test:unit` |
+| 13 | TreeViews: library, layers, indicators (**no** watchlist yet) | pending | 01 | ✓ | `test` |
+| 14 | Builtin apply command | pending | 10, 13 | — | `test:unit` |
+
+### Phase P3 — Live tickets + deltas
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 15 | LiveSessionBridge via **`/api/ws/live` tickets** | pending | 05, 09 | — | `test:unit` mock WS |
+| 16 | `chart.delta` + seq gap resume stub | pending | 07, 15 | — | `test:unit` |
+
+### Phase P4 — Plugins + MVP drawings/alerts/watchlist
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 17 | Plugins registry + workers probe | pending | 09, 13 | ✓ | `test:unit` |
+| 18 | MVP one drawing tool + persist via CustomEditorProvider | pending | 06, 08 | ✓ | `test:unit` |
+| 19 | MVP alerts TreeView CRUD | pending | 13 | ✓ | `test:unit` |
+| 20 | Watchlist tree + quote StatusBar (**PR-08b**) | pending | 13 | ✓ | `test:unit` + `test` |
+
+### Phase P5 — MCP + LM tools + pack
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 21 | MCP provider + CLI resolution soft-fail (KD-9) | completed | 05 | ✓ | `test:unit` |
+| 22 | LM tools + `registerTool` / `prepareInvocation` | completed | 10, 12, 21 | — | `test` |
+| 23 | Extension pack `hoox-sh.axis` | completed | 01 | ✓ | `vsce package` |
+
+### Phase P6 — CI, docs, publish, optional Pyodide
+
+| ID | Task | Status | Depends on | Parallel | Validation |
+| --- | --- | --- | --- | --- | --- |
+| 24 | GHA: bun unit + electron + BASELINE gate + VSIX | completed | 04, 02, 10 | — | CI |
+| 25 | CSP audit + NOTICE (LWC Apache-2.0) + README | completed | 06, 15 | ✓ | checklist |
+| 26 | Open VSX + Marketplace publish docs | completed | 23, 24 | — | dry-run |
+| 27 | Optional Pyodide flag + **CSP matrix update** | completed | 06, 24 | — | `test:unit` |
+
+## 3. Done criteria (all must hold)
+
+- [ ] VSIX installs with `hoox-sh.pyne` and opens `axis.chart` via `CustomEditorProvider`
+- [ ] Run from pinescript TextEditor paints chart (mock then HistoryClient) and updates Results per design §7.1
+- [ ] Live path uses `GET /api/ws/live` tickets; secrets only in SecretStorage with `WORKER_API_KEY_RE`
+- [ ] MCP provider soft-fails unless `axis` on PATH, `axis.mcp.command` set, or `axis.mcp.allowNpx`; LM tools registered
+- [ ] Coverage BASELINE gate green; protocol 100%; TARGET 90/80 printed
+- [ ] Extension pack `hoox-sh.axis` listed
+- [ ] NOTICE lists Lightweight Charts Apache-2.0; headers AGPL-3.0-only (no “or later”)
+- [ ] Electron inventory grown from P0 toward Appendices A–C (KD-14)
+- [ ] All 27 machine subtasks `completed` via task CLI
+
+## 4. Machine-readable tracker
+
+`.opencode/tmp/tasks/axis-vscode-ext/` holds `task.json` + `subtask_01..27.json`. Manage with:
+
+```bash
+bash /mnt/data/home/jango/.opencode/skills/task-management/router.sh status axis-vscode-ext
+bash /mnt/data/home/jango/.opencode/skills/task-management/router.sh next axis-vscode-ext
+bash /mnt/data/home/jango/.opencode/skills/task-management/router.sh validate axis-vscode-ext
+bash /mnt/data/home/jango/.opencode/skills/task-management/router.sh complete axis-vscode-ext <seq> "summary"
+```

@@ -1,0 +1,38 @@
+{
+  "id": "axis-vscode-ext-20",
+  "seq": "20",
+  "title": "Watchlist tree + quote StatusBar (implements PR-08b)",
+  "status": "completed",
+  "depends_on": [
+    "13"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/ui/extras/quote.ts"
+  ],
+  "acceptance_criteria": [
+    "Contributes axis.watchlist view (first time watchlist appears)",
+    "displayedLastPrice semantics mirrored from quote.ts",
+    "MVP list add/remove",
+    "Electron inventory extended for watchlist-related commands/settings if any"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/views/watchlist.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit",
+    "bun --cwd packages/vscode-axis-ide run test"
+  ],
+  "rollback_notes": "Remove axis.watchlist contribution and quote StatusBarItem.",
+  "agent_id": null,
+  "started_at": "2026-11-02T12:00:00Z",
+  "completed_at": "2026-11-02T07:31:07Z",
+  "completion_summary": "Added watchlist TreeView + quote StatusBar (PR-08b). host/quote.ts mirrors displayedLastPrice/streamAllowsLivePrice from PWA src/ui/extras/quote.ts (vscode-free). views/watchlist.ts exports registerWatchlist(context), MVP axis.watchlist.add/remove, workspaceState axis.watchlist.v1 {symbols,selected}, StatusBar axis.watchlist.quote with mock placeholder until live feed (setQuoteFeed). Fragment watchlist-contributes.fragment.json for first-time axis.watchlist contribute. Bun unit tests: 14 pass. Did not edit package.json/extension.ts. NOTE: electron FORBIDDEN_VIEWS still includes axis.watchlist \u2014 wiring agent must flip when merging fragment."
+}

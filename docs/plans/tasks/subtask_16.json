@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-16",
+  "seq": "16",
+  "title": "chart.delta + seq gap resume stub",
+  "status": "completed",
+  "depends_on": [
+    "07",
+    "15"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/streams/stream-live.ts",
+    ".opencode/plans/final/plan.mdx"
+  ],
+  "acceptance_criteria": [
+    "chart.delta applies tail merge in webview/host",
+    "seq gap triggers resume stub",
+    "Delta protocol tests remain at 100%"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/live/",
+    "packages/vscode-axis-ide/webview/chart/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Keep live connect; revert delta/resume path only.",
+  "agent_id": null,
+  "started_at": "2026-11-02T11:00:00Z",
+  "completed_at": "2026-11-02T06:56:17Z",
+  "completion_summary": "Webview applyChartHostMessage merges chart.delta tail at baseIndex; seq gap \u2192 chart.requestReload. Host createLiveChartFanout encodes wire full/delta/close \u2192 chart-bus; createLiveResumeStub logs + markDegraded + optional remint. bridge.markDegraded added. Unit 286; coverage gate pure-host 100% / protocol 100%. package.json/extension.ts not wired."
+}

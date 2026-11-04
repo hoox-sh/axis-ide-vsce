@@ -242,7 +242,7 @@ function assertChartAssets(extensionUri: Uri): void {
   const mainJs = chartAssetPath(extensionUri, 'main.js');
   if (!existsSync(mainJs.fsPath)) {
     throw new Error(
-      `AXIS chart webview assets missing at ${mainJs.fsPath}. Run: bun run --cwd packages/vscode-axis-ide compile:webview`,
+      `AXIS chart webview assets missing at ${mainJs.fsPath}. Run: bun run compile:webview`,
     );
   }
 }

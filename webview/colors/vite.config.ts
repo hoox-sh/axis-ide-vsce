@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-/** Colors webview → packages/vscode-axis-ide/dist/webview/colors/ */
+/** Colors webview → ./dist/webview/colors/ */
 export default defineConfig({
   root: resolve(__dirname),
   base: './',

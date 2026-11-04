@@ -18,11 +18,11 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 From the VS Code / Open VSX Marketplace, search for **AXIS Trading Pack**, or install the VSIX:
 
 ```bash
-bun run --cwd packages/vscode-axis-pack package   # → axis-0.1.0.vsix
-code --install-extension axis-0.1.0.vsix
+bun run --cwd pack package   # → pack/axis-0.1.0.vsix
+code --install-extension pack/axis-0.1.0.vsix
 ```
 
-Root alias (when wired): `bun run vscode:pack:package`.
+From the repository root: `bun run pack:package`.
 
 ## License
 

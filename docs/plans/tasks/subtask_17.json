@@ -1,0 +1,40 @@
+{
+  "id": "axis-vscode-ext-17",
+  "seq": "17",
+  "title": "Plugins registry + workers probe",
+  "status": "completed",
+  "depends_on": [
+    "09",
+    "13"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/plugins/types.ts",
+    "src/workers/catalog.ts",
+    "src/engines/catalog.ts"
+  ],
+  "acceptance_criteria": [
+    "Builtin engine/source ids listed in host registry",
+    "axis.workers.probeAll probes offline without throw",
+    "globalState axis.plugins.v1 holds metadata without secrets"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/plugins/",
+    "packages/vscode-axis-ide/src/views/workers.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Remove plugins registry and workers TreeView contribution.",
+  "agent_id": null,
+  "started_at": "2026-11-02T11:00:00Z",
+  "completed_at": "2026-11-02T12:00:00Z",
+  "completion_summary": "Host plugin registry lists builtin engine/source ids; axis.plugins.v1 persist API strips secrets; workers probeAll never throws offline; contribute fragments + registerPluginsAndWorkers exported. package.json/extension.ts unwired by design."
+}

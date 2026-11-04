@@ -1,0 +1,79 @@
+name: Bug report
+description: Something in AXIS IDE does not work as expected.
+title: '[bug]: '
+labels: ['bug', 'needs-triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Remove API keys, tokens, and private script content before posting.
+
+  - type: input
+    id: extension-version
+    attributes:
+      label: AXIS IDE version
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: editor
+    attributes:
+      label: Editor
+      description: VS Code, Cursor, VSCodium, Windsurf, or other (include the version).
+      placeholder: VS Code 1.95.0
+    validations:
+      required: true
+
+  - type: input
+    id: pyne-version
+    attributes:
+      label: PYNE Language Support version
+      placeholder: 0.5.5
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a .pine file
+        2. Run AXIS: Open Chart
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior / logs
+      description: Paste the AXIS Run output channel and any errors. Secrets are never needed.
+      render: shell
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Chart / custom editor
+        - Run / engine
+        - Results / Strategy
+        - Live sessions
+        - Library / Layers / Scripts
+        - Watchlist / Alerts
+        - Plugins
+        - Workers
+        - MCP / Copilot tools
+        - Packaging / install
+        - Other

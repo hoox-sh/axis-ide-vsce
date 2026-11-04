@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: AXIS documentation
+    url: https://hoox.sh/axis/docs
+    about: Product docs, guides, and the AXIS charting PWA.
+  - name: PYNE Language Support
+    url: https://github.com/hoox-sh/pyne/issues
+    about: Language server, syntax highlighting, and PYNE runtime issues.
+  - name: Security report
+    url: https://github.com/hoox-sh/axis-ide-vsce/security/advisories/new
+    about: Report a vulnerability privately (do not open a public issue).

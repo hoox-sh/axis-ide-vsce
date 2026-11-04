@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-/** Library studio webview → packages/vscode-axis-ide/dist/webview/library/ */
+/** Library studio webview → ./dist/webview/library/ */
 export default defineConfig({
   root: resolve(__dirname),
   base: './',

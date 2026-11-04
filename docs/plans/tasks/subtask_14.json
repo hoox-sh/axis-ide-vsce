@@ -1,0 +1,37 @@
+{
+  "id": "axis-vscode-ext-14",
+  "seq": "14",
+  "title": "Builtin apply command",
+  "status": "completed",
+  "depends_on": [
+    "10",
+    "13"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/indicators/builtins"
+  ],
+  "acceptance_criteria": [
+    "axis.applyBuiltin QuickPick lists builtin scripts",
+    "Selection applies into run/chart path when orchestrator available"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/host/builtins.ts",
+    "packages/vscode-axis-ide/media/builtins/"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Remove axis.applyBuiltin command and builtin catalog stub.",
+  "agent_id": null,
+  "started_at": "2026-11-02T11:00:00Z",
+  "completed_at": "2026-11-02T06:44:21Z",
+  "completion_summary": "Shipped offline media/builtins/catalog.json (111 AXIS builtins with full Pine source) plus host/builtins.ts loader, host/apply-builtin.ts QuickPick \u2192 untitled pinescript, and apply-builtin-contributes.fragment.json for axis.applyBuiltin. Bun unit tests 17 pass; builtins.ts/apply-builtin.ts at 100% lines. Did not edit package.json/extension.ts (wiring merges fragment + registerApplyBuiltin)."
+}

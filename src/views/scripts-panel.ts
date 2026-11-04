@@ -108,7 +108,7 @@ function assertScriptsAssets(extensionUri: Uri): void {
   const hasJs = Boolean(jsPath) && existsSync(jsPath);
   if (!hasJs) {
     throw new Error(
-      `AXIS scripts webview assets missing at ${jsPath || 'unknown'}. Run: bun run --cwd packages/vscode-axis-ide compile:webview:scripts`,
+      `AXIS scripts webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:scripts`,
     );
   }
 }

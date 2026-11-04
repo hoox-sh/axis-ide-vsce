@@ -19,7 +19,7 @@
 import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
-/** Symbols webview → packages/vscode-axis-ide/dist/webview/symbols/ */
+/** Symbols webview → ./dist/webview/symbols/ */
 export default defineConfig({
   root: resolve(__dirname),
   base: './',

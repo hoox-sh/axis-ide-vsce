@@ -1,0 +1,37 @@
+{
+  "id": "axis-vscode-ext-08",
+  "seq": "08",
+  "title": "axis.openChart + pinescript title actions; extend electron inventory",
+  "status": "completed",
+  "depends_on": [
+    "07"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/vscode-axis-ide/package.json"
+  ],
+  "acceptance_criteria": [
+    "axis.openChart creates/opens *.axis.json beside or for active Pine buffer",
+    "editor/title menus for pinescript include openChart (+ run when present)",
+    "Electron inventory asserts new commands (KD-14 growth)"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/package.json",
+    "packages/vscode-axis-ide/src/extension.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test"
+  ],
+  "rollback_notes": "Remove openChart menu wiring; leave custom editor registration.",
+  "agent_id": null,
+  "started_at": "2026-11-02T07:30:00Z",
+  "completed_at": "2026-11-02T08:30:00Z",
+  "completion_summary": "axis.openChart sibling *.axis.json + pinescript editor/title menu; electron inventory extended."
+}

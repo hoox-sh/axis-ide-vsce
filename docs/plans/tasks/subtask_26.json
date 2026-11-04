@@ -1,0 +1,36 @@
+{
+  "id": "axis-vscode-ext-26",
+  "seq": "26",
+  "title": "Open VSX + Marketplace publish docs",
+  "status": "completed",
+  "depends_on": [
+    "23",
+    "24"
+  ],
+  "parallel": false,
+  "suggested_agent": "DocWriter",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/vscode-axis-ide/README.md"
+  ],
+  "acceptance_criteria": [
+    "PUBLISH.md documents vsce and ovsx dry-run steps",
+    "Pack and IDE publish order documented"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/PUBLISH.md"
+  ],
+  "validation_commands": [
+    "test -f packages/vscode-axis-ide/PUBLISH.md"
+  ],
+  "rollback_notes": "Docs-only revert.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:54:10.259Z",
+  "completion_summary": "PUBLISH.md: vsce/ovsx dry-run, publisher hoox-sh, IDE-then-pack order"
+}

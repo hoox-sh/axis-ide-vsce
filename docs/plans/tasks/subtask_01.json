@@ -1,0 +1,40 @@
+{
+  "id": "axis-vscode-ext-01",
+  "seq": "01",
+  "title": "Scaffold packages/vscode-axis-ide + AGPL-3.0-only headers (no \"or later\") + esbuild",
+  "status": "completed",
+  "depends_on": [],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "started_at": "2026-11-02T03:45:00Z",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/cli/package.json",
+    "../pynescript/vscode-extension/package.json",
+    "../pynescript/vscode-extension/esbuild.mjs"
+  ],
+  "acceptance_criteria": [
+    "package.json name axis-ide, publisher hoox-sh, license AGPL-3.0-only",
+    "extensionDependencies is id-only [\"hoox-sh.pyne\"] (no semver)",
+    "Sibling package via bun --cwd; not added to root workspaces",
+    "File headers SPDX AGPL-3.0-only and must not say \"or later\"",
+    "vsce package / compile produces a VSIX or dist/extension.js"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/package.json",
+    "packages/vscode-axis-ide/src/extension.ts",
+    "packages/vscode-axis-ide/esbuild.host.mjs"
+  ],
+  "validation_commands": [
+    "bun run --cwd packages/vscode-axis-ide compile"
+  ],
+  "rollback_notes": "Delete packages/vscode-axis-ide; remove root vscode:ide:* scripts.",
+  "agent_id": null,
+  "completed_at": "2026-11-02T02:50:47Z",
+  "completion_summary": "Scaffolded packages/vscode-axis-ide as sibling package (no root workspaces). package.json: name axis-ide, publisher hoox-sh, license AGPL-3.0-only, engines.vscode ^1.95.0, extensionDependencies [\"hoox-sh.pyne\"] id-only, P0 commands + axis.telemetry.offline, KD-15 activationEvents. esbuild.host.mjs \u2192 out/extension.js. AGPL-3.0-only headers (\"version 3 of the License only\", no \"or later\"). bun run --cwd packages/vscode-axis-ide compile succeeds; vsce package produced axis-ide-0.1.0.vsix. Root scripts vscode:ide:compile|test|package added."
+}

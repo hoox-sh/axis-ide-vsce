@@ -16,53 +16,54 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { defineConfig } from 'vite';
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { defineConfig } from "vite";
 
-const packageRoot = resolve(__dirname, '../..');
-const repoRoot = resolve(packageRoot, '../..');
+const packageRoot = resolve(__dirname, "../..");
 
-/** Prefer package-local LWC, else monorepo root (sibling package layout). */
+/** Resolve the repo-local Lightweight Charts install (Vite-bundled into the chart webview). */
 function resolveLwcEntry(): string {
   const candidates = [
-    resolve(packageRoot, 'node_modules/lightweight-charts/dist/lightweight-charts.production.mjs'),
-    resolve(repoRoot, 'node_modules/lightweight-charts/dist/lightweight-charts.production.mjs'),
+    resolve(
+      packageRoot,
+      "node_modules/lightweight-charts/dist/lightweight-charts.production.mjs",
+    ),
   ];
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
   // Fall through to bare id — Vite/node resolution may still find it.
-  return 'lightweight-charts';
+  return "lightweight-charts";
 }
 
-/** Chart webview → packages/vscode-axis-ide/dist/webview/chart/ (design packaging topology). */
+/** Chart webview → ./dist/webview/chart/ (design packaging topology). */
 export default defineConfig({
   root: resolve(__dirname),
-  base: './',
+  base: "./",
   publicDir: false,
   resolve: {
     alias: {
-      'lightweight-charts': resolveLwcEntry(),
+      "lightweight-charts": resolveLwcEntry(),
     },
   },
   build: {
-    outDir: resolve(__dirname, '../../dist/webview/chart'),
+    outDir: resolve(__dirname, "../../dist/webview/chart"),
     emptyOutDir: true,
-    target: 'es2020',
+    target: "es2020",
     // No maps in dist — vsce parent-dir negations otherwise ship main.js.map (sourcesContent).
     sourcemap: false,
     minify: true,
     lib: {
-      entry: resolve(__dirname, 'src/main.ts'),
-      formats: ['iife'],
-      name: 'AxisChartWebview',
-      fileName: () => 'main.js',
+      entry: resolve(__dirname, "src/main.ts"),
+      formats: ["iife"],
+      name: "AxisChartWebview",
+      fileName: () => "main.js",
     },
     cssCodeSplit: false,
     rollupOptions: {
       output: {
-        assetFileNames: 'main.[ext]',
+        assetFileNames: "main.[ext]",
       },
     },
   },

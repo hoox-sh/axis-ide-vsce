@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+*.tsbuildinfo
+
+# Test / coverage
+coverage/
+.nyc_output/
+test-results/
+
+# Packaged extensions
+*.vsix
+!test-fixtures/**/*.vsix
+
+# Electron test download / user data
+.vscode-test/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json.example
+*.swp
+*.swo
+*~
+
+# Logs / caches
+*.log
+.cache/
+.turbo/
+
+# Bun
+bun.lockb
+
+# Local agent / session data
+.opencode/
+.tmp/
+.agent-sync/
+.agent-sync-notice.md
+.agent_sync*.md

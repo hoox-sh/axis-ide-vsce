@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-27",
+  "seq": "27",
+  "title": "Optional Pyodide flag + CSP matrix update",
+  "status": "completed",
+  "depends_on": [
+    "06",
+    "24"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/engines"
+  ],
+  "acceptance_criteria": [
+    "axis.engine.allowPyodide default false",
+    "When enabled, docs/CSP matrix updated for wasm-unsafe-eval and worker-src",
+    "LOCAL_PYODIDE_VERSION locked to 0.29.5",
+    "Bars-in calculator profile only \u2014 not stream-owning"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/webview/chart/",
+    "packages/vscode-axis-ide/README.md"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test:unit"
+  ],
+  "rollback_notes": "Leave flag false; remove pyodide assets from VSIX if added.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:55:03Z",
+  "completion_summary": "Flag allowPyodide default false; LOCAL_PYODIDE_VERSION 0.29.5 host stub; CSP matrix+README+buildChartCspDirectives widen when on; no Wasm in VSIX."
+}

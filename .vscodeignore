@@ -91,3 +91,17 @@ dist/webview/symbols/**
 dist/webview/logs/**
 !dist/webview/logs/main.js
 !dist/webview/logs/main.css
+
+# Repo-only (standalone layout) — never ship these in the extension VSIX.
+.github/**
+pack/**
+docs/**
+biome.json
+.editorconfig
+.gitattributes
+AGENTS.md
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+SECURITY.md
+PUBLISH.md

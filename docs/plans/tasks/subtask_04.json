@@ -1,0 +1,38 @@
+{
+  "id": "axis-vscode-ext-04",
+  "seq": "04",
+  "title": "Coverage ratchet script (BASELINE fail / TARGET print)",
+  "status": "completed",
+  "depends_on": [
+    "03"
+  ],
+  "parallel": false,
+  "suggested_agent": "TestEngineer",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "scripts/check-coverage.mjs",
+    "bunfig.toml"
+  ],
+  "acceptance_criteria": [
+    "Fails on BASELINE regression only; TARGET 90/80 printed but not hard-fail until ratcheted",
+    "Scoped INCLUDE dirs for pure host (host/protocol/secrets/run/live)",
+    "Excludes webview vendor/LWC, dist/, generated",
+    "Protocol scope remains hard 100%"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/scripts/check-coverage.mjs"
+  ],
+  "validation_commands": [
+    "bun run --cwd packages/vscode-axis-ide test:coverage:gate"
+  ],
+  "rollback_notes": "Remove scripts/check-coverage.mjs and test:coverage:gate script entry.",
+  "agent_id": null,
+  "started_at": "2026-11-02T05:10:00Z",
+  "completed_at": "2026-11-02T05:15:00Z",
+  "completion_summary": "Added packages/vscode-axis-ide/scripts/check-coverage.mjs modeled on root ratchet: INCLUDE host/protocol/secrets/run/live (existing files only), EXCLUDE tests/vendor/LWC/dist/out. Measured BASELINE=100 enforced; protocol hard 100%; TARGET_HOST 90 and TARGET_PACKAGE 80 printed only. Wired test:coverage + test:coverage:gate; package bunfig.toml ignores electron src/test."
+}

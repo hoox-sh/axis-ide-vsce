@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-02",
+  "seq": "02",
+  "title": "Electron smoke for P0 contributes + activation (KD-14)",
+  "status": "completed",
+  "depends_on": [
+    "01"
+  ],
+  "parallel": false,
+  "suggested_agent": "TestEngineer",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "../pynescript/vscode-extension/src/test/extension.test.ts",
+    "packages/vscode-axis-ide/package.json"
+  ],
+  "acceptance_criteria": [
+    "Asserts only P0 command/setting ids (axis.showRunOutput, axis.openChart; optional axis.telemetry.offline)",
+    "Asserts extensionDependencies includes hoox-sh.pyne",
+    "Warns (does not hard-fail) if installed PYNE packageJSON.version < 0.5.4",
+    "Mirrors PYNE @vscode/test-electron test style"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/test/extension.test.ts",
+    "packages/vscode-axis-ide/src/test/runTest.ts"
+  ],
+  "validation_commands": [
+    "bun run --cwd packages/vscode-axis-ide test"
+  ],
+  "rollback_notes": "Remove src/test electron harness; leave unit compile intact.",
+  "agent_id": null,
+  "started_at": "2026-11-02T02:48:00Z",
+  "completed_at": "2026-11-02T02:50:47Z",
+  "completion_summary": "Electron harness green: src/test/{runTest,index,extension.test}.ts with mocha TDD runner. Asserts P0-only commands/settings, package identity, extensionDependencies id-only, soft-warn for PYNE <0.5.4. runTest installs sibling PYNE VSIX when present (no --disable-extensions). bun run --cwd packages/vscode-axis-ide test \u2192 9 passing."
+}

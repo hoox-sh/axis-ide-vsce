@@ -65,7 +65,7 @@ function assertResultsAssets(extensionUri: Uri): void {
   const mainJs = resultsAssetPath(extensionUri, 'main.js');
   if (!existsSync(mainJs.fsPath)) {
     throw new Error(
-      `AXIS results webview assets missing at ${mainJs.fsPath}. Run: bun run --cwd packages/vscode-axis-ide compile:webview`,
+      `AXIS results webview assets missing at ${mainJs.fsPath}. Run: bun run compile:webview`,
     );
   }
 }

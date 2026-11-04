@@ -2,15 +2,15 @@ AXIS Trading Pack — NOTICE
 ==========================
 
 Copyright (c) 2026 HOOX · AXIS · hoox-sh
-https://github.com/hoox-sh/axis
-Package: packages/vscode-axis-pack (extension pack id hoox-sh.axis)
+https://github.com/hoox-sh/axis-ide-vsce
+Package: pack/ (extension pack id hoox-sh.axis)
 
 License
 -------
 This extension pack is licensed under the GNU Affero General Public License
 **version 3 only** (SPDX: AGPL-3.0-only).
 
-Full text: LICENSE (this package) and the AXIS monorepo root LICENSE.
+Full text: LICENSE in this directory and the repository-root LICENSE.
 
 There is no AGPL version 4. Do not use AGPL-3.0-or-later for this pack.
 

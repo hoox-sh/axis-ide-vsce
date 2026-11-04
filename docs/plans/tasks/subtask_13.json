@@ -1,0 +1,38 @@
+{
+  "id": "axis-vscode-ext-13",
+  "seq": "13",
+  "title": "TreeViews: library, layers, indicators (no watchlist yet)",
+  "status": "completed",
+  "depends_on": [
+    "01"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "started_at": "2026-11-02T10:30:00Z",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "src/plugins/types.ts"
+  ],
+  "acceptance_criteria": [
+    "Activity bar views axis.library, axis.layers, axis.indicators registered",
+    "Empty TreeDataProviders OK for MVP",
+    "Does not contribute axis.watchlist (deferred to task 20 / PR-08b)"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/views/library.ts",
+    "packages/vscode-axis-ide/src/views/layers.ts",
+    "packages/vscode-axis-ide/src/views/indicators.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test"
+  ],
+  "rollback_notes": "Remove TreeView contributions for library/layers/indicators.",
+  "agent_id": null,
+  "completed_at": "2026-11-02T06:30:00Z",
+  "completion_summary": "Added empty MVP TreeDataProviders for axis.library / axis.layers / axis.indicators under packages/vscode-axis-ide/src/views/. layers.ts keeps Scripts → Panes → Overlays → On-chain → Drawings section order (PWA rule) with empty placeholders. trees.ts exports registerAxisTreeViews(context). tree-contributes.fragment.json holds viewsContainers.activitybar + views for wiring agent (no watchlist/alerts/plugins/workers). Bun unit tests for empty getChildren: 4 pass. Did not edit package.json or extension.ts."
+}

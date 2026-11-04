@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an improvement for AXIS IDE.
+title: '[feat]: '
+labels: ['enhancement', 'needs-triage']
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard or missing today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you want. Note any Pine/PYNE or AXIS PWA parity concerns.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Chart / custom editor
+        - Run / engine
+        - Results / Strategy
+        - Live sessions
+        - Library / Layers / Scripts
+        - Watchlist / Alerts
+        - Plugins
+        - Workers
+        - MCP / Copilot tools
+        - Packaging / install
+        - Docs

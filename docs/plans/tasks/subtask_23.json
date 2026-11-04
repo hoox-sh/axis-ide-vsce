@@ -1,0 +1,36 @@
+{
+  "id": "axis-vscode-ext-23",
+  "seq": "23",
+  "title": "Extension pack hoox-sh.axis",
+  "status": "completed",
+  "depends_on": [
+    "01"
+  ],
+  "parallel": true,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/vscode-axis-ide/package.json"
+  ],
+  "acceptance_criteria": [
+    "packages/vscode-axis-pack/package.json extensionPack lists hoox-sh.pyne and hoox-sh.axis-ide",
+    "License AGPL-3.0-only; categories Extension Packs",
+    "vsce package produces pack VSIX"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-pack/package.json"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-pack run package || npx --yes @vscode/vsce package --cwd packages/vscode-axis-pack --no-dependencies"
+  ],
+  "rollback_notes": "Delete packages/vscode-axis-pack.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:50:15.870Z",
+  "completion_summary": "Pack hoox-sh.axis 0.1.0; extensionPack pyne+axis-ide; vsce axis-0.1.0.vsix OK; root vscode:pack:package fragment noted."
+}

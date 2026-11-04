@@ -83,7 +83,7 @@ function getAlertsHtml(webview: Webview, extensionUri: Uri): string {
   const hasJs = Boolean(jsPath) && existsSync(jsPath);
   if (!hasJs) {
     throw new Error(
-      `AXIS alerts webview assets missing at ${jsPath || 'unknown'}. Run: bun run --cwd packages/vscode-axis-ide compile:webview:alerts`,
+      `AXIS alerts webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:alerts`,
     );
   }
   const script = webview.asWebviewUri(alertsAssetPath(extensionUri, 'main.js'));

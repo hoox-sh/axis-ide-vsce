@@ -1,0 +1,39 @@
+{
+  "id": "axis-vscode-ext-10",
+  "seq": "10",
+  "title": "Wire axis.runScript keybinding \u2192 chart (mock)",
+  "status": "completed",
+  "depends_on": [
+    "08",
+    "09"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/vscode-axis-ide/src/run/orchestrator.ts",
+    "packages/vscode-axis-ide/package.json"
+  ],
+  "acceptance_criteria": [
+    "Ctrl/Cmd+Enter when editorLangId == pinescript invokes axis.runScript",
+    "Successful run paints chart.full or publishes diagnostics on compile error",
+    "OutputChannel AXIS Run logs start/end"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/extension.ts",
+    "packages/vscode-axis-ide/package.json"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test"
+  ],
+  "rollback_notes": "Remove keybinding and runScript command registration.",
+  "agent_id": null,
+  "started_at": "2026-11-02T05:04:15Z",
+  "completed_at": "2026-11-02T05:04:15Z",
+  "completion_summary": "Wired axis.runScript / axis.runScriptSilent, Ctrl/Cmd+Enter keybinding, editor title menu, axis.engine.id/endpoint settings, extension mock-bar run path + chart bus paint."
+}

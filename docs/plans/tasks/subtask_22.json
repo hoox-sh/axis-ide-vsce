@@ -1,0 +1,38 @@
+{
+  "id": "axis-vscode-ext-22",
+  "seq": "22",
+  "title": "LM tools + registerTool / prepareInvocation",
+  "status": "completed",
+  "depends_on": [
+    "10",
+    "12",
+    "21"
+  ],
+  "parallel": false,
+  "suggested_agent": "CoderAgent",
+  "context_files": [
+    "AGENTS.md",
+    ".opencode/plans/axis-vscode-extension-design.md",
+    ".opencode/plans/axis-vscode-extension-plan.mdx",
+    ".opencode/plans/axis-vscode-extension-tasks.mdx"
+  ],
+  "reference_files": [
+    "packages/vscode-axis-ide/src/run/orchestrator.ts"
+  ],
+  "acceptance_criteria": [
+    "axis_run_script, axis_get_results_focus, axis_chart_snapshot_meta registered",
+    "prepareInvocation confirmation for run tool",
+    "Return summaries only — never secrets, never full plot arrays"
+  ],
+  "deliverables": [
+    "packages/vscode-axis-ide/src/mcp/lm-tools.ts"
+  ],
+  "validation_commands": [
+    "bun --cwd packages/vscode-axis-ide run test"
+  ],
+  "rollback_notes": "Unregister languageModelTools; leave MCP stdio provider.",
+  "agent_id": null,
+  "started_at": "2026-11-02T13:00:00Z",
+  "completed_at": "2026-11-02T07:55:17.502Z",
+  "completion_summary": "LM tools: axis_run_script (+confirm), axis_get_results_focus, axis_chart_snapshot_meta; summaries only; registerLmTools + fragment; 14 unit tests."
+}

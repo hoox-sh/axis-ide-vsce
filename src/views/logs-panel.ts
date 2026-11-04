@@ -77,7 +77,7 @@ function assertLogsAssets(extensionUri: Uri): void {
   }
   if (!jsPath || !existsSync(jsPath)) {
     throw new Error(
-      `AXIS logs webview assets missing at ${jsPath || 'unknown'}. Run: bun run --cwd packages/vscode-axis-ide compile:webview:logs`,
+      `AXIS logs webview assets missing at ${jsPath || 'unknown'}. Run: bun run compile:webview:logs`,
     );
   }
 }
