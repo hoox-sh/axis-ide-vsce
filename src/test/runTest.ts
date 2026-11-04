@@ -58,8 +58,8 @@ function findPyneVsix(): string | undefined {
   }
 
   const dirs = [
-    path.resolve(__dirname, '../../../../../pynescript/vscode-extension'),
-    path.resolve(__dirname, '../../../../../pyne/vscode-extension'),
+    path.resolve(__dirname, '../../../../pynescript/vscode-extension'),
+    path.resolve(__dirname, '../../../../pyne/vscode-extension'),
   ];
 
   const found: string[] = [];
