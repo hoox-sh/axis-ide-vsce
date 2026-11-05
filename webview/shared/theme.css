@@ -40,7 +40,7 @@ body {
 /* Single focus-visible rule for every studio: thin accent outline, no halo.
  * Inputs opt out below (components.css): they signal focus via border-color. */
 :focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
+  outline: 1px solid var(--axis-focus-outline);
   outline-offset: -1px;
 }
 
@@ -55,12 +55,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--vscode-scrollbarSlider-background, var(--axis-border));
+  background: var(--axis-scroll-thumb);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--vscode-scrollbarSlider-hoverBackground, var(--axis-border));
+  background: var(--axis-scroll-thumb-hover);
 }
 
 ::-webkit-scrollbar-corner {
@@ -76,8 +76,8 @@ body {
 body.vscode-high-contrast,
 body.vscode-high-contrast-light {
   /* Replace color-mix-derived tokens with solid values. */
-  --axis-faint: var(--vscode-descriptionForeground, #9aa3b2);
-  --axis-focus-ring: 0 0 0 1px var(--vscode-contrastBorder, var(--axis-accent));
+  --axis-faint: var(--axis-dim);
+  --axis-focus-ring: 0 0 0 1px var(--axis-contrast-border);
 }
 
 /* Borderless / transparent-bordered surfaces get a visible 1px edge. */
@@ -93,7 +93,7 @@ body.vscode-high-contrast .ax-chip,
 body.vscode-high-contrast-light .ax-chip,
 body.vscode-high-contrast .ax-empty__action,
 body.vscode-high-contrast-light .ax-empty__action {
-  border: var(--axis-border-w) solid var(--vscode-contrastBorder, var(--axis-accent));
+  border: var(--axis-border-w) solid var(--axis-contrast-border);
 }
 
 /* Kill elevation shadows. */
@@ -109,9 +109,9 @@ body.vscode-high-contrast .ax-tabs__tab[aria-selected='true'],
 body.vscode-high-contrast-light .ax-tabs__tab[aria-selected='true'],
 body.vscode-high-contrast .ax-chip[aria-pressed='true'],
 body.vscode-high-contrast-light .ax-chip[aria-pressed='true'] {
-  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
-  color: var(--vscode-button-secondaryForeground, var(--axis-text));
-  border-color: var(--vscode-contrastActiveBorder, var(--axis-accent));
+  background: var(--axis-btn-secondary-bg);
+  color: var(--axis-btn-secondary-fg);
+  border-color: var(--axis-contrast-active-border);
 }
 
 /* Tick flashes are color-mix tints — disable them entirely. */

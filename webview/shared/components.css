@@ -6,10 +6,10 @@
 /*
  * AXIS curated component classes (§4 catalog). Class names are the frozen
  * contract with components.ts builders. Colors flow through --axis-* tokens
- * (tokens.css); the few VS Code-only semantics (badge, input, link, scrollbar)
- * map here with literal fallbacks. Import after tokens.css, theme.css and
- * motion.css — per-component reduced-motion guards must stay after the
- * animated rules in this same file.
+ * (tokens.css); the shared tokens layer keeps every VS Code variable
+ * reference and raw fallback in one place. Import after tokens.css,
+ * theme.css and motion.css — per-component reduced-motion guards must stay
+ * after the animated rules in this same file.
  */
 
 /* 1 · ax-panel — elevated surface */
@@ -17,7 +17,7 @@
   background: var(--axis-bg-elev);
   border: var(--axis-border-w) solid var(--axis-border);
   border-radius: var(--axis-radius-panel);
-  box-shadow: 0 8px 28px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.48));
+  box-shadow: 0 8px 28px var(--axis-shadow-panel);
 }
 
 .ax-panel--in {
@@ -59,8 +59,8 @@
   min-height: 16px;
   padding: 0 6px;
   border-radius: 999px;
-  background: var(--vscode-badge-background, #616161);
-  color: var(--vscode-badge-foreground, #ffffff);
+  background: var(--axis-badge-bg);
+  color: var(--axis-badge-fg);
   font-family: var(--axis-font-mono);
   font-size: 10px;
   line-height: 16px;
@@ -79,6 +79,9 @@
 }
 
 .ax-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin: 0;
   padding: 0 12px;
   min-height: var(--axis-control-h);
@@ -100,6 +103,33 @@
   background: color-mix(in oklch, var(--axis-accent) 18%, transparent);
   color: var(--axis-text);
   box-shadow: inset 0 -1px 0 var(--axis-accent);
+}
+
+.ax-tabs__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+.ax-tabs__icon:empty,
+.ax-tabs__count:empty {
+  display: none;
+}
+
+.ax-tabs__count {
+  flex: none;
+  min-height: 14px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--axis-badge-bg);
+  color: var(--axis-badge-fg);
+  font-family: var(--axis-font-mono);
+  font-size: 9px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 4 · ax-row — hairline-separated list row */
@@ -164,23 +194,57 @@
 
 /* 5 · ax-chip — 2px filter chip / toggle-group member */
 .ax-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin: 0;
   padding: 1px 8px;
   min-height: 18px;
-  border: var(--axis-border-w) solid var(--vscode-contrastBorder, transparent);
+  border: var(--axis-border-w) solid var(--axis-chip-border);
   border-radius: var(--axis-radius-chip);
-  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
-  color: var(--vscode-button-secondaryForeground, var(--axis-text));
+  background: var(--axis-btn-secondary-bg);
+  color: var(--axis-btn-secondary-fg);
   font: inherit;
   font-size: 11px;
   line-height: 16px;
   cursor: pointer;
 }
 
+.ax-chip:hover {
+  background: var(--axis-btn-secondary-hover-bg);
+}
+
 .ax-chip[aria-pressed='true'] {
   background: color-mix(in oklch, var(--axis-accent) 18%, transparent);
   border-color: color-mix(in oklch, var(--axis-accent) 40%, transparent);
   color: var(--axis-text);
+}
+
+.ax-chip__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+}
+
+.ax-chip__icon:empty,
+.ax-chip__count:empty {
+  display: none;
+}
+
+.ax-chip__count {
+  flex: none;
+  min-height: 14px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--axis-badge-bg);
+  color: var(--axis-badge-fg);
+  font-family: var(--axis-font-mono);
+  font-size: 9px;
+  line-height: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 6 · ax-kpi — stat tile */
@@ -276,7 +340,7 @@
 
 .ax-status-dot--live .ax-status-dot__dot {
   background: var(--axis-up);
-  animation: axis-live-pulse 1.6s var(--axis-ease) infinite;
+  animation: axis-live-pulse 350ms var(--axis-ease) infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -290,16 +354,16 @@
   width: 100%;
   margin: 0;
   padding: 3px 6px;
-  border: var(--axis-border-w) solid var(--vscode-input-border, var(--axis-border));
+  border: var(--axis-border-w) solid var(--axis-input-border);
   border-radius: var(--axis-radius-input);
-  background: var(--vscode-input-background, var(--axis-bg-elev));
-  color: var(--vscode-input-foreground, var(--axis-text));
+  background: var(--axis-input-bg);
+  color: var(--axis-input-fg);
   font: inherit;
   font-size: 12px;
 }
 
 .ax-search::placeholder {
-  color: var(--vscode-input-placeholderForeground, var(--axis-dim));
+  color: var(--axis-input-placeholder);
 }
 
 /* Search input signals focus with the border only — no outline halo. */
@@ -334,10 +398,10 @@
   width: 100%;
   margin: 0;
   padding: 3px 6px;
-  border: var(--axis-border-w) solid var(--vscode-input-border, var(--axis-border));
+  border: var(--axis-border-w) solid var(--axis-input-border);
   border-radius: var(--axis-radius-input);
-  background: var(--vscode-input-background, var(--axis-bg-elev));
-  color: var(--vscode-input-foreground, var(--axis-text));
+  background: var(--axis-input-bg);
+  color: var(--axis-input-fg);
   font: inherit;
   font-size: 12px;
 }
@@ -382,7 +446,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--vscode-textLink-foreground, var(--axis-accent));
+  color: var(--axis-link);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
@@ -472,14 +536,14 @@
   width: 12px;
   height: 12px;
   border-radius: 2px;
-  border: 1px solid var(--vscode-contrastBorder, var(--vscode-widget-border, rgba(127, 127, 127, 0.55)));
+  border: 1px solid var(--axis-border-soft);
   background: transparent;
 }
 
 .ax-swatch__paint--raw {
   background-image: repeating-linear-gradient(
     45deg,
-    var(--vscode-descriptionForeground, #888888) 0 1px,
+    var(--axis-swatch-raw) 0 1px,
     transparent 1px 4px
   );
 }

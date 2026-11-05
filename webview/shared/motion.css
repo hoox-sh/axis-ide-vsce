@@ -9,16 +9,18 @@
  * prefers-reduced-motion guard. Import after tokens.css (durations and
  * easings) and before components.css (component rules may re-apply
  * animations — the reduce guards colocated there must stay last).
+ *
+ * All decorative animations run in ≤350ms; the live pulse uses
+ * animation-direction: alternate so each iteration is under the limit.
  */
 
-/* Live dot: 1.6s opacity breathe. */
+/* Live dot: 350ms opacity pulse, alternates to avoid a >350ms cycle. */
 @keyframes axis-live-pulse {
-  0%,
-  100% {
+  from {
     opacity: 1;
   }
 
-  50% {
+  to {
     opacity: 0.35;
   }
 }

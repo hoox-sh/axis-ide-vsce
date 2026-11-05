@@ -83,6 +83,10 @@ export function header(options: HeaderOptions): HTMLElement {
 export interface TabItem {
   id: string;
   label: string;
+  /** Optional icon rendered before the label. */
+  icon?: Node;
+  /** Optional count pill rendered after the label. */
+  count?: string | number;
 }
 
 export interface TabsOptions {
@@ -111,11 +115,20 @@ export function tabs(options: TabsOptions): HTMLElement {
     options.onSelect?.(id);
   };
   for (const item of options.tabs) {
-    const tab = el('button', 'ax-tabs__tab', item.label);
+    const tab = el('button', 'ax-tabs__tab');
     tab.type = 'button';
     tab.setAttribute('role', 'tab');
     tab.dataset.tabId = item.id;
     tab.setAttribute('aria-selected', item.id === activeId ? 'true' : 'false');
+    if (item.icon) {
+      const icon = el('span', 'ax-tabs__icon');
+      icon.append(item.icon);
+      tab.append(icon);
+    }
+    tab.append(el('span', 'ax-tabs__label', item.label));
+    if (item.count !== undefined) {
+      tab.append(el('span', 'ax-tabs__count', String(item.count)));
+    }
     tab.addEventListener('click', () => {
       select(item.id);
     });
@@ -174,14 +187,27 @@ export interface ChipOptions {
   /** Called after the aria-pressed state flips. */
   onToggle?: (value: string, pressed: boolean) => void;
   className?: string;
+  /** Optional icon rendered before the label. */
+  icon?: Node;
+  /** Optional count pill rendered after the label. */
+  count?: string | number;
 }
 
 export function chip(options: ChipOptions): HTMLButtonElement {
-  const node = el('button', 'ax-chip', options.label);
+  const node = el('button', 'ax-chip');
   node.type = 'button';
   node.dataset.value = options.value;
   node.setAttribute('aria-pressed', options.pressed ? 'true' : 'false');
   if (options.className) node.classList.add(options.className);
+  if (options.icon) {
+    const icon = el('span', 'ax-chip__icon');
+    icon.append(options.icon);
+    node.append(icon);
+  }
+  node.append(el('span', 'ax-chip__label', options.label));
+  if (options.count !== undefined) {
+    node.append(el('span', 'ax-chip__count', String(options.count)));
+  }
   node.addEventListener('click', () => {
     const pressed = node.getAttribute('aria-pressed') !== 'true';
     node.setAttribute('aria-pressed', pressed ? 'true' : 'false');

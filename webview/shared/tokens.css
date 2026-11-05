@@ -24,6 +24,38 @@
   --axis-down:  var(--vscode-errorForeground, var(--vscode-charts-red, #f07178));
   --axis-warn:  var(--vscode-editorWarning-foreground, var(--vscode-charts-yellow, #e8b84a));
   --axis-info:  var(--vscode-charts-blue, var(--vscode-textLink-foreground, #6ee7f5));
+  /* Buttons */
+  --axis-btn-bg:               var(--vscode-button-background, #0e639c);
+  --axis-btn-fg:               var(--vscode-button-foreground, #ffffff);
+  --axis-btn-hover-bg:         var(--vscode-button-hoverBackground, #1177bb);
+  --axis-btn-secondary-bg:     var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
+  --axis-btn-secondary-fg:     var(--vscode-button-secondaryForeground, var(--axis-text));
+  --axis-btn-secondary-hover-bg: var(--vscode-button-secondaryHoverBackground, var(--axis-bg-hover));
+  /* Inputs */
+  --axis-input-bg:          var(--vscode-input-background, var(--axis-bg-elev));
+  --axis-input-fg:          var(--vscode-input-foreground, var(--axis-text));
+  --axis-input-border:      var(--vscode-input-border, var(--axis-border));
+  --axis-input-placeholder: var(--vscode-input-placeholderForeground, var(--axis-dim));
+  /* Badges + pills + counts */
+  --axis-badge-bg: var(--vscode-badge-background, #616161);
+  --axis-badge-fg: var(--vscode-badge-foreground, #ffffff);
+  /* Links / text-link actions */
+  --axis-link: var(--vscode-textLink-foreground, var(--axis-accent));
+  /* Scrollbars */
+  --axis-scroll-thumb:       var(--vscode-scrollbarSlider-background, var(--axis-border));
+  --axis-scroll-thumb-hover: var(--vscode-scrollbarSlider-hoverBackground, var(--axis-border));
+  /* Focus — thin accent ring only, never an outer halo */
+  --axis-focus-outline: var(--vscode-focusBorder, var(--axis-accent));
+  --axis-focus-ring: 0 0 0 1px color-mix(in oklch, var(--axis-accent) 40%, transparent);
+  /* High-contrast */
+  --axis-contrast-border:       var(--vscode-contrastBorder, var(--axis-accent));
+  --axis-contrast-active-border: var(--vscode-contrastActiveBorder, var(--axis-accent));
+  /* Elevation */
+  --axis-shadow-panel: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.48));
+  /* Swatch raw-literal hatching */
+  --axis-swatch-raw: var(--vscode-descriptionForeground, #888888);
+  /* Chip high-contrast border (normal themes stay transparent) */
+  --axis-chip-border: var(--vscode-contrastBorder, transparent);
   /* Typography — figures stay sans + tabular-nums; codes/HUD/timestamps mono */
   --axis-font:      var(--vscode-font-family, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif);
   --axis-font-mono: var(--vscode-editor-font-family, var(--vscode-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace));
@@ -44,8 +76,6 @@
   --axis-row-h: 22px;
   --axis-capsule-h: 18px;
   --axis-bar-h: 4px;
-  /* Focus — thin accent ring only, never an outer halo */
-  --axis-focus-ring: 0 0 0 1px color-mix(in oklch, var(--axis-accent) 40%, transparent);
   /* Motion */
   --axis-dur-fast: 120ms;
   --axis-dur-base: 200ms;
