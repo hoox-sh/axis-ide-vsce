@@ -23,8 +23,10 @@
  * Pine Script™ and TradingView® are trademarks of TradingView, Inc.
  */
 
+import { existsSync } from 'node:fs';
 import {
   type CancellationToken,
+  ColorThemeKind,
   type DiagnosticCollection,
   type ExtensionContext,
   type OutputChannel,
@@ -33,11 +35,14 @@ import {
   DiagnosticSeverity,
   Position,
   Range,
+  Selection,
   StatusBarAlignment,
   type StatusBarItem,
+  TextEditorRevealType,
   Uri,
   ViewColumn,
   commands,
+  env,
   extensions,
   languages,
   window,
@@ -73,8 +78,10 @@ import { setLogSink } from './host/logger';
 import { parseRunOnSave, type RunOnSaveMode } from './host/run-on-save';
 import {
   DEFAULT_ENGINE_ENDPOINT,
+  ProfilerStore,
   ResultsFocusStore,
   RunOrchestrator,
+  attachProfiler,
   checkEngineEndpoint,
   notifyChart,
   resolveRunContext,
@@ -112,13 +119,22 @@ import { registerLayersStudio } from './views/layers-panel';
 import { registerLibraryStudio } from './views/library-panel';
 import { registerInlineDebugDecorations } from './host/inline-debug-decorations';
 import { registerProfilerDecorations } from './host/profiler-decorations';
-import { registerColorsPanel } from './views/colors-panel';
-import { registerLogsPanel } from './views/logs-panel';
-import { registerProfilerView } from './views/profiler';
-import { registerSymbolsPanel } from './views/symbols-panel';
-import { RESULTS_VIEW_ID, registerResultsView } from './views/results';
-import { registerStrategyView } from './views/strategy';
-import type { ResultsWebviewViewProvider } from './views/results-panel';
+import {
+  RUN_OUTPUT_VIEW_ID,
+  buildRunOutputData,
+} from './views/run-output-messages';
+import { registerRunOutput, type RunOutputHostSurfaces } from './views/run-output-studio';
+import type { StudioViewProvider } from './views/studio-provider';
+import {
+  TOOLBOX_STUDIO_VIEW_ID,
+  buildToolboxStudioRegistration,
+  defaultToolboxRestore,
+  registerToolbox,
+  toolboxInsertPositions,
+  type ToolboxInsertTextEditorLike,
+  type ToolboxInsertPositionLike,
+  type ToolboxInsertSelectionLike,
+} from './views/toolbox-studio';
 import { registerScriptsStudio } from './views/scripts-panel';
 import { WATCHLIST_COMMANDS, registerWatchlist } from './views/watchlist';
 import { registerWatchlistStudio } from './views/watchlist-panel';
@@ -158,8 +174,9 @@ let secrets: AxisSecretStorage | undefined;
 let runDiagnostics: DiagnosticCollection | undefined;
 let orchestrator: RunOrchestrator | undefined;
 let resultsStore: ResultsFocusStore | undefined;
-let resultsProvider: ResultsWebviewViewProvider | undefined;
-let strategyProvider: ResultsWebviewViewProvider | undefined;
+let profilerStore: ProfilerStore | undefined;
+let runOutputProvider: StudioViewProvider | undefined;
+let toolboxProvider: StudioViewProvider | undefined;
 let liveBridge: LiveSessionBridge | undefined;
 /** Aborts the previous command-level run when a new one starts. */
 let commandAbort: AbortController | undefined;
@@ -167,6 +184,110 @@ let commandAbort: AbortController | undefined;
 let deactivated = false;
 /** workspaceState helpers for active plugin engine id (run path). */
 let pluginWorkspace: WorkspaceStateHelpers | undefined;
+
+function createStudioDeps(context: ExtensionContext): import('./views/studio-provider').StudioProviderDeps {
+  return {
+    extensionUri: context.extensionUri,
+    joinPath: (base, ...parts) => Uri.joinPath(base as Uri, ...parts),
+    fsPath: (uri) => (uri as Uri).fsPath,
+    assetExists: (path) => existsSync(path),
+    themeBodyClass: () => {
+      try {
+        switch (window.activeColorTheme.kind) {
+          case ColorThemeKind.Light:
+          case ColorThemeKind.HighContrastLight:
+            return 'vscode-light';
+          case ColorThemeKind.HighContrast:
+            return 'vscode-high-contrast';
+          default:
+            return 'vscode-dark';
+        }
+      } catch {
+        return 'vscode-dark';
+      }
+    },
+  };
+}
+
+function createStudioHost(): import('./views/studio-provider').StudioViewHost {
+  return {
+    registerWebviewViewProvider: (id, provider, options) =>
+      window.registerWebviewViewProvider(id, provider, options),
+  };
+}
+
+function revealActivePineLine(line: number): void {
+  try {
+    if (!Number.isInteger(line) || line < 1) return;
+    const editor = window.activeTextEditor;
+    const doc = editor?.document;
+    if (!editor || !doc || doc.languageId !== PINE_LANGUAGE_ID) {
+      void window.showInformationMessage('Open a Pine/PYNE editor to reveal this line.');
+      return;
+    }
+    const index = Math.min(line, doc.lineCount) - 1;
+    const pos = new Position(index, 0);
+    editor.selection = new Selection(pos, pos);
+    editor.revealRange(new Range(pos, pos), TextEditorRevealType.InCenter);
+  } catch {
+    // host unavailable
+  }
+}
+
+function runOutputSurfaces(): RunOutputHostSurfaces {
+  return {
+    copyText: (text) => {
+      void env.clipboard.writeText(text);
+    },
+    focusRun: (runId) => {
+      resultsStore?.focusResults(runId);
+    },
+    revealProfilerLine: (line) => revealActivePineLine(line),
+    revealLogLine: (line) => revealActivePineLine(line),
+    copyLogText: (text) => {
+      void env.clipboard.writeText(text);
+    },
+  };
+}
+
+function insertSymbolTextAtCursor(text: string): void {
+  try {
+    const editor = window.activeTextEditor;
+    if (!editor) {
+      void window.showInformationMessage('Open a Pine/PYNE editor to insert a symbol.');
+      return;
+    }
+    const positions = toolboxInsertPositions<ToolboxInsertPositionLike>(editor);
+    if (positions.length === 0) {
+      void window.showInformationMessage('No valid cursor position to insert the symbol.');
+      return;
+    }
+    void editor.edit((builder) => {
+      for (const at of positions) builder.insert(at as Position, text);
+    });
+  } catch {
+    void window.showInformationMessage('Could not insert symbol.');
+  }
+}
+
+function createToolboxDeps(
+  refreshCallbacks: Array<() => void>,
+): import('./views/toolbox-studio').ToolboxPanelDeps {
+  return {
+    revealColorLine: (line) => revealActivePineLine(line),
+    copyColorText: (text) => {
+      void env.clipboard.writeText(text);
+    },
+    refreshColors: () => {
+      for (const cb of refreshCallbacks) cb();
+    },
+    insertSymbolText: (text) => insertSymbolTextAtCursor(text),
+    copySymbolText: (text) => {
+      void env.clipboard.writeText(text);
+    },
+    restore: () => defaultToolboxRestore(window.activeTextEditor),
+  };
+}
 
 function readRunOnSaveMode(): RunOnSaveMode {
   try {
@@ -720,18 +841,14 @@ async function promptAndClearSecrets(): Promise<string | undefined> {
 }
 
 /**
- * Open or create a sibling `*.axis.json` beside the active Pine buffer so
- * `axis.chart` resolves. Existing siblings are not rewritten. Returns the chart
- * URI string or an error message. Never awaits UI dismissal (tests/CI).
- */
-/**
- * Focus the Results panel (§7.1). Optional `runId` retargets `resultsFocusId`
- * and posts `results.set`. Shows the Results WebviewView when possible.
+ * Focus the Run Output panel and force the Summary tab. Optional `runId`
+ * retargets `resultsFocusId` before revealing. Consolidation-era replacement for
+ * separate Results + Strategy reveals (Phase 3, §7.1).
  */
 async function focusResultsCommand(runId?: string): Promise<string | undefined> {
   if (deactivated) return undefined;
   try {
-    if (!resultsStore) {
+    if (!resultsStore || !profilerStore) {
       const err = 'AXIS: Focus Results is not ready (activate incomplete).';
       void window.showErrorMessage(err);
       return err;
@@ -739,13 +856,16 @@ async function focusResultsCommand(runId?: string): Promise<string | undefined> 
     if (typeof runId === 'string' && runId.trim()) {
       resultsStore.focusResults(runId.trim());
     }
-    // Reveal contributed view — VS Code registers `{viewId}.focus`.
     try {
-      await commands.executeCommand(`${RESULTS_VIEW_ID}.focus`);
+      await commands.executeCommand(`${RUN_OUTPUT_VIEW_ID}.focus`);
     } catch {
-      resultsProvider?.reveal();
+      runOutputProvider?.reveal();
     }
-    strategyProvider?.reveal();
+    // Force the Summary tab by posting the current data with `activeTab: 'summary'`.
+    runOutputProvider?.postStudioSet({
+      ...buildRunOutputData(resultsStore.getResultsSetPayload(), profilerStore.getSnapshot()),
+      activeTab: 'summary',
+    });
     const focusId = resultsStore.getResultsFocusId();
     return focusId ?? 'ok';
   } catch (e) {
@@ -846,14 +966,47 @@ export function activate(context: ExtensionContext): void {
   secrets = new AxisSecretStorage(context.secrets);
   orchestrator = new RunOrchestrator();
   resultsStore = new ResultsFocusStore();
-  resultsProvider = registerResultsView(context, resultsStore);
-  strategyProvider = registerStrategyView(context, resultsStore);
-  registerProfilerView(context, resultsStore);
+  profilerStore = new ProfilerStore();
+  const detachProfiler = attachProfiler(resultsStore, profilerStore);
+  context.subscriptions.push({ dispose: detachProfiler });
   registerProfilerDecorations(context, resultsStore);
   registerInlineDebugDecorations(context, resultsStore);
-  registerColorsPanel(context);
-  registerSymbolsPanel(context);
-  registerLogsPanel(context, resultsStore);
+
+  const studioDeps = createStudioDeps(context);
+  const studioHost = createStudioHost();
+
+  runOutputProvider = registerRunOutput(
+    context,
+    studioDeps,
+    studioHost,
+    resultsStore,
+    runOutputSurfaces(),
+    profilerStore,
+  );
+
+  const toolboxRefreshCallbacks: Array<() => void> = [];
+  const toolboxDeps = createToolboxDeps(toolboxRefreshCallbacks);
+  toolboxProvider = registerToolbox(
+    buildToolboxStudioRegistration(toolboxDeps),
+    studioDeps,
+    studioHost,
+    context,
+  );
+  toolboxRefreshCallbacks.push(() => {
+    toolboxProvider?.postStudioSet(defaultToolboxRestore(window.activeTextEditor));
+  });
+
+  // Refresh the Colors tab when the active editor or its document changes.
+  context.subscriptions.push(
+    window.onDidChangeActiveTextEditor(() => {
+      toolboxDeps.refreshColors();
+    }),
+    workspace.onDidChangeTextDocument((event) => {
+      if (event.document === window.activeTextEditor?.document) {
+        toolboxDeps.refreshColors();
+      }
+    }),
+  );
   registerLibraryStudio(context);
   registerLayersStudio(context);
   registerScriptsStudio(context, resultsStore);
@@ -1040,6 +1193,7 @@ export function deactivate(): void {
   runDiagnostics = undefined;
   orchestrator = undefined;
   resultsStore = undefined;
-  resultsProvider = undefined;
-  strategyProvider = undefined;
+  profilerStore = undefined;
+  runOutputProvider = undefined;
+  toolboxProvider = undefined;
 }
