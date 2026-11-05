@@ -1,0 +1,138 @@
+/* Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Run Output studio — layout and local rules. The shared base (tokens,
+ * theme reset + focus-visible + scrollbars, ax-* components) is imported
+ * by main.ts ahead of this file via the `@axis-shared` alias.
+ */
+
+
+#runoutput-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: var(--axis-gap);
+  background: var(--axis-bg);
+  color: var(--axis-text);
+}
+
+.runoutput-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--axis-gap);
+  margin: 0 0 var(--axis-gap);
+  min-width: 0;
+}
+
+.runoutput-tabs {
+  flex: 0 0 auto;
+  margin: 0 0 var(--axis-gap);
+}
+
+.runoutput-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.runoutput-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--axis-gap);
+  min-height: 0;
+}
+
+.runoutput-button {
+  flex: none;
+  margin: 0;
+  padding: 1px 8px;
+  min-height: 18px;
+  border: 1px solid var(--vscode-panel-border, transparent);
+  border-radius: var(--axis-radius-chip);
+  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
+  color: var(--vscode-button-secondaryForeground, var(--axis-text));
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.runoutput-button:hover {
+  background: var(--vscode-button-hoverBackground, var(--axis-bg-hover));
+}
+
+.runoutput-focusline {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--axis-dim);
+  font-size: 11px;
+  font-family: var(--axis-font-mono);
+}
+
+.runoutput-key {
+  flex: none;
+  color: var(--axis-dim);
+  font-size: 11px;
+  min-width: 6em;
+}
+
+.runoutput-value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--axis-font-mono);
+  font-size: 12px;
+}
+
+.runoutput-value--error {
+  color: var(--axis-down);
+  white-space: pre-wrap;
+}
+
+.runoutput-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--axis-gap-xs);
+}
+
+.runoutput-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--axis-gap);
+}
+
+.runoutput-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.runoutput-section-title {
+  margin: var(--axis-gap-xs) 0 0;
+  font-size: var(--axis-label);
+  font-weight: var(--axis-label-weight);
+  letter-spacing: var(--axis-label-tracking);
+  text-transform: uppercase;
+  color: var(--axis-dim);
+}
+
+.runoutput-json {
+  margin: 0;
+  padding: var(--axis-gap);
+  overflow: auto;
+  white-space: pre-wrap;
+  font-family: var(--axis-font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--axis-bg-elev);
+  border: var(--axis-border-w) solid var(--axis-border);
+  border-radius: var(--axis-radius-panel);
+  color: var(--axis-text);
+}
