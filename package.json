@@ -50,12 +50,8 @@
   ],
   "activationEvents": [
     "onCustomEditor:axis.chart",
-    "onView:axis.results",
-    "onView:axis.strategy",
-    "onView:axis.profiler",
-    "onView:axis.colors",
-    "onView:axis.symbols",
-    "onView:axis.logs",
+    "onView:axis.runOutput",
+    "onView:axis.toolbox",
     "onView:axis.library",
     "onView:axis.layers",
     "onView:axis.indicators",
@@ -163,44 +159,16 @@
       "axis-panel": [
         {
           "type": "webview",
-          "id": "axis.results",
-          "name": "Results",
+          "id": "axis.runOutput",
+          "name": "Run Output",
           "icon": "media/views/results.svg",
           "retainContextWhenHidden": false
         },
         {
           "type": "webview",
-          "id": "axis.strategy",
-          "name": "Strategy",
-          "icon": "media/views/strategy.svg",
-          "retainContextWhenHidden": false
-        },
-        {
-          "type": "webview",
-          "id": "axis.profiler",
-          "name": "Profiler",
-          "icon": "media/views/profiler.svg",
-          "retainContextWhenHidden": false
-        },
-        {
-          "type": "webview",
-          "id": "axis.colors",
-          "name": "Colors",
+          "id": "axis.toolbox",
+          "name": "Toolbox",
           "icon": "media/views/colors.svg",
-          "retainContextWhenHidden": false
-        },
-        {
-          "type": "webview",
-          "id": "axis.symbols",
-          "name": "Symbols",
-          "icon": "media/views/symbols.svg",
-          "retainContextWhenHidden": false
-        },
-        {
-          "type": "webview",
-          "id": "axis.logs",
-          "name": "Logs",
-          "icon": "media/views/logs.svg",
           "retainContextWhenHidden": false
         }
       ]
@@ -438,7 +406,7 @@
         },
         {
           "command": "axis.focusResults",
-          "when": "view == axis.results || view == axis.strategy",
+          "when": "view == axis.runOutput",
           "group": "navigation"
         }
       ],
@@ -695,21 +663,18 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile:webview:chart": "vite build --config webview/chart/vite.config.ts",
-    "compile:webview:results": "vite build --config webview/results/vite.config.ts",
+    "compile:webview:runoutput": "vite build --config webview/runoutput/vite.config.ts",
+    "compile:webview:toolbox": "vite build --config webview/toolbox/vite.config.ts",
     "compile:webview:plugins": "vite build --config webview/plugins/vite.config.ts",
-    "compile:webview:profiler": "vite build --config webview/profiler/vite.config.ts",
     "compile:webview:library": "vite build --config webview/library/vite.config.ts",
     "compile:webview:layers": "vite build --config webview/layers/vite.config.ts",
     "compile:webview:scripts": "vite build --config webview/scripts/vite.config.ts",
     "compile:webview:watchlist": "vite build --config webview/watchlist/vite.config.ts",
     "compile:webview:alerts": "vite build --config webview/alerts/vite.config.ts",
     "compile:webview:workers": "vite build --config webview/workers/vite.config.ts",
-    "compile:webview:colors": "vite build --config webview/colors/vite.config.ts",
-    "compile:webview:symbols": "vite build --config webview/symbols/vite.config.ts",
-    "compile:webview:logs": "vite build --config webview/logs/vite.config.ts",
-    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:results && npm run compile:webview:plugins && npm run compile:webview:profiler && npm run compile:webview:library && npm run compile:webview:layers && npm run compile:webview:scripts && npm run compile:webview:watchlist && npm run compile:webview:alerts && npm run compile:webview:workers && npm run compile:webview:colors && npm run compile:webview:symbols && npm run compile:webview:logs",
+    "compile:webview": "npm run compile:webview:chart && npm run compile:webview:runoutput && npm run compile:webview:toolbox && npm run compile:webview:plugins && npm run compile:webview:library && npm run compile:webview:layers && npm run compile:webview:scripts && npm run compile:webview:watchlist && npm run compile:webview:alerts && npm run compile:webview:workers",
     "compile": "node esbuild.host.mjs && npm run compile:webview",
-    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/results/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/profiler/tsconfig.json --noEmit && tsc -p webview/library/tsconfig.json --noEmit && tsc -p webview/layers/tsconfig.json --noEmit && tsc -p webview/scripts/tsconfig.json --noEmit && tsc -p webview/watchlist/tsconfig.json --noEmit && tsc -p webview/alerts/tsconfig.json --noEmit && tsc -p webview/workers/tsconfig.json --noEmit && tsc -p webview/colors/tsconfig.json --noEmit && tsc -p webview/symbols/tsconfig.json --noEmit && tsc -p webview/logs/tsconfig.json --noEmit",
+    "check": "tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit && tsc -p webview/runoutput/tsconfig.json --noEmit && tsc -p webview/toolbox/tsconfig.json --noEmit && tsc -p webview/plugins/tsconfig.json --noEmit && tsc -p webview/library/tsconfig.json --noEmit && tsc -p webview/layers/tsconfig.json --noEmit && tsc -p webview/scripts/tsconfig.json --noEmit && tsc -p webview/watchlist/tsconfig.json --noEmit && tsc -p webview/alerts/tsconfig.json --noEmit && tsc -p webview/workers/tsconfig.json --noEmit",
     "watch": "node esbuild.host.mjs --watch",
     "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
     "watch:all": "npm run watch & npm run watch:webview",

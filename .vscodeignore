@@ -43,18 +43,18 @@ dist/webview/**
 dist/webview/chart/**
 !dist/webview/chart/main.js
 !dist/webview/chart/main.css
-!dist/webview/results/
-dist/webview/results/**
-!dist/webview/results/main.js
-!dist/webview/results/main.css
+!dist/webview/runoutput/
+dist/webview/runoutput/**
+!dist/webview/runoutput/main.js
+!dist/webview/runoutput/main.css
+!dist/webview/toolbox/
+dist/webview/toolbox/**
+!dist/webview/toolbox/main.js
+!dist/webview/toolbox/main.css
 !dist/webview/plugins/
 dist/webview/plugins/**
 !dist/webview/plugins/main.js
 !dist/webview/plugins/main.css
-!dist/webview/profiler/
-dist/webview/profiler/**
-!dist/webview/profiler/main.js
-!dist/webview/profiler/main.css
 !dist/webview/library/
 dist/webview/library/**
 !dist/webview/library/main.js
@@ -79,18 +79,7 @@ dist/webview/alerts/**
 dist/webview/workers/**
 !dist/webview/workers/main.js
 !dist/webview/workers/main.css
-!dist/webview/colors/
-dist/webview/colors/**
-!dist/webview/colors/main.js
-!dist/webview/colors/main.css
-!dist/webview/symbols/
-dist/webview/symbols/**
-!dist/webview/symbols/main.js
-!dist/webview/symbols/main.css
-!dist/webview/logs/
-dist/webview/logs/**
-!dist/webview/logs/main.js
-!dist/webview/logs/main.css
+
 
 # Repo-only (standalone layout) — never ship these in the extension VSIX.
 .github/**
