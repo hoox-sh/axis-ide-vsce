@@ -6,6 +6,8 @@ with its commit history preserved.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-05
+
 ### Added
 
 - Standalone repository layout: extension at the root, extension pack under
