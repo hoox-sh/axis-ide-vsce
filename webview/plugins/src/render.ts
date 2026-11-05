@@ -17,10 +17,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Semantic HTML for the Plugins studio (VS Code tokens live in style.css).
+ * Plugins studio rendering.
+ *
+ * The new DOM builder (used by main.ts) renders everything with the shared
+ * ax-* components. The legacy `pluginsViewHtml` string renderer is kept for the
+ * host test suite, which asserts against its markup shape.
  */
 
+import { panel, header, row, chip, statusDot, empty } from '@axis-shared/components';
+import { RESTORE_FOCUS_ATTR } from '@axis-shared/dom';
 import {
+  KIND_TABS,
   extraFacts,
   EMPTY_KIND_COPY,
   activeChips,
@@ -32,16 +39,14 @@ import {
   isPluginActive,
   KIND_LABELS,
   KIND_MARKS,
-  KIND_TABS,
   kindRole,
   kindsToRender,
   pluginBadges,
   visiblePluginsForKind,
-  type ActiveChip,
   type PluginBadge,
   type PluginsViewState,
 } from './state';
-import type { KindTab, PluginCard, PluginKind } from './protocol';
+import { isKindTab, type KindTab, type PluginCard, type PluginKind, type PluginsFlags } from './protocol';
 
 /** 16×16 geometric kind marks (inline; `currentColor` follows VS Code tokens). */
 const KIND_ICON_INNER: Record<PluginKind, string> = {
@@ -66,6 +71,223 @@ export function kindIconSvg(kind: PluginKind): string {
   if (!inner) return '';
   return `<svg class="plugins-kind-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false" data-kind-icon="${kind}">${inner}</svg>`;
 }
+
+export function kindIconNode(kind: PluginKind): SVGElement {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  svg.setAttribute('data-kind-icon', kind);
+  svg.classList.add('plugin-card__icon');
+  svg.innerHTML = KIND_ICON_INNER[kind] ?? '';
+  return svg;
+}
+
+function h<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function badgeNode(badge: PluginBadge): HTMLElement {
+  if (badge.tone === 'warn') {
+    return statusDot({ label: badge.text, state: 'warn' });
+  }
+  return chip({ label: badge.text, value: badge.text, pressed: false });
+}
+
+function cardHeader(card: PluginCard, active: boolean, nameId: string): HTMLElement {
+  const node = h('div', 'plugin-card__head');
+  const icon = kindIconNode(card.kind);
+  const name = h('h3', 'plugin-card__name', card.name);
+  name.id = nameId;
+  const code = h('code', 'plugin-card__id', card.id);
+  code.title = card.id;
+  node.append(icon, name, code);
+  if (active) {
+    node.append(statusDot({ label: 'Active', state: 'ok' }));
+  }
+  return node;
+}
+
+function cardBadges(
+  card: PluginCard,
+  active: Record<string, string | undefined>,
+  flags: PluginsFlags,
+): HTMLElement | null {
+  const badges = pluginBadges(card, active, flags).filter((b) => b.text !== 'Active');
+  if (badges.length === 0) return null;
+  const node = h('div', 'plugin-card__badges');
+  for (const badge of badges) {
+    node.append(badgeNode(badge));
+  }
+  return node;
+}
+
+function cardFacts(card: PluginCard): HTMLElement | null {
+  const facts = extraFacts(card.extra);
+  if (facts.length === 0) return null;
+  const list = h('dl', 'plugin-card__facts');
+  for (const fact of facts) {
+    list.append(
+      row({
+        className: 'plugin-card__fact',
+        children: [h('dt', 'plugin-card__fact-key', fact.key), h('dd', 'plugin-card__fact-value', fact.value)],
+      }),
+    );
+  }
+  return list;
+}
+
+function cardActions(card: PluginCard, active: boolean): HTMLElement {
+  const node = h('div', 'plugin-card__actions');
+
+  const copyBtn = h('button', 'plugin-card__copy', 'Copy id');
+  copyBtn.type = 'button';
+  copyBtn.title = 'Copy id';
+  copyBtn.setAttribute('aria-label', `Copy id ${card.id}`);
+  copyBtn.dataset.action = 'copy-id';
+  copyBtn.dataset.kind = card.kind;
+  copyBtn.dataset.id = card.id;
+
+  const activateBtn = h('button', 'plugin-card__activate', active ? 'Active' : 'Activate');
+  activateBtn.type = 'button';
+  activateBtn.title = active ? 'Already active' : 'Activate';
+  activateBtn.disabled = active;
+  activateBtn.dataset.action = 'activate';
+  activateBtn.dataset.kind = card.kind;
+  activateBtn.dataset.id = card.id;
+
+  node.append(copyBtn, activateBtn);
+  return node;
+}
+
+export function renderPluginCard(state: PluginsViewState, card: PluginCard): HTMLElement {
+  const active = isPluginActive(card, state.active);
+  const nameId = `plugin-${card.kind}-${card.id}`.replace(/[^a-zA-Z0-9_-]/g, '-');
+  const cardEl = panel({ className: 'plugin-card' });
+
+  cardEl.tabIndex = 0;
+  cardEl.setAttribute('role', 'article');
+  cardEl.setAttribute('aria-labelledby', nameId);
+  cardEl.dataset.kind = card.kind;
+  cardEl.dataset.id = card.id;
+  cardEl.setAttribute(RESTORE_FOCUS_ATTR, `${card.kind}:${card.id}`);
+  if (active) {
+    cardEl.classList.add('is-active');
+  }
+
+  cardEl.append(cardHeader(card, active, nameId));
+
+  const badges = cardBadges(card, state.active, state.flags);
+  if (badges) cardEl.append(badges);
+
+  const description = card.description?.trim();
+  if (description) {
+    cardEl.append(h('p', 'plugin-card__desc', description));
+  }
+
+  const facts = cardFacts(card);
+  if (facts) cardEl.append(facts);
+
+  cardEl.append(cardActions(card, active));
+  return cardEl;
+}
+
+function renderSection(state: PluginsViewState, kind: PluginKind): HTMLElement {
+  const cards = visiblePluginsForKind(state, kind);
+
+  const section = h('section', 'plugins-section');
+  section.setAttribute('aria-labelledby', `kind-${kind}-title`);
+
+  const titleId = `kind-${kind}-title`;
+  const head = header({ title: KIND_LABELS[kind], count: cards.length });
+  const titleEl = head.querySelector('.ax-header__title');
+  if (titleEl) titleEl.id = titleId;
+  section.append(head);
+
+  section.append(h('p', 'plugins-section__role', kindRole(kind, cards)));
+
+  if (cards.length === 0) {
+    const searching = state.query.trim().length > 0;
+    const hint = searching ? emptyFilterMessage(state.query) : EMPTY_KIND_COPY[kind];
+    section.append(empty({ hint, className: 'plugins-empty' }));
+  } else {
+    const grid = h('div', 'plugins-cards');
+    for (const card of cards) {
+      grid.append(renderPluginCard(state, card));
+    }
+    section.append(grid);
+  }
+
+  return section;
+}
+
+export function renderPluginsBody(state: PluginsViewState): HTMLElement {
+  const node = h('div');
+  node.setAttribute('role', 'tabpanel');
+
+  if (!state.ready && state.plugins.length === 0) {
+    node.append(empty({ hint: 'Waiting for host catalog…', className: 'plugins-empty' }));
+    return node;
+  }
+
+  const kinds = kindsToRender(state.tab);
+  for (const kind of kinds) {
+    node.append(renderSection(state, kind));
+  }
+
+  const query = state.query.trim();
+  if (query.length > 0 && state.plugins.length > 0 && state.tab === 'all') {
+    const anyVisible = kinds.some((k) => visiblePluginsForKind(state, k).length > 0);
+    if (!anyVisible) {
+      node.replaceChildren(empty({ hint: emptyFilterMessage(query), className: 'plugins-empty plugins-empty--filter' }));
+    }
+  }
+
+  return node;
+}
+
+export function renderActiveChips(
+  state: PluginsViewState,
+  onChipClick: (tab: KindTab) => void,
+): HTMLElement {
+  const chips = activeChips(state.active);
+  if (chips.length === 0) {
+    return h('p', 'plugins-status', formatActiveStatus(state.active));
+  }
+
+  const node = h('div', 'plugins-chips');
+  node.setAttribute('role', 'list');
+  node.setAttribute('aria-label', formatActiveStatus(state.active));
+  for (const c of chips) {
+    const btn = chip({
+      label: c.id,
+      value: c.tab,
+      icon: kindIconNode(c.kind),
+      onToggle: (tab) => {
+        if (isKindTab(tab)) onChipClick(tab);
+      },
+    });
+    btn.title = `${KIND_LABELS[c.tab]}: ${c.id}`;
+    btn.setAttribute('aria-label', `Show ${KIND_LABELS[c.tab]}, ${c.id}`);
+    btn.dataset.role = 'chip';
+    btn.dataset.tab = c.tab;
+    node.append(btn);
+  }
+  return node;
+}
+
+// ---------------------------------------------------------------------------
+// Legacy string renderer — kept for host test assertions.
+// ---------------------------------------------------------------------------
 
 export function escapeHtml(value: string): string {
   return String(value ?? '')
@@ -169,9 +391,9 @@ function tabsHtml(tab: PluginsViewState['tab']): string {
   return `<div class="plugins-tabs" role="tablist" aria-label="Plugin kinds">${buttons}</div>`;
 }
 
-function chipHtml(chip: ActiveChip): string {
-  const label = KIND_LABELS[chip.tab];
-  return `<button type="button" role="listitem" id="chip-${chip.kind}" class="plugins-chip" data-tab="${chip.tab}" data-chip="1" title="${escapeHtml(label)}: ${escapeHtml(chip.id)}" aria-label="Show ${escapeHtml(label)}, ${escapeHtml(chip.id)}"><span class="plugins-chip__mark" aria-hidden="true">${escapeHtml(chip.chip)}</span><span class="plugins-chip__id">${escapeHtml(chip.id)}</span></button>`;
+function chipHtml(chipItem: { tab: PluginKind; chip: string; id: string; kind: PluginKind }): string {
+  const label = KIND_LABELS[chipItem.tab];
+  return `<button type="button" role="listitem" id="chip-${chipItem.kind}" class="plugins-chip" data-tab="${chipItem.tab}" data-chip="1" title="${escapeHtml(label)}: ${escapeHtml(chipItem.id)}" aria-label="Show ${escapeHtml(label)}, ${escapeHtml(chipItem.id)}"><span class="plugins-chip__mark" aria-hidden="true">${escapeHtml(chipItem.chip)}</span><span class="plugins-chip__id">${escapeHtml(chipItem.id)}</span></button>`;
 }
 
 function chipsHtml(state: PluginsViewState): string {
@@ -230,54 +452,4 @@ export function pluginsViewHtml(state: PluginsViewState): string {
 </div>`;
 }
 
-export function renderPluginsView(root: HTMLElement, state: PluginsViewState): void {
-  const active = document.activeElement;
-  const inRoot = active instanceof HTMLElement && root.contains(active);
-  const activeEl = inRoot && active instanceof HTMLElement ? active : null;
-  const searchEl = root.querySelector('#plugins-search');
-  const searchSel =
-    searchEl instanceof HTMLInputElement && activeEl === searchEl
-      ? { start: searchEl.selectionStart ?? 0, end: searchEl.selectionEnd ?? 0 }
-      : null;
-  const body = root.querySelector('#plugins-body');
-  const scrollTop = body instanceof HTMLElement ? body.scrollTop : 0;
-  const focusKey = activeEl
-    ? activeEl.id ||
-      `${activeEl.getAttribute('data-action') ?? ''}:${activeEl.getAttribute('data-kind') ?? ''}:${activeEl.getAttribute('data-id') ?? ''}:${activeEl.getAttribute('data-tab') ?? ''}`
-    : '';
 
-  root.innerHTML = pluginsViewHtml(state);
-
-  const nextBody = root.querySelector('#plugins-body');
-  if (nextBody instanceof HTMLElement) nextBody.scrollTop = scrollTop;
-
-  let next: Element | null = null;
-  if (searchSel) {
-    next = root.querySelector('#plugins-search');
-  } else if (focusKey && !focusKey.includes(':')) {
-    next = root.querySelector(`#${CSS.escape(focusKey)}`);
-  } else if (focusKey) {
-    const [action, kind, id, tab] = focusKey.split(':');
-    if (action === 'activate' && kind && id) {
-      next = root.querySelector(
-        `[data-action="activate"][data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
-      );
-    } else if (action === 'copy-id' && kind && id) {
-      next = root.querySelector(
-        `[data-action="copy-id"][data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
-      );
-    } else if (tab) {
-      next = root.querySelector(`.plugins-tabs__tab[data-tab="${CSS.escape(tab)}"]`);
-    }
-  }
-  if (next instanceof HTMLElement) {
-    next.focus();
-    if (searchSel && next instanceof HTMLInputElement) {
-      try {
-        next.setSelectionRange(searchSel.start, searchSel.end);
-      } catch {
-        // ignore
-      }
-    }
-  }
-}

@@ -17,17 +17,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * AXIS Watchlist studio on the shared runtime + studio.* protocol:
- * studio.ready → studio.init / studio.set carrying the snapshot.
- * Prices are whatever the host formatted. A "placeholder" badge means the
- * mock feed — this view never invents a live tick.
+ * AXIS Watchlist studio on the shared runtime + studio.* protocol.
+ *
+ * The webview builds its shell from shared `ax-*` components and diffs the
+ * incoming snapshot so only changed rows are touched. Row background flashes
+ * (`axis-wl-flash-up/down`) fire when a tick moves price up or down; the class
+ * is removed after one animation cycle and disabled under reduced motion.
  */
 
 import '@axis-shared/tokens.css';
 import '@axis-shared/theme.css';
+import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
-import { setHidden, setText } from '@axis-shared/dom';
+import { capsule, empty, header, panel, row, search } from '@axis-shared/components';
 import { createStudio } from '@axis-shared/studio';
 import {
   WATCHLIST_VIEW,
@@ -37,30 +40,53 @@ import {
   encodeWatchlistRemove,
   encodeWatchlistSelect,
   normalizeWatchlistSymbol,
+  snapshotFromPayload,
+  type WatchlistRowView,
   type WatchlistViewSnapshot,
 } from './protocol';
 
-// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
-// message subscription, safe posting, and disposal on pagehide.
 const studio = createStudio({ view: WATCHLIST_VIEW });
 
-function liveEl(): HTMLElement | null {
-  const el = document.getElementById('watchlist-live');
-  return el instanceof HTMLElement ? el : null;
+/** Last parsed numeric price per symbol, used to detect tick direction. */
+const prices = new Map<string, number>();
+
+/** Live DOM row references so snapshots can be diffed, not rebuilt. */
+const rowRefs = new Map<string, RowRef>();
+
+let countEl: HTMLElement | null = null;
+let selectedEl: HTMLElement | null = null;
+let priceEl: HTMLElement | null = null;
+let badgeEl: HTMLElement | null = null;
+let addInput: HTMLInputElement | null = null;
+let listEl: HTMLElement | null = null;
+let emptyEl: HTMLElement | null = null;
+let liveRegion: HTMLElement | null = null;
+
+interface RowRef {
+  li: HTMLElement;
+  check: Element;
+  main: HTMLElement;
+  price: HTMLElement;
 }
 
-function flash(text: string): void {
-  const el = liveEl();
-  if (!el) return;
-  el.textContent = '';
-  window.setTimeout(() => {
-    if (liveEl() === el) el.textContent = text;
-  }, 0);
+/* ------------------------------------------------------------------ *
+ * Price parsing — anything that is not a digit, dot, or minus sign is
+ * stripped before feeding to Number().
+ * ------------------------------------------------------------------ */
+
+function parsePrice(text: string): number | null {
+  const cleaned = text.replace(/[^0-9.-]/g, '');
+  if (cleaned === '' || cleaned === '-') return null;
+  const value = Number(cleaned);
+  return Number.isFinite(value) ? value : null;
 }
+
+/* ------------------------------------------------------------------ *
+ * Snapshot helpers.
+ * ------------------------------------------------------------------ */
 
 function countLabel(count: number): string {
-  if (count === 1) return '1 symbol';
-  return `${count} symbols`;
+  return count === 1 ? '1 symbol' : `${count} symbols`;
 }
 
 function selectedLabel(snap: WatchlistViewSnapshot): string {
@@ -68,6 +94,23 @@ function selectedLabel(snap: WatchlistViewSnapshot): string {
   if (snap.focusSymbol) return `Status bar follows ${snap.focusSymbol}`;
   return 'No symbol selected';
 }
+
+/* ------------------------------------------------------------------ *
+ * Announcer.
+ * ------------------------------------------------------------------ */
+
+function announce(text: string): void {
+  const el = liveRegion;
+  if (!el) return;
+  el.textContent = '';
+  window.requestAnimationFrame(() => {
+    if (liveRegion === el) el.textContent = text;
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Row contents.
+ * ------------------------------------------------------------------ */
 
 function checkSvg(): SVGElement {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -85,10 +128,10 @@ function checkSvg(): SVGElement {
 }
 
 function emptyCheck(): HTMLElement {
-  const slot = document.createElement('span');
-  slot.className = 'watchlist-check';
-  slot.setAttribute('aria-hidden', 'true');
-  return slot;
+  const span = document.createElement('span');
+  span.className = 'watchlist-check';
+  span.setAttribute('aria-hidden', 'true');
+  return span;
 }
 
 function actionButton(action: 'select' | 'remove', symbol: string, label: string): HTMLButtonElement {
@@ -102,53 +145,133 @@ function actionButton(action: 'select' | 'remove', symbol: string, label: string
   return button;
 }
 
-function renderRow(row: WatchlistViewSnapshot['rows'][number]): HTMLLIElement {
-  const li = document.createElement('li');
-  li.className = row.selected ? 'watchlist-row watchlist-row--selected' : 'watchlist-row';
-  if (row.selected) li.setAttribute('aria-current', 'true');
-  li.append(row.selected ? checkSvg() : emptyCheck());
-
+function createRow(item: WatchlistRowView): RowRef {
+  const check = item.selected ? checkSvg() : emptyCheck();
   const symbol = document.createElement('span');
   symbol.className = 'watchlist-symbol';
-  symbol.textContent = row.symbol;
-  li.append(symbol);
+  symbol.textContent = item.symbol;
 
   const price = document.createElement('span');
   price.className = 'watchlist-row__price';
-  price.textContent = row.priceText;
-  li.append(price);
+  price.textContent = item.priceText;
 
-  const actions = document.createElement('div');
-  actions.className = 'watchlist-row__actions';
-  actions.append(actionButton('select', row.symbol, 'Select'));
-  actions.append(actionButton('remove', row.symbol, 'Remove'));
-  li.append(actions);
-  return li;
+  const main = document.createElement('div');
+  main.className = 'watchlist-row__main';
+  main.append(symbol, price);
+
+  const li = row({
+    as: 'li',
+    active: item.selected,
+    className: 'watchlist-row',
+    children: [check, main],
+    actions: [actionButton('select', item.symbol, 'Select'), actionButton('remove', item.symbol, 'Remove')],
+  });
+  li.dataset.symbol = item.symbol;
+  if (item.selected) li.setAttribute('aria-current', 'true');
+  li.addEventListener('animationend', onFlashEnd);
+
+  return { li, check, main, price };
 }
 
-function applySnapshot(snap: WatchlistViewSnapshot): void {
-  setText('watchlist-count', countLabel(snap.count));
-  setText('watchlist-selected', selectedLabel(snap));
-  setText('watchlist-price', snap.focusPriceText || '—');
-  const badge = document.getElementById('watchlist-badge');
-  if (badge) {
-    badge.hidden = snap.placeholder !== true;
-    badge.textContent = 'placeholder';
+function updateCheck(ref: RowRef, selected: boolean): void {
+  const isCheck = ref.check instanceof SVGElement;
+  if (selected === isCheck) return;
+  ref.check.remove();
+  ref.check = selected ? checkSvg() : emptyCheck();
+  ref.li.insertBefore(ref.check, ref.main);
+}
+
+function onFlashEnd(event: AnimationEvent): void {
+  if (event.animationName !== 'axis-wl-flash-up' && event.animationName !== 'axis-wl-flash-down') return;
+  const target = event.currentTarget;
+  if (target instanceof HTMLElement) {
+    target.classList.remove('axis-wl-flash-up', 'axis-wl-flash-down');
   }
-  setHidden('watchlist-empty', snap.rows.length > 0);
-  const list = document.getElementById('watchlist-rows');
-  if (!list) return;
-  list.replaceChildren();
-  for (const row of snap.rows) list.append(renderRow(row));
 }
+
+function applyTickFlash(ref: RowRef, currentValue: number): void {
+  const symbol = ref.li.dataset.symbol;
+  if (!symbol) return;
+  const previousValue = prices.get(symbol);
+  if (previousValue == null || currentValue === previousValue) return;
+
+  const cls = currentValue > previousValue ? 'axis-wl-flash-up' : 'axis-wl-flash-down';
+  ref.li.classList.remove('axis-wl-flash-up', 'axis-wl-flash-down');
+  ref.li.classList.add(cls);
+}
+
+function updateRow(item: WatchlistRowView): void {
+  const ref = rowRefs.get(item.symbol);
+  if (!ref) return;
+
+  ref.li.classList.toggle('is-active', item.selected);
+  if (item.selected) {
+    ref.li.setAttribute('aria-current', 'true');
+  } else {
+    ref.li.removeAttribute('aria-current');
+  }
+  updateCheck(ref, item.selected);
+
+  const value = parsePrice(item.priceText);
+  if (ref.price.textContent !== item.priceText) {
+    ref.price.textContent = item.priceText;
+  }
+  if (value != null) {
+    applyTickFlash(ref, value);
+    prices.set(item.symbol, value);
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Snapshot render: diff rows so tick flashes and focus are preserved.
+ * ------------------------------------------------------------------ */
+
+function renderSnapshot(snap: WatchlistViewSnapshot): void {
+  if (countEl) countEl.textContent = countLabel(snap.count);
+  if (selectedEl) selectedEl.textContent = selectedLabel(snap);
+  if (priceEl) priceEl.textContent = snap.focusPriceText || '—';
+  if (badgeEl) badgeEl.hidden = !snap.placeholder;
+
+  const desired = new Set<string>();
+  if (listEl) {
+    for (const item of snap.rows) {
+      desired.add(item.symbol);
+      const existing = rowRefs.get(item.symbol);
+      if (existing) {
+        updateRow(item);
+        listEl.append(existing.li);
+      } else {
+        const created = createRow(item);
+        rowRefs.set(item.symbol, created);
+        const initialValue = parsePrice(item.priceText);
+        if (initialValue != null) prices.set(item.symbol, initialValue);
+        listEl.append(created.li);
+      }
+    }
+  }
+
+  for (const [symbol, ref] of rowRefs) {
+    if (!desired.has(symbol)) {
+      ref.li.remove();
+      rowRefs.delete(symbol);
+      prices.delete(symbol);
+    }
+  }
+
+  if (emptyEl) emptyEl.hidden = snap.rows.length > 0;
+}
+
+/* ------------------------------------------------------------------ *
+ * User actions.
+ * ------------------------------------------------------------------ */
 
 function onSubmit(event: Event): void {
   event.preventDefault();
-  const input = document.getElementById('watchlist-symbol-input');
-  if (!(input instanceof HTMLInputElement)) return;
+  const input = addInput;
+  if (!input) return;
   const symbol = normalizeWatchlistSymbol(input.value);
   if (!symbol) {
-    flash('Could not add');
+    announce('Could not add');
     return;
   }
   studio.post(encodeWatchlistAdd(symbol));
@@ -164,25 +287,128 @@ function onClick(event: Event): void {
   if (!symbol) return;
   const action = button.dataset.action;
   if (action === 'select') {
-    flash(`Selected ${symbol}`);
+    announce(`Selected ${symbol}`);
     studio.post(encodeWatchlistSelect(symbol));
     return;
   }
   if (action === 'remove') {
-    flash(`Removed ${symbol}`);
+    announce(`Removed ${symbol}`);
     studio.post(encodeWatchlistRemove(symbol));
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Shell construction.
+ * ------------------------------------------------------------------ */
+
+function buildHeader(snap: WatchlistViewSnapshot): HTMLElement {
+  const node = header({ title: 'Watchlist', count: snap.count });
+  node.classList.add('watchlist-header');
+
+  const body = document.createElement('div');
+  body.className = 'watchlist-header__body';
+
+  selectedEl = document.createElement('p');
+  selectedEl.className = 'watchlist-header__meta';
+  selectedEl.textContent = selectedLabel(snap);
+
+  priceEl = document.createElement('p');
+  priceEl.className = 'watchlist-price';
+  priceEl.textContent = snap.focusPriceText || '—';
+
+  badgeEl = capsule({ code: 'placeholder' });
+  badgeEl.hidden = !snap.placeholder;
+
+  body.append(selectedEl, priceEl, badgeEl);
+  node.append(body);
+
+  countEl = node.querySelector<HTMLElement>('.ax-header__count');
+  return node;
+}
+
+function buildAddForm(): HTMLFormElement {
+  const form = document.createElement('form');
+  form.id = 'watchlist-add-form';
+  form.className = 'watchlist-add';
+  form.autocomplete = 'off';
+
+  const label = document.createElement('label');
+  label.className = 'watchlist-add__label';
+  label.htmlFor = 'watchlist-symbol-input';
+  label.textContent = 'Add symbol';
+
+  addInput = search({
+    ariaLabel: 'Add symbol',
+    placeholder: 'BTCUSDT',
+    restoreKey: 'add-symbol',
+  });
+  addInput.id = 'watchlist-symbol-input';
+  addInput.spellcheck = false;
+
+  const submit = document.createElement('button');
+  submit.type = 'submit';
+  submit.className = 'watchlist-btn watchlist-btn--primary';
+  submit.textContent = 'Add';
+
+  form.append(label, addInput, submit);
+  return form;
+}
+
+function buildList(): HTMLElement {
+  const node = document.createElement('ul');
+  node.id = 'watchlist-rows';
+  node.className = 'watchlist-rows';
+  return node;
+}
+
+function buildEmpty(): HTMLElement {
+  return empty({
+    hint: 'Add a ticker such as BTCUSDT. The status bar still follows the selected symbol.',
+    className: 'watchlist-empty',
+  });
+}
+
+function buildLiveRegion(): HTMLElement {
+  const node = document.createElement('div');
+  node.id = 'watchlist-live';
+  node.className = 'watchlist-live';
+  node.setAttribute('aria-live', 'polite');
+  node.setAttribute('aria-atomic', 'true');
+  return node;
+}
+
+/* ------------------------------------------------------------------ *
+ * Entry.
+ * ------------------------------------------------------------------ */
+
 function main(): void {
-  const form = document.getElementById('watchlist-add-form');
-  if (form) form.addEventListener('submit', onSubmit);
   const root = document.getElementById('watchlist-root');
-  if (root) root.addEventListener('click', onClick);
+  if (!root) return;
+
+  const initialSnap = snapshotFromPayload({});
+
+  const headerNode = buildHeader(initialSnap);
+  const form = buildAddForm();
+  emptyEl = buildEmpty();
+  listEl = buildList();
+  liveRegion = buildLiveRegion();
+
+  const surface = panel({
+    className: 'watchlist-surface',
+    children: [headerNode, form, emptyEl, listEl, liveRegion],
+  });
+
+  root.replaceChildren();
+  root.append(surface);
+
+  form.addEventListener('submit', onSubmit);
+  root.addEventListener('click', onClick);
+
   studio.onMessage((message) => {
     const snap = decodeWatchlistSet(message);
-    if (snap) applySnapshot(snap);
+    if (snap) renderSnapshot(snap);
   });
+
   studio.post(encodeWatchlistReady());
 }
 

@@ -26,23 +26,29 @@ import '@axis-shared/tokens.css';
 import '@axis-shared/theme.css';
 import '@axis-shared/components.css';
 import './style.css';
+import { header, tabs, search } from '@axis-shared/components';
 import { createStudio } from '@axis-shared/studio';
+import { captureFocus, restoreFocus } from '@axis-shared/dom';
 import {
   PLUGINS_VIEW,
-  KIND_TABS,
   decodePluginsStudioMessage,
   encodePluginsActivate,
   encodePluginsReady,
   isKindTab,
   type KindTab,
+  type PluginKind,
 } from './protocol';
-import { renderPluginsView } from './render';
+import { kindIconNode, renderActiveChips, renderPluginsBody } from './render';
 import {
   ACTIVATE_FLASH_MS,
   COPY_FLASH_MS,
+  KIND_LABELS,
+  KIND_TABS,
   applyActivateFlash,
   applyCopiedFlash,
   applyPluginsHostMessage,
+  filterCount,
+  formatFilterCount,
   initialPluginsState,
   setKindTab,
   setSearchQuery,
@@ -50,19 +56,22 @@ import {
   type PluginsViewState,
 } from './state';
 
-// Shared lifecycle runtime: owns the acquireVsCodeApi singleton, host
-// message subscription, safe posting, and disposal on pagehide.
 const studio = createStudio({ view: PLUGINS_VIEW });
 
-let disposed = false;
 let state: PluginsViewState = initialPluginsState();
 let root: HTMLElement | null = null;
+let liveRegion: HTMLElement | null = null;
+let headerNode: HTMLElement | null = null;
+let searchInput: HTMLInputElement | null = null;
+let tabsNode: HTMLElement | null = null;
+let statusRowNode: HTMLElement | null = null;
+let bodyNode: HTMLElement | null = null;
+let tabButtons: HTMLButtonElement[] = [];
 
-type FlashKey = { kind: string; id: string };
-
-let copyFlashKey: FlashKey | null = null;
+let disposed = false;
+let copyFlashKey: { kind: string; id: string } | null = null;
 let copyFlashTimer: ReturnType<typeof setTimeout> | null = null;
-let activateFlashKey: FlashKey | null = null;
+let activateFlashKey: { kind: string; id: string } | null = null;
 let activateFlashTimer: ReturnType<typeof setTimeout> | null = null;
 
 function persistTab(tab: KindTab): void {
@@ -73,15 +82,10 @@ function persistTab(tab: KindTab): void {
   }
 }
 
-function liveEl(): HTMLElement | null {
-  const el = root?.querySelector('#plugins-live');
-  return el instanceof HTMLElement ? el : null;
-}
-
 function copyButton(kind: string, id: string): HTMLButtonElement | null {
-  if (!root) return null;
+  if (!bodyNode) return null;
   try {
-    const el = root.querySelector(
+    const el = bodyNode.querySelector(
       `[data-action="copy-id"][data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
     );
     return el instanceof HTMLButtonElement ? el : null;
@@ -90,11 +94,11 @@ function copyButton(kind: string, id: string): HTMLButtonElement | null {
   }
 }
 
-function cardEl(kind: string, id: string): HTMLElement | null {
-  if (!root) return null;
+function cardPanel(kind: string, id: string): HTMLElement | null {
+  if (!bodyNode) return null;
   try {
-    const el = root.querySelector(
-      `article.plugin-card[data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
+    const el = bodyNode.querySelector(
+      `.plugin-card[data-kind="${CSS.escape(kind)}"][data-id="${CSS.escape(id)}"]`,
     );
     return el instanceof HTMLElement ? el : null;
   } catch {
@@ -104,85 +108,47 @@ function cardEl(kind: string, id: string): HTMLElement | null {
 
 function restoreFlashes(): void {
   if (copyFlashKey) {
-    applyCopiedFlash(copyButton(copyFlashKey.kind, copyFlashKey.id), liveEl(), true);
+    applyCopiedFlash(copyButton(copyFlashKey.kind, copyFlashKey.id), liveRegion, true);
   }
   if (activateFlashKey) {
-    applyActivateFlash(cardEl(activateFlashKey.kind, activateFlashKey.id), true);
+    applyActivateFlash(cardPanel(activateFlashKey.kind, activateFlashKey.id), true);
   }
 }
 
 function startCopyFlash(button: HTMLButtonElement): void {
-  const kind = button.getAttribute('data-kind') ?? '';
-  const id = button.getAttribute('data-id') ?? '';
+  const kind = button.dataset.kind ?? '';
+  const id = button.dataset.id ?? '';
   if (copyFlashKey && (copyFlashKey.kind !== kind || copyFlashKey.id !== id)) {
     applyCopiedFlash(copyButton(copyFlashKey.kind, copyFlashKey.id), null, false);
   }
   copyFlashKey = { kind, id };
-  applyCopiedFlash(button, liveEl(), true);
+  applyCopiedFlash(button, liveRegion, true);
   if (copyFlashTimer) clearTimeout(copyFlashTimer);
   copyFlashTimer = setTimeout(() => {
     copyFlashTimer = null;
     const key = copyFlashKey;
     copyFlashKey = null;
-    if (!disposed && key) applyCopiedFlash(copyButton(key.kind, key.id), liveEl(), false);
+    if (!disposed && key) {
+      applyCopiedFlash(copyButton(key.kind, key.id), liveRegion, false);
+    }
   }, COPY_FLASH_MS);
 }
 
 function startActivateFlash(kind: string, id: string): void {
   if (activateFlashKey) {
-    applyActivateFlash(cardEl(activateFlashKey.kind, activateFlashKey.id), false);
+    applyActivateFlash(cardPanel(activateFlashKey.kind, activateFlashKey.id), false);
   }
   activateFlashKey = { kind, id };
-  applyActivateFlash(cardEl(kind, id), true);
+  applyActivateFlash(cardPanel(kind, id), true);
   if (activateFlashTimer) clearTimeout(activateFlashTimer);
   activateFlashTimer = setTimeout(() => {
     activateFlashTimer = null;
     const key = activateFlashKey;
     activateFlashKey = null;
-    if (!disposed && key) applyActivateFlash(cardEl(key.kind, key.id), false);
+    if (!disposed && key) {
+      applyActivateFlash(cardPanel(key.kind, key.id), false);
+    }
   }, ACTIVATE_FLASH_MS);
-}
-
-function paint(): void {
-  if (disposed || !root) return;
-  renderPluginsView(root, state);
-  restoreFlashes();
-}
-
-function postActivate(kind: string, id: string): void {
-  const msg = encodePluginsActivate(kind, id);
-  if (!msg) return;
-  studio.post(msg);
-}
-
-function onHostMessage(message: unknown): void {
-  if (disposed) return;
-  const decoded = decodePluginsStudioMessage(message);
-  if (!decoded) return;
-  state = applyPluginsHostMessage(state, decoded.kind, decoded.data);
-  paint();
-}
-
-function selectTab(tab: KindTab): void {
-  state = setKindTab(state, tab);
-  persistTab(state.tab);
-  paint();
-  const selected = root?.querySelector(`#tab-${state.tab}`);
-  if (selected instanceof HTMLElement) selected.focus();
-}
-
-function isTypingTarget(el: EventTarget | null): boolean {
-  if (!(el instanceof HTMLElement)) return false;
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return true;
-  return el.isContentEditable;
-}
-
-function focusSearch(): void {
-  const el = root?.querySelector('#plugins-search');
-  if (el instanceof HTMLInputElement) {
-    el.focus();
-    el.select();
-  }
 }
 
 function copyPluginId(id: string): void {
@@ -217,38 +183,45 @@ function copyPluginId(id: string): void {
   fallbackCopy();
 }
 
-function onClick(event: Event): void {
-  if (disposed) return;
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const tabBtn = target.closest('[data-tab]');
-  if (tabBtn instanceof HTMLElement) {
-    const tab = tabBtn.getAttribute('data-tab');
-    if (isKindTab(tab)) selectTab(tab);
-    return;
-  }
-  const copy = target.closest('[data-action="copy-id"]');
-  if (copy instanceof HTMLButtonElement) {
-    copyPluginId(copy.getAttribute('data-id') ?? '');
-    startCopyFlash(copy);
-    return;
-  }
-  const activate = target.closest('[data-action="activate"]');
-  if (activate instanceof HTMLButtonElement && !activate.disabled) {
-    const kind = activate.getAttribute('data-kind') ?? '';
-    const id = activate.getAttribute('data-id') ?? '';
-    postActivate(kind, id);
-    startActivateFlash(kind, id);
+function postActivate(kind: string, id: string): void {
+  const msg = encodePluginsActivate(kind, id);
+  if (!msg) return;
+  studio.post(msg);
+}
+
+function syncTabs(): void {
+  for (const button of tabButtons) {
+    const selected = button.dataset.tabId === state.tab;
+    button.setAttribute('aria-selected', selected ? 'true' : 'false');
   }
 }
 
-function onInput(event: Event): void {
-  if (disposed) return;
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  if (target.id !== 'plugins-search') return;
-  state = setSearchQuery(state, target.value);
-  paint();
+function selectTab(tab: KindTab): void {
+  if (!isKindTab(tab) || tab === state.tab) return;
+  state = setKindTab(state, tab);
+  persistTab(state.tab);
+  syncTabs();
+  updateHeaderCount();
+  updateBody(false);
+}
+
+function updateHeaderCount(): void {
+  if (!headerNode) return;
+  const count = filterCount(state);
+  const countEl = headerNode.querySelector('.ax-header__count');
+  if (countEl) countEl.textContent = formatFilterCount(count);
+}
+
+function focusSearch(): void {
+  if (!searchInput) return;
+  searchInput.focus();
+  searchInput.select();
+}
+
+function isTypingTarget(el: EventTarget | null): boolean {
+  if (!(el instanceof HTMLElement)) return false;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return true;
+  return el.isContentEditable;
 }
 
 function onGlobalKey(event: KeyboardEvent): void {
@@ -264,31 +237,56 @@ function onGlobalKey(event: KeyboardEvent): void {
   }
 }
 
-function onKeyDown(event: KeyboardEvent): void {
+function onTabsKeyDown(event: KeyboardEvent): void {
+  if (disposed || tabButtons.length === 0) return;
+  const current = tabButtons.find((button) => button.getAttribute('aria-selected') === 'true');
+  if (!current) return;
+
+  if (event.key === 'Home') {
+    event.preventDefault();
+    selectTab('all');
+    tabButtons[0]?.focus();
+    return;
+  }
+  if (event.key === 'End') {
+    event.preventDefault();
+    selectTab(KIND_TABS[KIND_TABS.length - 1] ?? 'component');
+    tabButtons[tabButtons.length - 1]?.focus();
+  }
+}
+
+function onClick(event: MouseEvent): void {
+  if (disposed) return;
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+
+  const chip = target.closest('[data-role="chip"]');
+  if (chip instanceof HTMLButtonElement) {
+    const tab = chip.dataset.tab;
+    if (isKindTab(tab)) selectTab(tab);
+    return;
+  }
+
+  const copy = target.closest('[data-action="copy-id"]');
+  if (copy instanceof HTMLButtonElement) {
+    const id = copy.dataset.id ?? '';
+    copyPluginId(id);
+    startCopyFlash(copy);
+  }
+
+  const activate = target.closest('[data-action="activate"]');
+  if (activate instanceof HTMLButtonElement && !activate.disabled) {
+    const kind = activate.dataset.kind ?? '';
+    const id = activate.dataset.id ?? '';
+    postActivate(kind, id);
+    startActivateFlash(kind, id);
+  }
+}
+
+function onBodyKeyDown(event: KeyboardEvent): void {
   if (disposed) return;
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
-  const tab = target.closest('[role="tab"]');
-  if (tab instanceof HTMLElement && root?.contains(tab)) {
-    const current = tab.getAttribute('data-tab');
-    if (!isKindTab(current)) return;
-    const idx = KIND_TABS.indexOf(current);
-    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      event.preventDefault();
-      selectTab(KIND_TABS[(idx + 1) % KIND_TABS.length] ?? 'all');
-    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      event.preventDefault();
-      const next = idx <= 0 ? KIND_TABS.length - 1 : idx - 1;
-      selectTab(KIND_TABS[next] ?? 'all');
-    } else if (event.key === 'Home') {
-      event.preventDefault();
-      selectTab('all');
-    } else if (event.key === 'End') {
-      event.preventDefault();
-      selectTab(KIND_TABS[KIND_TABS.length - 1] ?? 'component');
-    }
-    return;
-  }
   if (target.classList.contains('plugin-card') && (event.key === 'Enter' || event.key === ' ')) {
     const btn = target.querySelector('[data-action="activate"]');
     if (btn instanceof HTMLButtonElement && !btn.disabled) {
@@ -296,6 +294,94 @@ function onKeyDown(event: KeyboardEvent): void {
       btn.click();
     }
   }
+}
+
+function onHostMessage(message: unknown): void {
+  if (disposed) return;
+  const decoded = decodePluginsStudioMessage(message);
+  if (!decoded) return;
+  state = applyPluginsHostMessage(state, decoded.kind, decoded.data);
+  render();
+}
+
+function buildHeader(): HTMLElement {
+  headerNode = header({ title: 'Plugins', count: formatFilterCount(filterCount(state)) });
+  headerNode.classList.add('plugins-header');
+
+  const searchWrap = document.createElement('div');
+  searchWrap.className = 'plugins-search-wrap';
+  searchInput = search({
+    ariaLabel: 'Filter plugins by name, id, or description',
+    placeholder: 'Filter plugins',
+    value: state.query,
+    restoreKey: 'plugins-search',
+    className: 'plugins-search',
+    onInput: (value) => {
+      state = setSearchQuery(state, value);
+      updateHeaderCount();
+      updateBody(true);
+    },
+  });
+  searchWrap.append(searchInput);
+  headerNode.append(searchWrap);
+
+  return headerNode;
+}
+
+function buildTabs(): HTMLElement {
+  tabsNode = tabs({
+    tabs: KIND_TABS.map((id) => ({
+      id,
+      label: KIND_LABELS[id],
+      icon: id === 'all' ? undefined : kindIconNode(id as PluginKind),
+    })),
+    active: state.tab,
+    onSelect: (id) => {
+      selectTab(id as KindTab);
+    },
+  });
+  tabsNode.classList.add('plugins-tabs');
+  tabsNode.addEventListener('keydown', onTabsKeyDown);
+  tabButtons = Array.from(tabsNode.querySelectorAll<HTMLButtonElement>('.ax-tabs__tab'));
+  return tabsNode;
+}
+
+function buildStatusRow(): HTMLElement {
+  statusRowNode = document.createElement('div');
+  statusRowNode.className = 'plugins-status-row';
+  statusRowNode.append(renderActiveChips(state, selectTab));
+  return statusRowNode;
+}
+
+function buildBody(): HTMLElement {
+  bodyNode = document.createElement('div');
+  bodyNode.id = 'plugins-body';
+  bodyNode.className = 'plugins-body';
+  bodyNode.setAttribute('role', 'tabpanel');
+  bodyNode.addEventListener('keydown', onBodyKeyDown);
+  return bodyNode;
+}
+
+function updateStatusRow(): void {
+  if (!statusRowNode) return;
+  statusRowNode.replaceChildren(renderActiveChips(state, selectTab));
+}
+
+function updateBody(preserveScroll: boolean): void {
+  if (!bodyNode) return;
+  const focusKey = captureFocus();
+  const scrollTop = preserveScroll ? bodyNode.scrollTop : 0;
+  bodyNode.replaceChildren(renderPluginsBody(state));
+  bodyNode.scrollTop = scrollTop;
+  bodyNode.setAttribute('aria-label', KIND_LABELS[state.tab]);
+  restoreFocus(focusKey);
+  restoreFlashes();
+}
+
+function render(preserveScroll = true): void {
+  updateHeaderCount();
+  updateStatusRow();
+  updateBody(preserveScroll);
 }
 
 function ensureRoot(): HTMLElement {
@@ -311,13 +397,30 @@ function ensureRoot(): HTMLElement {
 function main(): void {
   state = initialPluginsState(tabFromPersisted(studio.getState()));
   root = ensureRoot();
-  window.addEventListener('keydown', onGlobalKey);
+  root.replaceChildren();
+
+  liveRegion = document.createElement('div');
+  liveRegion.id = 'plugins-live';
+  liveRegion.className = 'plugins-live';
+  liveRegion.setAttribute('aria-live', 'polite');
+  liveRegion.setAttribute('aria-atomic', 'true');
+
+  const headerEl = buildHeader();
+  const tabsEl = buildTabs();
+  const statusEl = buildStatusRow();
+  const bodyEl = buildBody();
+  root.append(liveRegion, headerEl, tabsEl, statusEl, bodyEl);
+
+  syncTabs();
+  render();
+
+  document.addEventListener('keydown', onGlobalKey);
   root.addEventListener('click', onClick);
-  root.addEventListener('input', onInput);
-  root.addEventListener('keydown', onKeyDown);
+
   window.addEventListener('pagehide', () => {
     disposed = true;
-    root = null;
+    searchInput = null;
+    bodyNode = null;
     copyFlashKey = null;
     activateFlashKey = null;
     if (copyFlashTimer) clearTimeout(copyFlashTimer);
@@ -325,8 +428,8 @@ function main(): void {
     copyFlashTimer = null;
     activateFlashTimer = null;
   });
+
   studio.onMessage(onHostMessage);
-  paint();
   studio.post(encodePluginsReady());
 }
 

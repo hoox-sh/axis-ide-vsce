@@ -1,20 +1,17 @@
-/* Copyright (C) 2026 jango_blockchained
+/*
+ * Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Workers studio — layout + visual rules only. The shared base (tokens,
- * theme reset + focus-visible + scrollbars, ax-* components) is imported
- * by main.ts ahead of this file; the root carries the studio's VS Code
- * surface (the old html/body declarations).
+ * Workers studio — layout rules only. Colors and component chrome come from
+ * the shared token + theme + motion + component layers imported by main.ts.
+ * No --vscode-* references and no raw hex colors (enforced by the layout-only
+ * convention in §3 of the enhancement plan).
  */
 
 .workers-root {
   height: 100%;
   padding: 10px 12px;
   overflow: auto;
-  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
-  color: var(--vscode-sideBar-foreground, var(--vscode-editor-foreground));
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
 }
 
 .workers-root__header {
@@ -26,13 +23,11 @@
   align-items: center;
   gap: 6px;
   margin: 0 0 4px;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .workers-mark {
   flex: 0 0 auto;
-  color: var(--vscode-foreground);
+  color: var(--axis-text);
 }
 
 .workers-phase,
@@ -44,114 +39,75 @@
 
 .workers-phase,
 .workers-counts {
-  color: var(--vscode-descriptionForeground);
+  color: var(--axis-dim);
 }
 
 .workers-live {
   min-height: 1.2em;
-  color: var(--vscode-foreground);
 }
 
 .workers-btn {
   margin: 0 0 8px;
   padding: 2px 8px;
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 2px;
-  background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
-  color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+  border: var(--axis-border-w) solid var(--axis-btn-bg);
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-btn-bg);
+  color: var(--axis-btn-fg);
   font: inherit;
   cursor: pointer;
 }
 
-.workers-btn:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
+.workers-btn:hover {
+  background: var(--axis-btn-hover-bg);
 }
 
 .workers-cards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--axis-gap);
 }
 
-.workers-card {
-  margin: 0;
-  padding: 8px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--vscode-editorWidget-background, transparent);
+.workers-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--axis-gap);
+}
+
+.workers-card__title-row {
+  min-height: var(--axis-control-h);
 }
 
 .workers-card__name {
-  margin: 0 0 2px;
-  font-size: 13px;
   font-weight: 600;
+  color: var(--axis-text);
 }
 
-.workers-card__id,
-.workers-card__summary,
-.workers-card__meta {
-  margin: 0 0 4px;
-  font-size: 12px;
-  color: var(--vscode-descriptionForeground);
+.workers-key {
+  flex: 0 0 auto;
+  margin-right: 4px;
+  color: var(--axis-dim);
+}
+
+.workers-value {
+  color: var(--axis-text);
   word-break: break-word;
 }
 
-.workers-card__id,
-.workers-card__endpoint {
-  font-family: var(--vscode-editor-font-family, ui-monospace, monospace);
+.workers-card__endpoint-row .workers-value,
+.workers-card__probe-row .workers-value {
+  font-family: var(--axis-font-mono);
 }
 
-.workers-card__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.workers-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.workers-action-btn {
   padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
+  border: var(--axis-border-w) solid var(--axis-btn-bg);
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-btn-bg);
+  color: var(--axis-btn-fg);
+  font: inherit;
+  cursor: pointer;
 }
 
-.workers-pill__dot {
-  width: 8px;
-  height: 8px;
-}
-
-.workers-pill--healthy {
-  background: var(--vscode-testing-iconPassed);
-  color: var(--vscode-editor-background);
-}
-
-.workers-pill--degraded {
-  background: var(--vscode-editorWarning-foreground);
-  color: var(--vscode-editor-background);
-}
-
-.workers-pill--down {
-  background: var(--vscode-testing-iconFailed);
-  color: var(--vscode-editor-foreground);
-}
-
-.workers-pill--unknown,
-.workers-pill--idle,
-.workers-pill--skipped {
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-}
-
-.workers-empty {
-  margin: 8px 0 0;
-  color: var(--vscode-disabledForeground);
+.workers-action-btn:hover {
+  background: var(--axis-btn-hover-bg);
 }

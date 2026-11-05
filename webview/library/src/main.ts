@@ -20,6 +20,7 @@
  * AXIS Library studio on the shared runtime + studio.* protocol:
  * studio.ready → studio.init / studio.set carrying `{ cards, catalogError }`.
  * Card click copies the id (1.2s "Copied"). Apply posts studio.action apply.
+ * Renderers are built from ax-* components via ./render.
  */
 
 import '@axis-shared/tokens.css';
@@ -28,7 +29,7 @@ import '@axis-shared/components.css';
 import './style.css';
 import { copyText } from '@axis-shared/clipboard';
 import { createStudio } from '@axis-shared/studio';
-import { libraryViewHtml } from './render';
+import { buildLibraryView } from './render';
 import {
   LIBRARY_VIEW,
   decodeLibrarySet,
@@ -41,7 +42,6 @@ import {
   applyCatalog,
   clearFilters,
   initialLibraryState,
-  isKindFilter,
   readPersistedLibraryUi,
   setCategoryFilter,
   setKindFilter,
@@ -66,8 +66,8 @@ type FocusRestore =
   | { type: 'kind'; id: string }
   | { type: 'category'; id: string }
   | { type: 'apply'; id: string }
-  | { type: 'card'; id: string }
   | { type: 'clear' }
+  | { type: 'card'; id: string }
   | null;
 
 function ensureRoot(): HTMLElement {
@@ -101,7 +101,7 @@ function persist(): void {
       category: state.category,
     });
   } catch {
-    // host state is optional
+    // host state persistence is optional
   }
 }
 
@@ -111,12 +111,22 @@ function captureFocus(): FocusRestore {
   if (el instanceof HTMLInputElement && el.id === 'library-search') {
     return { type: 'search', start: el.selectionStart, end: el.selectionEnd };
   }
-  if (el.dataset.kindFilter) return { type: 'kind', id: el.dataset.kindFilter };
-  if (el.dataset.categoryFilter) return { type: 'category', id: el.dataset.categoryFilter };
-  if (el.dataset.action === 'apply' && el.dataset.id) return { type: 'apply', id: el.dataset.id };
-  if (el.dataset.action === 'clear') return { type: 'clear' };
-  const card = el.closest('article.library-card');
-  if (card instanceof HTMLElement && card.dataset.id) return { type: 'card', id: card.dataset.id };
+  if (el.dataset.group === 'kind') {
+    const value = el.getAttribute('data-value');
+    if (value) return { type: 'kind', id: value };
+  }
+  if (el.dataset.group === 'category') {
+    const value = el.getAttribute('data-value');
+    if (value) return { type: 'category', id: value };
+  }
+  if (el.getAttribute('data-action') === 'apply' && el.getAttribute('data-id')) {
+    return { type: 'apply', id: el.getAttribute('data-id') ?? '' };
+  }
+  if (el.getAttribute('data-action') === 'clear') return { type: 'clear' };
+  const card = el.closest('.library-card');
+  if (card instanceof HTMLElement && card.getAttribute('data-id')) {
+    return { type: 'card', id: card.getAttribute('data-id') ?? '' };
+  }
   return null;
 }
 
@@ -133,15 +143,15 @@ function restoreFocus(focus: FocusRestore): void {
       return;
     }
     if (focus.type === 'kind') {
-      el = root.querySelector(`[data-kind-filter="${CSS.escape(focus.id)}"]`);
+      el = root.querySelector(`button[data-group="kind"][data-value="${CSS.escape(focus.id)}"]`);
     } else if (focus.type === 'category') {
-      el = root.querySelector(`[data-category-filter="${CSS.escape(focus.id)}"]`);
+      el = root.querySelector(`button[data-group="category"][data-value="${CSS.escape(focus.id)}"]`);
     } else if (focus.type === 'apply') {
       el = root.querySelector(`[data-action="apply"][data-id="${CSS.escape(focus.id)}"]`);
     } else if (focus.type === 'clear') {
       el = root.querySelector('[data-action="clear"]');
     } else {
-      el = root.querySelector(`article.library-card[data-id="${CSS.escape(focus.id)}"]`);
+      el = root.querySelector(`.library-card[data-id="${CSS.escape(focus.id)}"]`);
     }
   } catch {
     el = null;
@@ -164,7 +174,36 @@ function restoreFlashes(): void {
 function paint(): void {
   if (!root) return;
   const focus = captureFocus();
-  root.innerHTML = libraryViewHtml(state);
+  root.replaceChildren(
+    buildLibraryView(state, {
+      onSearch: (value) => {
+        state = setSearchQuery(state, value);
+        persist();
+        paint();
+      },
+      onSelectKind: (kind) => {
+        state = setKindFilter(state, kind);
+        persist();
+        paint();
+      },
+      onSelectCategory: (category) => {
+        state = setCategoryFilter(state, category);
+        persist();
+        paint();
+      },
+      onClear: () => {
+        state = clearFilters(state);
+        persist();
+        paint();
+      },
+      onCopy: (id) => {
+        copyId(id);
+      },
+      onApply: (id) => {
+        postApply(id);
+      },
+    }),
+  );
   restoreFlashes();
   restoreFocus(focus);
 }
@@ -172,7 +211,7 @@ function paint(): void {
 function cardEl(id: string): HTMLElement | null {
   if (!root) return null;
   try {
-    const el = root.querySelector(`article.library-card[data-id="${CSS.escape(id)}"]`);
+    const el = root.querySelector(`.library-card[data-id="${CSS.escape(id)}"]`);
     return el instanceof HTMLElement ? el : null;
   } catch {
     return null;
@@ -252,55 +291,6 @@ function focusSearch(): void {
   }
 }
 
-function onClick(event: Event): void {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const kindBtn = target.closest('[data-kind-filter]');
-  if (kindBtn instanceof HTMLElement) {
-    const kind = kindBtn.getAttribute('data-kind-filter');
-    if (isKindFilter(kind)) {
-      state = setKindFilter(state, kind);
-      persist();
-      paint();
-    }
-    return;
-  }
-  const categoryBtn = target.closest('[data-category-filter]');
-  if (categoryBtn instanceof HTMLElement) {
-    state = setCategoryFilter(state, categoryBtn.getAttribute('data-category-filter') ?? 'all');
-    persist();
-    paint();
-    return;
-  }
-  const clear = target.closest('[data-action="clear"]');
-  if (clear instanceof HTMLElement) {
-    state = clearFilters(state);
-    persist();
-    paint();
-    return;
-  }
-  const apply = target.closest('[data-action="apply"]');
-  if (apply instanceof HTMLButtonElement) {
-    event.preventDefault();
-    event.stopPropagation();
-    postApply(apply.getAttribute('data-id') ?? '');
-    return;
-  }
-  const card = target.closest('article.library-card');
-  if (card instanceof HTMLElement) {
-    copyId(card.getAttribute('data-id') ?? '');
-  }
-}
-
-function onInput(event: Event): void {
-  const target = event.target;
-  if (!(target instanceof HTMLInputElement)) return;
-  if (target.id !== 'library-search') return;
-  state = setSearchQuery(state, target.value);
-  persist();
-  paint();
-}
-
 function onGlobalKey(event: KeyboardEvent): void {
   if ((event.key === 'f' || event.key === 'F') && (event.ctrlKey || event.metaKey) && !event.altKey) {
     event.preventDefault();
@@ -363,8 +353,6 @@ function main(): void {
     paint();
   });
   window.addEventListener('keydown', onGlobalKey);
-  root.addEventListener('click', onClick);
-  root.addEventListener('input', onInput);
   root.addEventListener('keydown', onKeyDown);
   window.addEventListener(
     'pagehide',

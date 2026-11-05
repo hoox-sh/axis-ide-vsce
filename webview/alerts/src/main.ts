@@ -18,9 +18,11 @@
 
 /**
  * AXIS Alerts studio webview on the shared runtime + studio.* protocol.
- * Host posts studio.init / studio.set carrying the alerts snapshot and
- * studio.notice for flashes. Add / toggle / remove post back to the host;
- * empty titles never post. Optimistic toggle/remove keep the list snappy.
+ * Built with ax-* components: the header, form fields, list rows and empty
+ * state use the shared builders. Host posts studio.init / studio.set carrying
+ * the alerts snapshot and studio.notice for flashes. Add / toggle / remove
+ * post back to the host; empty titles never post. Optimistic toggle/remove
+ * keep the list snappy.
  */
 
 import '@axis-shared/tokens.css';
@@ -29,6 +31,7 @@ import '@axis-shared/components.css';
 import './style.css';
 import { createStudio } from '@axis-shared/studio';
 import { setHidden, setText } from '@axis-shared/dom';
+import { empty, field, header, row } from '@axis-shared/components';
 import {
   buildAlertsSnapshot,
   type AlertsStudioEntry,
@@ -59,7 +62,7 @@ let flashTimer: ReturnType<typeof setTimeout> | undefined;
 
 function bellGraphic(slashed: boolean): SVGElement {
   const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', 'alerts-bell');
+  svg.setAttribute('class', 'alerts-logo');
   svg.setAttribute('viewBox', '0 0 16 16');
   svg.setAttribute('width', '16');
   svg.setAttribute('height', '16');
@@ -81,19 +84,83 @@ function bellGraphic(slashed: boolean): SVGElement {
   return svg;
 }
 
-function renderRow(entry: AlertsStudioEntry): HTMLLIElement {
-  const li = document.createElement('li');
-  li.className = 'alerts-row';
-  li.setAttribute('data-alert-id', entry.id);
+function buildShell(): DocumentFragment {
+  const fragment = document.createDocumentFragment();
 
+  const titleHeader = header({ title: 'Alerts' });
+  titleHeader.classList.add('alerts-header__titlebar');
+
+  const brand = document.createElement('div');
+  brand.className = 'alerts-header__brand';
+  brand.append(bellGraphic(false), titleHeader);
+
+  const summary = document.createElement('p');
+  summary.id = 'alerts-summary';
+  summary.className = 'alerts-summary';
+  summary.setAttribute('aria-live', 'polite');
+  summary.setAttribute('aria-atomic', 'true');
+
+  const headerEl = document.createElement('div');
+  headerEl.className = 'alerts-header';
+  headerEl.append(brand, summary);
+
+  const titleField = field({
+    label: 'Title',
+    inputId: 'alerts-title',
+    placeholder: 'Alert title',
+  });
+
+  const conditionField = field({
+    label: 'Condition',
+    inputId: 'alerts-condition',
+    placeholder: 'Optional condition',
+  });
+
+  const addButton = document.createElement('button');
+  addButton.type = 'button';
+  addButton.id = 'alerts-add';
+  addButton.className = 'alerts-add';
+  addButton.dataset.action = 'add';
+  addButton.textContent = 'Add';
+
+  const form = document.createElement('div');
+  form.className = 'alerts-form';
+  form.append(titleField, conditionField, addButton);
+
+  const live = document.createElement('p');
+  live.id = 'alerts-live';
+  live.className = 'alerts-live';
+  live.setAttribute('aria-live', 'polite');
+  live.setAttribute('aria-atomic', 'true');
+
+  const emptyEl = empty({
+    hint: 'Add a title and an optional condition, then press Add. This is the IDE list, not the full PWA alert engine.',
+  });
+  emptyEl.id = 'alerts-empty';
+  emptyEl.classList.add('alerts-empty');
+
+  const list = document.createElement('ul');
+  list.id = 'alerts-list';
+  list.className = 'alerts-list';
+  list.setAttribute('aria-label', 'Alerts');
+  list.hidden = true;
+
+  fragment.append(headerEl, form, live, emptyEl, list);
+  return fragment;
+}
+
+function buildMark(enabled: boolean): HTMLElement {
   const mark = document.createElement('span');
-  mark.className = entry.enabled
+  mark.className = enabled
     ? 'alerts-mark alerts-mark--on'
     : 'alerts-mark alerts-mark--off';
   mark.setAttribute('role', 'img');
-  mark.setAttribute('aria-label', entry.enabled ? 'Enabled' : 'Disabled');
-  mark.append(bellGraphic(!entry.enabled));
+  mark.setAttribute('aria-label', enabled ? 'Enabled' : 'Disabled');
+  mark.append(bellGraphic(!enabled));
+  return mark;
+}
 
+function buildMain(entry: AlertsStudioEntry): HTMLElement {
   const main = document.createElement('div');
   main.className = 'alerts-row__main';
 
@@ -112,13 +179,13 @@ function renderRow(entry: AlertsStudioEntry): HTMLLIElement {
   idEl.textContent = entry.id;
 
   main.append(title, condition, idEl);
+  return main;
+}
 
-  const actions = document.createElement('div');
-  actions.className = 'alerts-row__actions';
-
+function buildActions(entry: AlertsStudioEntry): HTMLElement[] {
   const toggle = document.createElement('button');
   toggle.type = 'button';
-  toggle.className = 'alerts-btn';
+  toggle.className = 'alerts-row__action';
   toggle.dataset.action = 'toggle';
   toggle.textContent = entry.enabled ? 'Disable' : 'Enable';
   toggle.setAttribute('aria-pressed', entry.enabled ? 'true' : 'false');
@@ -129,14 +196,23 @@ function renderRow(entry: AlertsStudioEntry): HTMLLIElement {
 
   const remove = document.createElement('button');
   remove.type = 'button';
-  remove.className = 'alerts-btn';
+  remove.className = 'alerts-row__action';
   remove.dataset.action = 'remove';
   remove.textContent = 'Remove';
   remove.setAttribute('aria-label', `Remove ${entry.title}`);
 
-  actions.append(toggle, remove);
-  li.append(mark, main, actions);
-  return li;
+  return [toggle, remove];
+}
+
+function renderRow(entry: AlertsStudioEntry): HTMLElement {
+  const node = row({
+    as: 'li',
+    className: 'alerts-row',
+    children: [buildMark(entry.enabled), buildMain(entry)],
+    actions: buildActions(entry),
+  });
+  node.setAttribute('data-alert-id', entry.id);
+  return node;
 }
 
 function paint(): void {
@@ -215,8 +291,8 @@ function onClick(event: Event): void {
     onAdd();
     return;
   }
-  const row = button.closest('[data-alert-id]');
-  const id = row?.getAttribute('data-alert-id') ?? '';
+  const rowEl = button.closest('[data-alert-id]');
+  const id = rowEl?.getAttribute('data-alert-id') ?? '';
   if (!id) return;
   if (action === 'toggle') onToggle(id);
   else if (action === 'remove') onRemove(id);
@@ -245,9 +321,12 @@ function onHostMessage(message: unknown): void {
 
 function main(): void {
   const root = document.getElementById('alerts-root');
+  if (!root) return;
+  root.replaceChildren();
+  root.append(buildShell());
   studio.onMessage(onHostMessage);
-  root?.addEventListener('click', onClick);
-  root?.addEventListener('keydown', onKeyDown);
+  root.addEventListener('click', onClick);
+  root.addEventListener('keydown', onKeyDown);
   paint();
   studio.post(encodeAlertsReady());
 }

@@ -1,9 +1,9 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Library studio — layout + visual rules only. The shared base (tokens,
- * theme reset + focus-visible + scrollbars, ax-* components) is imported
- * by main.ts ahead of this file.
+ * Library studio — layout + positioning only. Colors flow through
+ * --axis-* tokens from webview/shared/tokens.css. No --vscode-* variables
+ * and no raw hex colors belong in this file.
  */
 
 .library-live {
@@ -24,13 +24,13 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
-  color: var(--vscode-foreground);
 }
 
-.library-boot {
-  margin: 12px;
-  color: var(--vscode-descriptionForeground);
+.library-shell {
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  background: var(--axis-bg);
 }
 
 .library-header {
@@ -40,206 +40,161 @@
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 8px;
-  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
-  /* pane edge: VS Code view chrome already draws the outer border */
+  gap: var(--axis-gap);
+  padding: var(--axis-gap) var(--axis-panel-pad) var(--axis-gap-xs);
+  background: var(--axis-bg);
 }
 
 .library-header__top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--axis-gap);
   min-width: 0;
 }
 
-.library-title {
+.library-header__titlebar {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--axis-gap-xs);
   margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
 }
 
-.library-counts {
+.library-header__titlebar .ax-header__title {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 13px;
+  color: var(--axis-text);
+}
+
+.library-header__titlebar > svg {
+  flex: 0 0 auto;
+  color: var(--axis-dim);
+}
+
+.library-header__counts {
   display: inline-flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--axis-gap);
   margin: 0;
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family);
+  color: var(--axis-dim);
+  font-family: var(--axis-font-mono);
   font-size: 11px;
   white-space: nowrap;
 }
 
-#library-showing {
-  color: var(--vscode-foreground);
+.library-header__showing {
+  color: var(--axis-text);
 }
 
 .library-sub {
   margin: 0;
-  color: var(--vscode-descriptionForeground);
+  color: var(--axis-dim);
   font-size: 11px;
 }
 
 .library-search-wrap {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--axis-gap-xs);
   min-width: 0;
-  padding: 0 6px;
-  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
-  border-radius: 2px;
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
+  padding: 0 var(--axis-gap-xs);
+  border: var(--axis-border-w) solid var(--axis-input-border);
+  border-radius: var(--axis-radius-input);
+  background: var(--axis-input-bg);
+  color: var(--axis-input-fg);
 }
 
 .library-search-wrap:focus-within {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -1px;
+  border-color: var(--axis-accent);
+}
+
+.library-search-wrap > svg {
+  flex: 0 0 auto;
+  color: var(--axis-input-placeholder);
 }
 
 .library-search {
-  display: block;
-  width: 100%;
-  height: 24px;
-  padding: 0;
-  border: 0;
+  /* ax-search is full width; within the wrap we want it to fill flex space. */
+  flex: 1 1 auto;
+  min-width: 0;
+  border-color: transparent;
   background: transparent;
-  color: var(--vscode-input-foreground);
-  font: inherit;
-  font-size: 12px;
-}
-
-.library-search::placeholder {
-  color: var(--vscode-input-placeholderForeground);
 }
 
 .library-search:focus {
-  outline: none;
+  border-color: transparent;
 }
 
 .library-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-}
-
-.library-chip {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 8px;
-  border: 1px solid var(--vscode-widget-border);
-  border-radius: 11px;
-  background: var(--vscode-input-background);
-  color: var(--vscode-foreground);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.library-chip:hover {
-  background: var(--vscode-list-hoverBackground);
-}
-
-.library-chip.is-selected {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
-  border-color: var(--vscode-button-background);
-}
-
-.library-chip:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
-}
-
-.library-chip__count {
-  min-width: 1.2em;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-  font-size: 10px;
-  font-weight: 600;
-  text-align: center;
-}
-
-.library-chip.is-selected .library-chip__count {
-  background: var(--vscode-button-secondaryBackground, var(--vscode-badge-background));
-  color: var(--vscode-button-secondaryForeground, var(--vscode-badge-foreground));
+  gap: var(--axis-gap-xs);
 }
 
 .library-body {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
-  padding: 8px 12px 16px;
+  padding: var(--axis-gap) var(--axis-panel-pad) var(--axis-gap);
 }
 
 .library-banner {
-  margin: 0 0 8px;
-  padding: 6px 8px;
-  border: 1px solid var(--vscode-inputValidation-warningBorder, var(--vscode-widget-border));
-  background: var(--vscode-inputValidation-warningBackground, var(--vscode-editorWidget-background));
-  color: var(--vscode-foreground);
+  margin: 0 0 var(--axis-gap);
+  padding: var(--axis-gap-xs) var(--axis-gap);
+  border: var(--axis-border-w) solid var(--axis-warn);
+  background: color-mix(in oklch, var(--axis-warn) 12%, transparent);
+  color: var(--axis-text);
   font-size: 12px;
 }
 
 .library-banner__k {
   font-weight: 600;
-  color: var(--vscode-editorWarning-foreground, var(--vscode-foreground));
+  color: var(--axis-warn);
 }
 
 .library-cards {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--axis-gap);
 }
 
 .library-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px 8px 12px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--vscode-editor-background);
-  color: var(--vscode-foreground);
-  cursor: pointer;
-}
-
-.library-card--indicator {
-  box-shadow: inset 2px 0 0 var(--vscode-charts-blue, var(--vscode-focusBorder));
+  align-items: stretch;
+  padding: var(--axis-gap) var(--axis-gap);
+  background: var(--axis-bg-elev);
+  --axis-card-accent: var(--axis-info);
 }
 
 .library-card--strategy {
-  box-shadow: inset 2px 0 0 var(--vscode-charts-orange, var(--vscode-focusBorder));
+  --axis-card-accent: var(--axis-warn);
 }
 
 .library-card:hover {
-  background: var(--vscode-list-hoverBackground);
+  background: var(--axis-bg-hover);
 }
 
-.library-card:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
+.library-card {
+  box-shadow: inset 2px 0 0 var(--axis-card-accent);
 }
 
 .library-card.is-copied {
-  outline: 1px solid var(--vscode-focusBorder);
-  background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-list-hoverBackground));
+  outline: 1px solid var(--axis-accent);
+  background: var(--axis-bg-hover);
+}
+
+.library-card__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--axis-gap-xs);
 }
 
 .library-card__head {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--axis-gap);
   min-width: 0;
 }
 
@@ -257,8 +212,8 @@
 
 .library-card__short {
   margin: 2px 0 0;
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family);
+  color: var(--axis-dim);
+  font-family: var(--axis-font-mono);
   font-size: 11px;
 }
 
@@ -268,15 +223,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--vscode-textLink-foreground, var(--vscode-foreground));
-  font-family: var(--vscode-editor-font-family);
+  color: var(--axis-link);
+  font-family: var(--axis-font-mono);
   font-size: 11px;
 }
 
 .library-card__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--axis-gap-xs);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -285,21 +240,25 @@
 .library-meta {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 2px;
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
+  gap: var(--axis-gap-xs);
+  min-height: var(--axis-capsule-h);
+  padding: 0 var(--axis-gap-xs);
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-badge-bg);
+  color: var(--axis-badge-fg);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
 
+.library-meta > svg {
+  flex: 0 0 auto;
+}
+
 .library-card__desc,
 .library-card__covers {
   margin: 0;
-  color: var(--vscode-foreground);
+  color: var(--axis-text);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -312,7 +271,7 @@
 }
 
 .library-card__k {
-  color: var(--vscode-descriptionForeground);
+  color: var(--axis-dim);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -322,38 +281,38 @@
 .library-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--axis-gap-xs);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .library-tag {
-  padding: 0 6px;
-  border: 1px solid var(--vscode-widget-border);
-  border-radius: 8px;
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family);
+  padding: 0 var(--axis-gap-xs);
+  border: var(--axis-border-w) solid var(--axis-border);
+  border-radius: 999px;
+  color: var(--axis-dim);
+  font-family: var(--axis-font-mono);
   font-size: 10px;
-  line-height: 16px;
+  line-height: var(--axis-capsule-h);
 }
 
 .library-card__actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--axis-gap);
 }
 
 .library-card__hint {
   flex: 1 1 auto;
   margin: 0;
-  color: var(--vscode-descriptionForeground);
+  color: var(--axis-dim);
   font-size: 10px;
 }
 
 .library-card__flash {
   display: none;
-  color: var(--vscode-testing-iconPassed, var(--vscode-charts-green, var(--vscode-foreground)));
+  color: var(--axis-up);
   font-size: 11px;
   font-weight: 600;
 }
@@ -366,30 +325,26 @@
   appearance: none;
   display: inline-flex;
   align-items: center;
-  height: 22px;
-  padding: 0 8px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+  gap: var(--axis-gap-xs);
+  height: var(--axis-row-h);
+  padding: 0 var(--axis-gap);
+  border: var(--axis-border-w) solid transparent;
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-btn-bg);
+  color: var(--axis-btn-fg);
   font: inherit;
   font-size: 12px;
   cursor: pointer;
 }
 
 .library-apply:hover {
-  background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
-}
-
-.library-apply:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
+  background: var(--axis-btn-hover-bg);
 }
 
 .library-apply__label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--axis-gap-xs);
 }
 
 .library-apply__sent {
@@ -415,7 +370,6 @@
 .library-icon--search {
   width: 12px;
   height: 12px;
-  color: var(--vscode-input-placeholderForeground);
 }
 
 .library-icon--meta,
@@ -427,49 +381,37 @@
 .library-icon--empty {
   width: 28px;
   height: 28px;
-  color: var(--vscode-descriptionForeground);
+  color: var(--axis-dim);
 }
 
-.library-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px dashed var(--vscode-widget-border);
-  border-radius: 4px;
-  background: var(--vscode-editor-background);
-  color: var(--vscode-foreground);
+.library-empty > svg {
+  color: var(--axis-dim);
 }
 
-.library-empty__title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.library-empty p {
-  margin: 0;
-  color: var(--vscode-descriptionForeground);
+.library-empty__hint {
+  margin: var(--axis-gap-xs) 0 0;
+  color: var(--axis-faint);
   font-size: 12px;
   line-height: 1.45;
 }
 
-.library-empty__error {
-  color: var(--vscode-errorForeground);
+.library-empty__hint .ax-kbd {
+  margin: 0 2px;
 }
 
-.library-empty code {
-  font-family: var(--vscode-editor-font-family);
-  color: var(--vscode-textPreformat-foreground, var(--vscode-foreground));
+.library-empty__counts {
+  margin: var(--axis-gap-xs) 0 0;
+  color: var(--axis-faint);
+  font-size: 12px;
 }
 
 .library-empty__facts {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 2px 10px;
-  margin: 4px 0 0;
+  margin: var(--axis-gap-xs) 0 0;
+  color: var(--axis-dim);
+  font-size: 11px;
 }
 
 .library-empty__facts div {
@@ -477,37 +419,18 @@
 }
 
 .library-empty__facts dt {
-  color: var(--vscode-descriptionForeground);
-  font-size: 11px;
+  color: var(--axis-dim);
 }
 
 .library-empty__facts dd {
   margin: 0;
-  font-size: 11px;
 }
 
-.library-clear {
-  appearance: none;
-  height: 22px;
-  padding: 0 10px;
-  border: 1px solid var(--vscode-button-border, var(--vscode-widget-border));
-  border-radius: 2px;
-  background: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
+.library-empty__facts code {
+  font-family: var(--axis-font-mono);
+  color: var(--axis-text);
 }
 
-.library-clear:hover {
-  background: var(--vscode-button-secondaryHoverBackground, var(--vscode-button-secondaryBackground));
-}
-
-.library-clear:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 1px;
-}
-
-.library-chip__icon:empty {
-  display: none;
+.library-empty .ax-empty__action {
+  margin-top: var(--axis-gap);
 }

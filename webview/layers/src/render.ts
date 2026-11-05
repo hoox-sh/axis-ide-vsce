@@ -17,9 +17,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Semantic Layers cards. Theme colors stay in style.css (`--vscode-*` only).
+ * Semantic Layers cards built from the shared ax-* component catalog.
+ * Cards are ax-panel surfaces; section heads are ax-header; rows are ax-row;
+ * empty sections use ax-empty. Colors flow through --axis-* tokens only.
  */
 
+import { empty, header, panel, row } from '@axis-shared/components';
 import type { LayersSectionView, LayersViewState } from './state';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -59,7 +62,7 @@ function iconSvg(title: string): SVGSVGElement {
   svg.setAttribute('width', '16');
   svg.setAttribute('height', '16');
   svg.setAttribute('aria-hidden', 'true');
-  svg.setAttribute('class', 'layers-card__svg');
+  svg.setAttribute('class', 'layers-panel__svg');
   svg.setAttribute('fill', 'none');
   svg.setAttribute('stroke', 'currentColor');
   svg.setAttribute('stroke-width', '1.3');
@@ -73,70 +76,97 @@ function itemsLabel(count: number): string {
   return count === 1 ? '1 item' : `${count} items`;
 }
 
-function renderCard(section: LayersSectionView): HTMLElement {
-  const card = document.createElement('section');
-  card.className = 'layers-card';
-  card.dataset.section = section.id;
+function labelSpan(text: string): HTMLSpanElement {
+  const node = document.createElement('span');
+  node.className = 'layers-row__label';
+  node.textContent = text;
+  return node;
+}
+
+function detailSpan(text: string): HTMLSpanElement {
+  const node = document.createElement('span');
+  node.className = 'layers-row__detail';
+  node.textContent = text;
+  return node;
+}
+
+function renderSection(section: LayersSectionView): HTMLElement {
+  const card = panel({ className: 'layers-panel' });
   const headingId = `${section.id}-title`;
+  card.setAttribute('role', 'region');
   card.setAttribute('aria-labelledby', headingId);
 
-  const head = document.createElement('div');
-  head.className = 'layers-card__head';
-
   const icon = document.createElement('span');
-  icon.className = 'layers-card__icon';
+  icon.className = 'layers-panel__icon';
   icon.append(iconSvg(section.title));
 
-  const title = document.createElement('h2');
-  title.className = 'layers-card__title';
-  title.id = headingId;
-  title.textContent = section.title;
-
   const role = document.createElement('p');
-  role.className = 'layers-card__role';
+  role.className = 'layers-panel__role';
   role.textContent = section.role;
 
-  const count = document.createElement('p');
-  count.className = 'layers-card__count';
-  count.textContent = String(section.count);
-  count.setAttribute('aria-label', `${section.title}: ${itemsLabel(section.count)}`);
+  const head = header({
+    title: section.title,
+    count: section.count,
+    children: [icon, role],
+  });
+  head.classList.add('layers-panel__header');
 
-  head.append(icon, title, role, count);
+  const title = head.querySelector('.ax-header__title');
+  if (title) title.id = headingId;
+
   card.append(head);
 
   if (section.rows.length > 0) {
     const list = document.createElement('ul');
-    list.className = 'layers-rows';
-    for (const row of section.rows) {
-      const item = document.createElement('li');
-      item.className = 'layers-row';
-      item.dataset.row = row.id;
-      const label = document.createElement('span');
-      label.className = 'layers-row__label';
-      label.textContent = row.label;
-      item.append(label);
-      if (row.detail) {
-        const detail = document.createElement('span');
-        detail.className = 'layers-row__detail';
-        detail.textContent = row.detail;
-        item.append(detail);
-      }
-      list.append(item);
+    list.className = 'layers-panel__rows';
+    for (const item of section.rows) {
+      const children: Node[] = [labelSpan(item.label)];
+      if (item.detail) children.push(detailSpan(item.detail));
+      const itemRow = row({ as: 'li', children });
+      itemRow.dataset.row = item.id;
+      list.append(itemRow);
     }
     card.append(list);
   } else {
-    const empty = document.createElement('p');
-    empty.className = 'layers-card__empty';
-    empty.textContent = section.empty;
-    card.append(empty);
+    card.append(empty({ hint: section.empty, className: 'layers-panel__empty' }));
   }
+
   return card;
 }
 
 export function renderSections(container: HTMLElement, sections: LayersSectionView[]): void {
   const frag = document.createDocumentFragment();
-  for (const section of sections) frag.append(renderCard(section));
+  for (const section of sections) frag.append(renderSection(section));
   container.replaceChildren(frag);
+}
+
+/**
+ * Build the sticky top header from the shared ax-header component.
+ * Reuses the host-emitted `#layers-summary` and `#layers-open-chart` nodes
+ * so listeners and text updates keep working without querying again.
+ */
+export function buildTopHeader(dom: LayersDom, state: LayersViewState): HTMLElement {
+  const summary = dom.summary ?? document.createElement('p');
+  summary.id = 'layers-summary';
+  summary.className = 'layers-summary';
+
+  const open = dom.open ?? document.createElement('button');
+  open.type = 'button';
+  open.id = 'layers-open-chart';
+  open.className = 'layers-open';
+  if (!open.textContent) open.textContent = 'Open chart';
+
+  const node = header({
+    title: 'Layers',
+    count: state.total,
+    children: [summary, open],
+  });
+  node.classList.add('layers-header');
+
+  const title = node.querySelector('.ax-header__title');
+  if (title) title.id = 'layers-title';
+
+  return node;
 }
 
 /**
@@ -147,7 +177,12 @@ export function paintLayers(dom: LayersDom, state: LayersViewState, announce: bo
   if (dom.summary) {
     dom.summary.textContent = `${itemsLabel(state.total)} · ${state.source}`;
   }
+
+  const titleCount = document.querySelector('.layers-header .ax-header__count');
+  if (titleCount) titleCount.textContent = String(state.total);
+
   if (dom.sections) renderSections(dom.sections, state.sections);
+
   if (!announce || !dom.live) return;
   const live = dom.live;
   live.textContent = '';

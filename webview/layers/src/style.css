@@ -1,61 +1,59 @@
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
- * Layers studio — layout + visual rules only. The shared base (tokens,
- * theme reset + focus-visible + scrollbars, ax-* components) is imported
- * by main.ts ahead of this file.
+ * Layers studio — layout-only overrides. The shared base (tokens, theme,
+ * motion + ax-* components) is imported by main.ts ahead of this file.
+ * Color flows through --axis-* tokens defined in webview/shared/tokens.css;
+ * this file contains no VS Code semantic variables and no raw hex colors.
  */
 
-.layers-root {
+#layers-root {
   position: relative;
   height: 100%;
   overflow: auto;
-  background: var(--vscode-sideBar-background);
-  color: var(--vscode-sideBar-foreground);
+  background: var(--axis-bg);
+  color: var(--axis-text);
 }
 
 .layers-header {
   position: sticky;
   top: 0;
   z-index: 2;
-  padding: 10px 12px 8px;
-  background: var(--vscode-sideBar-background);
-  /* pane edge: VS Code view chrome already draws the outer border */
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px var(--axis-panel-pad) var(--axis-gap);
+  background: var(--axis-bg);
 }
 
-.layers-title {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  color: var(--vscode-sideBarTitle-foreground);
+.layers-header .ax-header__title,
+.layers-header .ax-header__count {
+  flex: none;
 }
 
 .layers-summary {
-  margin: 4px 0 8px;
-  color: var(--vscode-descriptionForeground);
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--axis-dim);
   font-size: 12px;
 }
 
 .layers-open {
+  flex: none;
+  margin: 0;
+  padding: 3px 10px;
+  border: var(--axis-border-w) solid transparent;
+  border-radius: var(--axis-radius-chip);
+  background: var(--axis-btn-bg);
+  color: var(--axis-btn-fg);
   font: inherit;
   font-size: 12px;
-  line-height: 1.4;
-  padding: 3px 10px;
-  border: 1px solid transparent;
-  border-radius: 2px;
-  color: var(--vscode-button-foreground);
-  background: var(--vscode-button-background);
   cursor: pointer;
 }
 
 .layers-open:hover {
-  background: var(--vscode-button-hoverBackground);
-}
-
-.layers-open:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: 2px;
+  background: var(--axis-btn-hover-bg);
 }
 
 .layers-live {
@@ -73,106 +71,67 @@
 .layers-sections {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px 16px;
+  gap: var(--axis-gap);
+  padding: 0 var(--axis-panel-pad) var(--axis-panel-pad);
 }
 
-.layers-card {
+.layers-panel {
+  padding: var(--axis-panel-pad);
+}
+
+.layers-panel > * + * {
+  margin-top: var(--axis-gap);
+}
+
+.layers-panel__header {
+  flex-wrap: wrap;
   margin: 0;
-  padding: 8px 10px 10px;
-  border: 0;
-  border-radius: 4px;
-  background: var(--vscode-editor-background);
-  color: var(--vscode-editor-foreground);
-}
-
-.layers-card__head {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto;
-  grid-template-rows: auto auto;
-  column-gap: 8px;
-  row-gap: 1px;
-  align-items: center;
-}
-
-.layers-card__icon {
-  grid-row: 1 / span 2;
-  grid-column: 1;
-  display: flex;
-  color: var(--vscode-icon-foreground);
-}
-
-.layers-card__svg {
-  display: block;
-}
-
-.layers-card__title {
-  grid-column: 2;
-  grid-row: 1;
-  margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--vscode-foreground);
-}
-
-.layers-card__role {
-  grid-column: 2;
-  grid-row: 2;
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.35;
-  color: var(--vscode-descriptionForeground);
-}
-
-.layers-card__count {
-  grid-column: 3;
-  grid-row: 1 / span 2;
-  margin: 0;
-  min-width: 1.4em;
-  padding: 0 6px;
-  border-radius: 8px;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 18px;
-  background: var(--vscode-badge-background);
-  color: var(--vscode-badge-foreground);
-}
-
-.layers-rows {
-  list-style: none;
-  margin: 8px 0 0;
   padding: 0;
 }
 
-.layers-row {
+.layers-panel__header .ax-header__title {
+  flex: none;
+  text-transform: uppercase;
+}
+
+.layers-panel__icon {
+  order: -1;
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 8px;
-  padding: 4px 0;
-  border-top: 1px solid var(--vscode-widget-border);
-  font-size: 12px;
+  color: var(--axis-dim);
+}
+
+.layers-panel__svg {
+  display: block;
+}
+
+.layers-panel__role {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--axis-dim);
+}
+
+.layers-panel__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .layers-row__label {
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--vscode-foreground);
+  color: var(--axis-text);
 }
 
 .layers-row__detail {
   flex: 0 0 auto;
-  color: var(--vscode-descriptionForeground);
-  font-family: var(--vscode-editor-font-family);
+  color: var(--axis-dim);
+  font-family: var(--axis-font-mono);
   font-size: 11px;
-}
-
-.layers-card__empty {
-  margin: 8px 0 0;
-  color: var(--vscode-disabledForeground);
-  font-size: 12px;
 }
