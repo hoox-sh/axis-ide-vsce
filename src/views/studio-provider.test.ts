@@ -591,8 +591,10 @@ describe('registerStudioView', () => {
     const calmHost: StudioViewHost = {
       registerWebviewViewProvider: () => ({ dispose() {} }),
     };
+    // A hostile subscriptions.push no longer hides the provider: VS Code already
+    // holds the disposable, and the provider is fully wired.
     expect(
       registerStudioView(makeEntry().entry, makeDeps(), calmHost, pushBoomContext),
-    ).toBeUndefined();
+    ).toBeInstanceOf(StudioViewProvider);
   });
 });

@@ -336,7 +336,12 @@ export function registerStudioView(
     const disposable = host.registerWebviewViewProvider(entry.viewId, provider, {
       webviewOptions: { retainContextWhenHidden: entry.retainContextWhenHidden },
     });
-    context.subscriptions.push(disposable);
+    try {
+      context.subscriptions.push(disposable);
+    } catch {
+      // Hostile / disposing context; the disposable is still held by VS Code and
+      // the provider is fully wired. Swallow rather than hide the view.
+    }
     return provider;
   } catch {
     // uncontributed view id / test host
