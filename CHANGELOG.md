@@ -52,6 +52,15 @@ with its commit history preserved.
   preserved verbatim (`data` / `args`). Behavior and visuals are unchanged;
   `StudioMessageRouter` now accepts async action handlers (rejections logged
   and dropped), and asset-root failures degrade to a safe fallback shell.
+- Phase 3 panel consolidation: the bottom panel now hosts **Run Output**
+  (`axis.runOutput`) and **Toolbox** (`axis.toolbox`) instead of six separate
+  views. Run Output has client-side tabs for Summary, Strategy, Profiler, and
+  Logs; Toolbox has tabs for Colors and Symbols. `axis.focusResults` reveals
+  Run Output and forces the Summary tab. The VSIX now ships exactly ten
+  webview bundles (chart, runoutput, toolbox, alerts, library, layers, plugins,
+  scripts, watchlist, workers). Stable LM tool ids (`axis_get_results_focus`,
+  `axis_get_run_logs`, `axis_get_profiler`) are retargeted to the consolidated
+  data sources without renames.
 
 ### Fixed
 
