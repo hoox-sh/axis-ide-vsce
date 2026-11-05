@@ -61,6 +61,15 @@ with its commit history preserved.
   scripts, watchlist, workers). Stable LM tool ids (`axis_get_results_focus`,
   `axis_get_run_logs`, `axis_get_profiler`) are retargeted to the consolidated
   data sources without renames.
+- Phase 4 design-system adoption: the remaining activity-bar studios
+  (alerts, layers, library, plugins, scripts, watchlist, workers) now render
+  through the shared `createStudio()` runtime and `ax-*` component builders
+  (`ax-panel`, `ax-header`, `ax-row`, `ax-chip`, `ax-status-dot`, `ax-capsule`,
+  etc.). Per-studio `style.css` files are layout-only with zero `--vscode-*`
+  references and zero raw hex colors — all tokens come from `--axis-*`. Added
+  `axis-wl-flash-up/down` to watchlist rows and `axis-live-pulse` to worker/live
+  status dots; all motion is capped at 350 ms and gated by
+  `prefers-reduced-motion`.
 
 ### Fixed
 
@@ -72,6 +81,17 @@ with its commit history preserved.
 
 ### Changed
 
+- Watchlist studio migrated onto the shared `ax-*` component system
+  (`createStudio()`, `ax-panel`, `ax-header`, `ax-row`, `ax-capsule`,
+  `ax-search`, `ax-empty`) with tick-direction row flashes
+  (`axis-wl-flash-up/down`, 180ms, gated by `prefers-reduced-motion`).
+- Plugins studio migrated onto the shared `ax-*` component system
+  (`createStudio()`, `ax-panel`, `ax-header`, `ax-row`, `ax-chip`,
+  `ax-status-dot`, `ax-empty`, `ax-tabs`, `ax-search`). `style.css` is now
+  layout-only with zero `--vscode-*` references and zero raw hex colors.
+  Plugin cards, flags (allowPyodide/liveEnabled/allowUrlInstall), activate
+  action, search, copy-id, tab selection, and keyboard navigation are
+  preserved.
 - Repository / bugs / QnA links now point at `hoox-sh/axis-ide-vsce`.
 - Build and test commands no longer use monorepo `--cwd packages/…` paths.
 - `.vscodeignore` excludes repo-only docs, `pack/`, CI files, and internal

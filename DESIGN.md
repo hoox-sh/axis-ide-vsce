@@ -72,11 +72,12 @@ The pack VSIX is manifest-only; it does not rebundle PYNE or the IDE.[^publish]
                     │ axis.webview.v1 envelopes (typed)
 ┌───────────────────▼─────────────────────────────────────────┐
 │                     Webview studios                           │
-│  webview/<studio>/ — one Vite project per studio            │
+│  webview/<studio>/ — one Vite project per studio (10 bundles)    │
 │    ├─ chart                                                        │
-│    ├─ results   (shared results + strategy panels)                 │
-│    ├─ plugins / library / layers / scripts / watchlist / alerts  │
-│    ├─ workers / colors / symbols / logs / profiler                 │
+│    ├─ runoutput   (Run Output: Summary / Strategy / Profiler / Logs)│
+│    ├─ toolbox     (Toolbox: Colors / Symbols)                      │
+│    ├─ alerts / library / layers / plugins / scripts                │
+│    ├─ watchlist / workers                                          │
 │    └─ paint-only CSP; host proxies network                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -92,6 +93,7 @@ The pack VSIX is manifest-only; it does not rebundle PYNE or the IDE.[^publish]
 - One Vite config per studio under `webview/<studio>/vite.config.ts`.
 - Each studio produces `dist/webview/<studio>/main.js` and `main.css`.
 - `.vscodeignore` allowlists only those two files per studio; source maps and directories are excluded from the VSIX.[^pkg]
+- A shared runtime lives under `webview/shared/` (source-only, no build of its own): typed `acquireVsCodeApi()`, the `axis.webview.v1` codec re-export, vanilla-TS component builders (`ax-*`), AXIS design tokens (`--axis-*`), theme reset, motion variables, and a `createStudioViteConfig()` factory. Bundles import shared modules through the `@axis-shared` alias, so each studio still ships only its own `main.js`/`main.css` pair.
 
 ### Host↔webview protocol
 
@@ -112,7 +114,7 @@ No `onStartupFinished` event is used.[^pkg]
 1. **Open chart**: `axis.openChart` creates or opens a sibling `*.axis.json` next to the active Pine file (e.g. `rsi.pyne` → `rsi.axis.json`).[^design]
 2. **Run script**: `axis.runScript` (Ctrl/Cmd+Enter on `pinescript`) sends the buffer to the configured Pro engine endpoint (`axis.engine.endpoint`). By default the engine receives bars from the local datafeed (`axis.datafeed.url`). With `axis.chart.useMockBars` true, deterministic fixture bars are used instead.
 3. **Live session**: `axis.liveStart` mints a ticket via `GET /api/ws/live?issue=ticket` and upgrades to a WebSocket at `/api/ws/live?ticket=…`.[^design]
-4. **Results focus**: runs publish summaries to the Results / Strategy panels; `axis.focusResults` retargets the active run.
+4. **Run Output focus**: runs publish summaries to the Run Output panel (`axis.runOutput`), which combines Summary, Strategy, Profiler, and Logs as client-side tabs; `axis.focusResults` reveals Run Output and selects the Summary tab.
 
 ## Security model
 

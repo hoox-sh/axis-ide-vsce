@@ -3,7 +3,8 @@
 Audit against design KD-6 / CSP matrix (Task 25 + Task 27). **Do not widen runtime CSP
 without updating this doc** (and README).
 
-HTML is host-generated (`src/editors/chart-html.ts`, `src/views/results-html.ts`)
+HTML is host-generated (`src/editors/chart-html.ts` and the generic
+`src/views/studio-html.ts` shell used by every `WebviewViewProvider` studio)
 with `webview.cspSource` — never hard-coded `vscode-resource:` / `https:`.
 
 Optional Pyodide widen is gated by **`axis.engine.allowPyodide`** (default **false**).
@@ -12,9 +13,9 @@ Runtime helper: `buildChartCspDirectives(cspSource, allowPyodide)` in
 `src/host/pyodide-profile.ts` (calculator / bars-in only — not stream-owning; Wasm
 assets are **not** shipped in this VSIX).
 
-## Enforced (chart + results / strategy) — default
+## Enforced (chart + all panel/activity webviews) — default
 
-| Directive | Chart (`axis.chart`) | Results / Strategy (`axis.results` / `axis.strategy`) |
+| Directive | Chart (`axis.chart`) | All other webviews (`runoutput`, `toolbox`, `alerts`, `library`, `layers`, `plugins`, `scripts`, `watchlist`, `workers`) |
 | --- | --- | --- |
 | `default-src` | `'none'` | `'none'` |
 | `base-uri` | `'none'` | `'none'` |
@@ -26,10 +27,10 @@ assets are **not** shipped in this VSIX).
 | `worker-src` | _(omitted)_ | _(omitted)_ |
 | Inline `<script>` | **Forbidden** (src= only) | **Forbidden** (src= only) |
 
-`style-src 'unsafe-inline'` covers VS Code theme CSS variables. Scripts and
-styles load via `asWebviewUri` from `dist/webview/{chart,results}/` under
-`localResourceRoots`. Lightweight Charts is bundled into the chart `main.js`
-(no CDN).
+`style-src 'unsafe-inline'` covers VS Code theme CSS variables and the shared
+`--axis-*` design-token layer. Scripts and styles load via `asWebviewUri` from
+`dist/webview/<studio>/` under `localResourceRoots`. Lightweight Charts is
+bundled into the chart `main.js` (no CDN).
 
 ## vs AXIS PWA (`public/_headers`)
 
