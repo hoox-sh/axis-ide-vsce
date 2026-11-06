@@ -4,7 +4,7 @@ All notable changes to **AXIS IDE** (`hoox-sh.axis-ide`) and the **AXIS Trading
 Pack** (`hoox-sh.axis`). This repository was extracted from the AXIS monorepo
 with its commit history preserved.
 
-## [Unreleased]
+## [0.3.1] — 2026-11-06
 
 ### Fixed
 
