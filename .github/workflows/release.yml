@@ -100,19 +100,10 @@ jobs:
               -p "$OVSX_PAT"
           fi
 
-      - name: Publish pack to VS Marketplace
-        if: env.VSCE_PAT != ''
-        run: |
-          VER="${{ steps.versions.outputs.pack }}"
-          if npx --yes @vscode/vsce show hoox-sh.axis --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
-            echo "hoox-sh.axis $VER already on the Marketplace — skipping."
-          else
-            npx --yes @vscode/vsce publish \
-              --pat "$VSCE_PAT" \
-              --packagePath "pack/axis-$VER.vsix" \
-              --no-dependencies
-          fi
-
+      # Pack: Open VSX first so a Marketplace-side block (the reserved
+      # hoox-sh.axis name) cannot prevent the Open VSX publication.
+      # The Marketplace step is continue-on-error until the reserved name
+      # is cleared in the publisher portal — see PUBLISH.md.
       - name: Publish pack to Open VSX
         if: env.OVSX_PAT != ''
         run: |
@@ -123,4 +114,18 @@ jobs:
             npx --yes ovsx publish \
               "pack/axis-$VER.vsix" \
               -p "$OVSX_PAT"
+          fi
+
+      - name: Publish pack to VS Marketplace
+        if: env.VSCE_PAT != ''
+        continue-on-error: true
+        run: |
+          VER="${{ steps.versions.outputs.pack }}"
+          if npx --yes @vscode/vsce show hoox-sh.axis --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
+            echo "hoox-sh.axis $VER already on the Marketplace — skipping."
+          else
+            npx --yes @vscode/vsce publish \
+              --pat "$VSCE_PAT" \
+              --packagePath "pack/axis-$VER.vsix" \
+              --no-dependencies
           fi
