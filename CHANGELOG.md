@@ -4,7 +4,79 @@ All notable changes to **AXIS IDE** (`hoox-sh.axis-ide`) and the **AXIS Trading
 Pack** (`hoox-sh.axis`). This repository was extracted from the AXIS monorepo
 with its commit history preserved.
 
-## [Unreleased]
+## [0.3.0] — 2026-11-06
+
+### Fixed
+
+- Security/robustness hardening across live, run, and MCP paths: strict
+  AXIS Worker host allowlist (exact host or strict subdomain of
+  `worker.axis.hoox.sh` — no substring/`workers.dev` matching), `axis.worker.url`
+  now application-scope, MCP stdio definitions gated by the same worker-URL
+  check with send-time `pn_` key re-validation, absolute 30s deadlines for
+  Pro `/run` and datafeed OHLCV round-trips with combined abort signals,
+  remint failure reporting in the live resume stub, array coercion for live
+  frame `bars`/`tail` payloads, chart fan-out cursor reset on reconnect,
+  deep secret scrubbing of engine payloads and console logging, bounded
+  results cache (100 runs), live-doc snapshot disposal on chart close, and
+  an inline-script vector backstop (`on*=` attributes, `javascript:` URLs)
+  for chart HTML.
+
+### Added
+
+- OKF knowledge bundle (`okf/`, Open Knowledge Format v0.2): a compiled,
+  committed map of the repo refreshed on every commit by the pre-commit hook
+  (`.githooks/`), with `okf:enrich/check/lint/query/context` scripts, an
+  `okf:check` CI step, and curated agent playbooks under `okf/playbooks/`
+  (`okf_lock: human`). See `docs/okf.md`.
+- Storybook for the `ax-*` webview design system (`.storybook/` + `stories/`,
+  `@storybook/html-vite`): the shared CSS layers render under a VS Code token
+  shim with a dark / light / high-contrast toolbar switch. Stories cover the
+  token board, inputs (search / field + states), underline tab bars, pill
+  chips, rows, status primitives, surfaces, the profiler bar, glyph grid, and
+  the Plugins studio card composition. Run `bun run storybook`.
+
+### Changed
+
+- `AGENTS.md` and `DESIGN.md` are now local-only (untracked, gitignored)
+  alongside `.opencode/` and `opencode.json`; `.grok/` is ignored for when it
+  appears. The OKF bundle no longer ingests `DESIGN.md`.
+
+- Webview shared components aligned with the AXIS repo design language
+  (`src/ui/studio/studio.css`): tabs are underline-indicator tab bars
+  (animated 2px accent indicator on a hairline rail) instead of segmented
+  pills; chips are transparent accent-state pills with press scale, focus
+  ring, and disabled fade; inputs gain the accent caret, hover edge lighten,
+  focus edge + soft ring, selection tint, autofill fix, removed native
+  number/search chrome, readonly/disabled/invalid states; motion durations
+  normalized to the 120ms/200ms axis tokens; high-contrast contract updated
+  for the new tab rail. Class names (`ax-*`) unchanged — studios and tests
+  are unaffected.
+
+### Security
+
+- Hardened the Worker-key trust boundary: `axis.worker.url` is now
+  application-scoped and the "known Worker host" allowlist uses strict
+  exact/suffix matching instead of substring matching, so a workspace setting
+  can no longer exfiltrate the `pn_` key to a spoofed host.
+- The MCP stdio provider now gates the worker origin with the same loopback /
+  known-host / `allowRemoteEndpoint` check as the live path, and re-validates
+  the Worker key shape before emitting `AXIS_API_KEY` into the child env.
+- Pro `/run` and datafeed HTTP now enforce a 30s round-trip timeout, and
+  `postEngineRun` re-asserts the loopback gate at the transport layer
+  (fail-closed for future callers).
+- Scrubbed `error` / `strategyReport` fields flowing into the Scripts and Run
+  Output webviews, and the host logger console bridge, for consistent secret
+  redaction.
+
+### Fixed
+
+- Live reconnect now resets the chart fan-out's seq/bar cursors so a remint
+  that restarts the worker's sequence counter is no longer dropped as a stale
+  snapshot.
+- Bounded the in-memory run-results and chart live-doc caches so long sessions
+  no longer grow them without bound.
+- The live resume stub now reports `reminted: false` when the remint actually
+  fails, instead of logging "remint ok".
 
 ## [0.2.0] — 2026-11-05
 
