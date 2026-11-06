@@ -43,10 +43,15 @@ test-results/
 # Bun
 bun.lockb
 
+# Storybook build output
+storybook-static/
+
 # Local agent / session data
 .opencode/
+.grok/
 opencode.json
-okf/
+AGENTS.md
+DESIGN.md
 .tmp/
 .agent-sync/
 .agent-sync-notice.md
