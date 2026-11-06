@@ -48,6 +48,9 @@ export interface RunResultRecord {
 
 export type ResultsFocusChangeReason = 'publish' | 'focus' | 'ready';
 
+/** Cap on cached run records so a long session cannot grow the map unbounded. */
+export const MAX_RUN_RESULTS = 100;
+
 /** Snapshot posted as `results.set` (plus newestRunId for host/MCP). */
 export interface ResultsFocusSnapshot extends ResultsSetPayload {
   newestRunId: string | null;
@@ -120,6 +123,13 @@ export class ResultsFocusStore {
     };
     this.runResults.set(id, record);
     this.newestRunId = id;
+    // Bound the cache — evict oldest entries beyond the cap. lastRun/focus are
+    // copied snapshots, so eviction only limits re-focusing very old runs.
+    while (this.runResults.size > MAX_RUN_RESULTS) {
+      const oldest = this.runResults.keys().next().value;
+      if (oldest === undefined) break;
+      this.runResults.delete(oldest);
+    }
 
     const firstEver = this.resultsFocusId == null;
     const shouldPublish = partial.focus || firstEver;

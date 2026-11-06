@@ -98,11 +98,14 @@ describe('shouldUseLiveProxy', () => {
 describe('looksLikeWorkerEndpoint / checkWorkerUrl', () => {
   test('recognizes cloud Worker and wrangler :8787', () => {
     expect(looksLikeWorkerEndpoint('https://worker.axis.hoox.sh')).toBe(true);
+    expect(looksLikeWorkerEndpoint('https://api.worker.axis.hoox.sh')).toBe(true);
     expect(looksLikeWorkerEndpoint('http://127.0.0.1:8787')).toBe(true);
     expect(looksLikeWorkerEndpoint('https://axis.hoox.sh')).toBe(false);
     expect(looksLikeWorkerEndpoint('')).toBe(false);
-    expect(looksLikeWorkerEndpoint('https://worker-axis.example.workers.dev')).toBe(true);
-    expect(looksLikeWorkerEndpoint('https://x.example/api/onchain/tvl')).toBe(true);
+    // Substring / wildcard spoofs must NOT pass (key-exfiltration guard).
+    expect(looksLikeWorkerEndpoint('https://worker-axis.example.workers.dev')).toBe(false);
+    expect(looksLikeWorkerEndpoint('https://worker-axis.evil.com')).toBe(false);
+    expect(looksLikeWorkerEndpoint('https://x.example/api/onchain/tvl')).toBe(false);
     expect(looksLikeWorkerEndpoint('https://[::1')).toBe(false);
   });
 
@@ -142,7 +145,7 @@ describe('looksLikeWorkerEndpoint / checkWorkerUrl', () => {
         workerApiKey: KEY,
       }),
     ).toBe(false);
-    expect(looksLikeWorkerEndpoint('https://pynescript-axis.example.com')).toBe(true);
+    expect(looksLikeWorkerEndpoint('https://pynescript-axis.example.com')).toBe(false);
   });
 });
 

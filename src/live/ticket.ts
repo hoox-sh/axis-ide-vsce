@@ -81,23 +81,23 @@ function normalizeWorkerBase(workerEndpoint: string): string {
   return base.replace(/\/+$/, '');
 }
 
+/** Canonical AXIS Worker host. Subdomains are allowed via strict suffix match. */
+const AXIS_WORKER_HOST = 'worker.axis.hoox.sh';
+
+/**
+ * True only for the canonical AXIS Worker host or a strict subdomain of it.
+ * Deliberately no substring / wildcard matching: `worker-axis.evil.com`,
+ * `*.workers.dev`, or any host embedding `worker-axis` must NOT pass, so a
+ * workspace setting cannot exfiltrate the `pn_` key to an attacker host.
+ */
 function isAxisWorkerHostname(host: string): boolean {
-  if (host.endsWith('.workers.dev')) return true;
-  if (host === 'worker.axis.hoox.sh' || host.endsWith('.worker.axis.hoox.sh')) {
-    return true;
-  }
-  if (host.includes('worker-axis') || host.includes('pynescript-axis')) {
-    return true;
-  }
-  return false;
+  return host === AXIS_WORKER_HOST || host.endsWith(`.${AXIS_WORKER_HOST}`);
 }
 
 /** True when endpoint looks like an AXIS Cloudflare Worker (not the VPS SPA). */
 export function looksLikeWorkerEndpoint(endpoint: string | undefined | null): boolean {
   const raw = String(endpoint || '').trim();
   if (!raw) return false;
-  const lower = raw.toLowerCase();
-  if (lower.includes('/api/onchain')) return true;
   try {
     const u = new URL(raw.includes('://') ? raw : `https://${raw}`);
     const host = u.hostname.toLowerCase();

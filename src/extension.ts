@@ -628,6 +628,9 @@ async function runScriptCore(opts: {
       return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
     }
     if (!resolved.ok) {
+      if (resolved.reason === 'aborted') {
+        return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
+      }
       const err = scrubSecrets(resolved.error);
       output.appendLine(err);
       if (showErrors) void window.showErrorMessage(err);
@@ -642,6 +645,7 @@ async function runScriptCore(opts: {
         getProKey: () => secretStore.getProKey(),
       },
       endpoint: endpointCheck.endpoint,
+      allowRemote: settings.allowRemote,
       bus: { notifyChart },
       results: focusStore,
       output: {
@@ -1042,8 +1046,8 @@ export function activate(context: ExtensionContext): void {
     } catch {
       // disposed
     }
-    if (level === 'error') console.error(`[axis] ${message}`);
-    else if (level === 'warn') console.warn(`[axis] ${message}`);
+    if (level === 'error') console.error(`[axis] ${scrubSecrets(message)}`);
+    else if (level === 'warn') console.warn(`[axis] ${scrubSecrets(message)}`);
   });
 
   runDiagnostics = languages.createDiagnosticCollection('axis-run');
@@ -1070,6 +1074,8 @@ export function activate(context: ExtensionContext): void {
   const secretStore = secrets;
   // Holder so fan-out can close over the bridge after construction.
   let onFrame: LiveFrameHandler = () => {};
+  // Holder so the bridge can reset the fan-out's cursors on every fresh open.
+  let onReconnect: () => void = () => {};
   const bridge = createLiveSessionBridge({
     secrets: {
       getWorkerKey: async () => {
@@ -1088,6 +1094,9 @@ export function activate(context: ExtensionContext): void {
     },
     onFrame: (frame) => {
       onFrame(frame);
+    },
+    onReconnect: () => {
+      onReconnect();
     },
     onStatus: (_state, label) => {
       applyLiveHud(label);
@@ -1113,6 +1122,7 @@ export function activate(context: ExtensionContext): void {
     },
   });
   onFrame = fanout.onFrame;
+  onReconnect = fanout.reset;
   applyLiveHud(bridge.getStatusLabel());
 
   const focusStoreForLm = resultsStore;

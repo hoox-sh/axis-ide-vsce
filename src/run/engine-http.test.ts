@@ -20,6 +20,7 @@ import { describe, expect, test } from 'bun:test';
 import type { OhlcvBar } from '../host/mock-bars';
 import {
   DEFAULT_ENGINE_ENDPOINT,
+  ENGINE_REMOTE_DENIED,
   MISSING_ENDPOINT_ERROR,
   barsForPine,
   mapEngineResponse,
@@ -266,11 +267,68 @@ describe('postEngineRun', () => {
       bars: SAMPLE_BARS,
       mode: 'auto',
       apiKey: 'pyn_abcdefghijklmnopqrstuvwxyz0123456789',
+      allowRemote: true,
       fetchImpl,
     });
     expect(result.status).toBe('error');
     expect(result.httpStatus).toBe(401);
     expect(result.error).toContain('invalid key');
+  });
+
+  test('remote endpoint without allowRemote is rejected before fetch', async () => {
+    let called = false;
+    const fetchImpl: FetchLike = async () => {
+      called = true;
+      return { ok: true, status: 200, text: async () => '{}' };
+    };
+    const result = await postEngineRun({
+      endpoint: 'https://api.example.test',
+      script: 'x',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      apiKey: 'pyn_abcdefghijklmnopqrstuvwxyz0123456789',
+      fetchImpl,
+    });
+    expect(called).toBe(false);
+    expect(result.status).toBe('error');
+    expect(result.error).toBe(ENGINE_REMOTE_DENIED);
+  });
+
+  test('malformed endpoint URL is rejected by the loopback gate', async () => {
+    let called = false;
+    const fetchImpl: FetchLike = async () => {
+      called = true;
+      return { ok: true, status: 200, text: async () => '{}' };
+    };
+    const result = await postEngineRun({
+      endpoint: 'http://[',
+      script: 'x',
+      bars: [],
+      mode: 'auto',
+      apiKey: 'pyn_abcdefghijklmnopqrstuvwxyz0123456789',
+      fetchImpl,
+    });
+    expect(called).toBe(false);
+    expect(result.status).toBe('error');
+    expect(result.error).toBe(ENGINE_REMOTE_DENIED);
+  });
+
+  test('applies an explicit timeoutMs to the request signal', async () => {
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl = mockFetch((_url, init) => {
+      seenSignal = init?.signal;
+      return { ok: true, status: 200, body: JSON.stringify({ status: 'success', plots: [], series: {} }) };
+    });
+    await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'x',
+      bars: [],
+      mode: 'auto',
+      apiKey: 'pyn_abcdefghijklmnopqrstuvwxyz0123456789',
+      timeoutMs: 1234,
+      fetchImpl,
+    });
+    expect(seenSignal).toBeDefined();
   });
 
   test('empty endpoint returns clear error without fetch', async () => {

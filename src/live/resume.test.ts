@@ -70,6 +70,20 @@ describe('createLiveResumeStub', () => {
     expect(r2.reminted).toBe(false);
   });
 
+  test('remint returning { ok:false } reports reminted:false', async () => {
+    const secret = `pn_${'ab'.repeat(24)}`;
+    const lines: string[] = [];
+    const stub = createLiveResumeStub({
+      output: { appendLine: (l) => lines.push(l) },
+      remint: async () => ({ ok: false, error: `${secret} mint failed` }),
+    });
+    const r = await stub.resume('seq-gap');
+    expect(r.ok).toBe(true);
+    expect(r.reminted).toBe(false);
+    expect(lines.some((l) => l.includes('remint failed'))).toBe(true);
+    expect(lines.some((l) => l.includes(secret))).toBe(false);
+  });
+
   test('dedupes overlapping resume calls', async () => {
     let remints = 0;
     let release!: () => void;

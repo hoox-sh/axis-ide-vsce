@@ -87,7 +87,18 @@ export function createLiveResumeStub(deps: LiveResumeStubDeps = {}): LiveResumeS
     }
 
     try {
-      await deps.remint!();
+      const result = await deps.remint!();
+      // `bridge.start()` returns a `LiveStartResult`; a `{ ok: false }` means the
+      // remint failed (mint error, missing key, WS error) — report it honestly.
+      if (
+        result != null &&
+        typeof result === 'object' &&
+        (result as { ok?: unknown }).ok === false
+      ) {
+        const err = (result as { error?: unknown }).error ?? 'remint failed';
+        log(`live resume stub: remint failed: ${scrubSecrets(String(err))}`);
+        return { ok: true, reminted: false, reason: why };
+      }
       log(`live resume stub: remint ok (${why})`);
       return { ok: true, reminted: true, reason: why };
     } catch (err) {

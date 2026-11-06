@@ -85,6 +85,8 @@ export interface RunDeps {
   secrets: RunSecrets;
   /** Engine base URL (`axis.engine.endpoint`) — already gated by caller. */
   endpoint: string;
+  /** `axis.engine.allowRemoteEndpoint` — re-asserted at the transport layer. */
+  allowRemote?: boolean;
   /** Optional injectable fetch (tests). */
   fetchImpl?: FetchLike;
   bus: {
@@ -273,6 +275,7 @@ export class RunOrchestrator {
         mode: req.mode || 'auto',
         symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
         apiKey: rawKey,
+        allowRemote: deps.allowRemote,
         signal,
         fetchImpl: deps.fetchImpl,
       });
@@ -384,6 +387,10 @@ export class RunOrchestrator {
       return { ok: false, epoch: my, reason: 'error', error };
     } finally {
       if (this.inflight === localAbort) this.inflight = undefined;
+      // Abort the local controller so combineSignals' listener registrations
+      // release promptly instead of lingering until the next run / deactivate.
+      // `AbortController.abort()` is specified to never throw.
+      localAbort.abort();
     }
   }
 

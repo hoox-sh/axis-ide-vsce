@@ -24,10 +24,14 @@
  */
 
 import { checkHttpBaseUrl, type EndpointCheck } from '../run/endpoint';
+import { combineAbortSignals } from '../run/engine-http';
 import { MOCK_BARS_CAP, type OhlcvBar } from './mock-bars';
 import { pairFormSymbol } from './series-key';
 
 export const DEFAULT_DATAFEED_URL = 'http://127.0.0.1:5003';
+
+/** Absolute deadline for a datafeed OHLCV round-trip (supersede abort still wins). */
+export const DATAFEED_TIMEOUT_MS = 30_000;
 
 export const REMOTE_DATAFEED_DENIED =
   'AXIS datafeed URL must be loopback (127.0.0.1 / localhost / ::1) unless axis.engine.allowRemoteEndpoint is enabled.';
@@ -60,11 +64,13 @@ export interface FetchHistoricalRequest {
   allowRemote?: boolean;
   fetchImpl?: HistoryFetchLike;
   signal?: AbortSignal;
+  /** Absolute round-trip deadline (ms). Defaults to DATAFEED_TIMEOUT_MS. */
+  timeoutMs?: number;
 }
 
 export type FetchHistoricalResult =
   | { ok: true; bars: OhlcvBar[]; endpoint: string }
-  | { ok: false; error: string };
+  | { ok: false; error: string; reason?: 'aborted' };
 
 /**
  * Normalize and gate the datafeed base URL (same loopback posture as engine).
@@ -165,13 +171,18 @@ export async function fetchHistorical(
 
     const url = `${gated.endpoint}/datafeed/ohlcv?${params.toString()}`;
     const fetchImpl = req.fetchImpl ?? globalThis.fetch.bind(globalThis);
+    const timeoutMs =
+      typeof req.timeoutMs === 'number' && Number.isFinite(req.timeoutMs)
+        ? req.timeoutMs
+        : DATAFEED_TIMEOUT_MS;
+    const signal = combineAbortSignals(req.signal, AbortSignal.timeout(timeoutMs));
     let res: { ok: boolean; status: number; text(): Promise<string> };
     try {
-      res = await fetchImpl(url, { method: 'GET', signal: req.signal });
+      res = await fetchImpl(url, { method: 'GET', signal });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (req.signal?.aborted) {
-        return { ok: false, error: 'AXIS history: fetch aborted.' };
+        return { ok: false, error: 'AXIS history: fetch aborted.', reason: 'aborted' };
       }
       return {
         ok: false,

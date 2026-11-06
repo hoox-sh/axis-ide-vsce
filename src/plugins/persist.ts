@@ -25,19 +25,13 @@
 import {
   EMPTY_PLUGINS_V1,
   PLUGINS_GLOBAL_STATE_KEY,
-  PLUGIN_KINDS,
   type GlobalStateHelpers,
   type InstalledPluginMeta,
-  type PluginKind,
 } from './types';
 
 /** Field names never allowed in persisted plugin JSON. */
 const SECRET_FIELD_RE =
   /^(api[_-]?key|password|passwd|secret|token|bearer|authorization|auth|credential|private[_-]?key)$/i;
-
-function isPluginKind(raw: unknown): raw is PluginKind {
-  return typeof raw === 'string' && (PLUGIN_KINDS as readonly string[]).includes(raw);
-}
 
 function stripSecretsFromRecord(
   input: Record<string, unknown>,
@@ -72,7 +66,9 @@ export function sanitizeInstalledPluginMeta(
         : id;
     const description =
       cleaned.description != null ? String(cleaned.description) : undefined;
-    const kind = isPluginKind(kindRaw) ? kindRaw : kindRaw;
+    // `kind` is metadata-only and typed `PluginKind | string` (forward-compat
+    // with future plugin kinds); accept any non-empty string verbatim.
+    const kind = kindRaw;
     return { url, id, name, kind, description };
   } catch {
     return null;

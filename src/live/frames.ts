@@ -111,7 +111,8 @@ export function normalizeLiveFrame(raw: unknown): NormalizedWireFrame {
     if (type === 'full') {
       const seq = num(raw.seq) ?? num(body.seq);
       if (seq === null) return { kind: 'unknown' };
-      const bars = body.bars ?? raw.bars ?? [];
+      const barsRaw = body.bars ?? raw.bars;
+      const bars = Array.isArray(barsRaw) ? barsRaw : [];
       const plots = 'plots' in body ? body.plots : 'plots' in raw ? raw.plots : undefined;
       return plots !== undefined
         ? { kind: 'full', seq, bars, plots, seriesKey }
@@ -126,8 +127,11 @@ export function normalizeLiveFrame(raw: unknown): NormalizedWireFrame {
         num(body.base_index) ??
         num(raw.baseIndex) ??
         num(raw.base_index);
-      const tail = body.tail ?? body.bars ?? raw.tail ?? raw.bars;
-      if (baseIndex === null || tail === undefined) return { kind: 'unknown' };
+      const tailRaw = body.tail ?? body.bars ?? raw.tail ?? raw.bars;
+      if (baseIndex === null || tailRaw === undefined) return { kind: 'unknown' };
+      // Coerce so a malformed (non-array) tail is never forwarded to the chart;
+      // the host cursor math and the webview payload stay consistent.
+      const tail = Array.isArray(tailRaw) ? tailRaw : [];
       const plots = 'plots' in body ? body.plots : 'plots' in raw ? raw.plots : undefined;
       return plots !== undefined
         ? { kind: 'delta', seq, baseIndex, tail, plots, seriesKey }

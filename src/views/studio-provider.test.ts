@@ -73,6 +73,7 @@ interface WebviewOverrides {
   htmlThrows?: 'first' | 'always';
   asWebviewThrows?: boolean;
   stateThrows?: boolean;
+  disposeThrows?: boolean;
 }
 
 function makeWebview(overrides: WebviewOverrides = {}) {
@@ -98,7 +99,11 @@ function makeWebview(overrides: WebviewOverrides = {}) {
     },
     onDidReceiveMessage: (listener) => {
       messageHandler = listener;
-      return { dispose() {} };
+      return {
+        dispose() {
+          if (overrides.disposeThrows) throw new Error('dispose');
+        },
+      };
     },
     get html() {
       return htmlValue;
@@ -523,6 +528,15 @@ describe('StudioViewProvider pushes and state', () => {
     w1.fireDispose();
     expect(provider.postStudioSet(1)).toBe(true);
     w2.fireDispose();
+    expect(provider.postStudioSet(1)).toBe(false);
+  });
+
+  test('dispose tolerates a throwing view-subscription disposer', () => {
+    const { entry } = makeEntry();
+    const provider = new StudioViewProvider(entry, makeDeps());
+    const w = makeWebview({ disposeThrows: true });
+    provider.resolveStudioView(w.view);
+    expect(() => provider.dispose()).not.toThrow();
     expect(provider.postStudioSet(1)).toBe(false);
   });
 });

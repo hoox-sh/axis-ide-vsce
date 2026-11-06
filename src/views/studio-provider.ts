@@ -108,6 +108,7 @@ export class StudioViewProvider implements WebviewViewProvider {
   private view: StudioWebviewViewLike | undefined;
   private readonly router: StudioMessageRouter;
   private readonly unregisterRoute: () => void;
+  private readonly viewSubscriptions: Array<{ dispose(): void }> = [];
 
   constructor(
     private readonly entry: StudioRegistration,
@@ -133,10 +134,15 @@ export class StudioViewProvider implements WebviewViewProvider {
     try {
       this.view = webviewView;
       const { webview } = webviewView;
-      webview.onDidReceiveMessage((raw) => this.handleRaw(raw));
-      webviewView.onDidDispose(() => {
-        if (this.view === webviewView) this.view = undefined;
-      });
+      // Drop listeners from any previous resolution before wiring fresh ones,
+      // so a re-created webview view cannot deliver messages twice.
+      this.disposeViewSubscriptions();
+      this.viewSubscriptions.push(
+        webview.onDidReceiveMessage((raw) => this.handleRaw(raw)),
+        webviewView.onDidDispose(() => {
+          if (this.view === webviewView) this.view = undefined;
+        }),
+      );
       try {
         let root: unknown;
         try {
@@ -177,7 +183,19 @@ export class StudioViewProvider implements WebviewViewProvider {
     } catch {
       // hostile router disposer
     }
+    this.disposeViewSubscriptions();
     this.view = undefined;
+  }
+
+  private disposeViewSubscriptions(): void {
+    const list = this.viewSubscriptions.splice(0);
+    for (const d of list) {
+      try {
+        d.dispose();
+      } catch {
+        // already disposed
+      }
+    }
   }
 
   /** Post `studio.init` — the `studio.ready` handshake ack, with `restore()` data when available. */

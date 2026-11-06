@@ -103,6 +103,12 @@ export interface LiveSessionBridgeDeps {
   /** Forward StreamLiveWire-compat frames (full/delta/status/close). */
   onFrame?: LiveFrameHandler;
   onStatus?: LiveStatusListener;
+  /**
+   * Fired every time a fresh socket opens (initial connect and remint). The
+   * chart fan-out resets its seq/bar cursors here so a worker that restarts
+   * its sequence counter after reconnect isn't treated as a stale snapshot.
+   */
+  onReconnect?: () => void;
   /** Test seam — defaults to workerLiveWsUrl. */
   buildWsUrl?: (endpoint: string, ticket: string) => string;
 }
@@ -307,6 +313,11 @@ export class LiveSessionBridge {
       this.errored = false;
       this.log('live WS open');
       this.emitStatus();
+      try {
+        this.deps.onReconnect?.();
+      } catch {
+        // reconnect hooks must not break the bridge
+      }
     };
     socket.onerror = () => {
       if (gen !== this.generation) return;

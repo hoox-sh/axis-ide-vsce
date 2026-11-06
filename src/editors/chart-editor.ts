@@ -62,7 +62,7 @@ import {
   serializeChartDocument,
 } from './chart-document';
 import { appendDrawingToDoc } from './chart-drawings';
-import { setChartLiveDoc } from './chart-live-doc';
+import { clearChartLiveDoc, setChartLiveDoc } from './chart-live-doc';
 import { isPyodideAllowed } from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
@@ -227,6 +227,9 @@ export class AxisChartDocument implements CustomDocument {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
+    // Drop the in-memory live-doc snapshot so the module-level store does not
+    // retain every chart document ever opened for the life of the extension.
+    clearChartLiveDoc(this.uri.toString());
     this._onDidDispose.fire();
     this._onDidDispose.dispose();
     this._onDidChange.dispose();

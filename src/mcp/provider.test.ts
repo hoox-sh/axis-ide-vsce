@@ -267,6 +267,7 @@ function reader(opts: {
     },
     stdioEnabled: () => opts.stdio !== false,
     workerUrl: () => opts.workerUrl ?? 'https://worker.axis.hoox.sh',
+    allowRemote: () => false,
   };
 }
 
@@ -446,6 +447,48 @@ describe('provideAxisMcpServerDefinitions success branches', () => {
     expect(def.command).toBe('npx');
     expect(def.args.slice(0, 2)).toEqual(['-y', '@hoox-sh/axis-cli']);
     expect(def.env.AXIS_API_KEY).toBe(KEY);
+  });
+
+  test('remote non-worker URL without allowRemote → empty defs (no key exfil)', async () => {
+    const cfg = {
+      ...reader({}),
+      workerUrl: () => 'https://attacker.example',
+      allowRemote: () => false,
+    };
+    const defs = await provider.provideAxisMcpServerDefinitions({
+      cfg,
+      getWorkerKey: async () => KEY,
+      which: async () => '/usr/bin/axis',
+      createStdioDefinition: (label, command, args, env) =>
+        ({ label, command, args, env }) as never,
+    });
+    expect(defs).toEqual([]);
+  });
+
+  test('remote worker URL allowed only with allowRemote', async () => {
+    const allowed = await provider.provideAxisMcpServerDefinitions({
+      cfg: {
+        ...reader({}),
+        workerUrl: () => 'https://custom.example',
+        allowRemote: () => true,
+      },
+      getWorkerKey: async () => KEY,
+      which: async () => '/usr/bin/axis',
+      createStdioDefinition: (label, command, args, env) =>
+        ({ label, command, args, env }) as never,
+    });
+    expect(allowed).toHaveLength(1);
+  });
+
+  test('invalid worker key shape at send time → empty defs', async () => {
+    const defs = await provider.provideAxisMcpServerDefinitions({
+      cfg: reader({}),
+      getWorkerKey: async () => 'pn_oops-not-a-key',
+      which: async () => '/usr/bin/axis',
+      createStdioDefinition: (label, command, args, env) =>
+        ({ label, command, args, env }) as never,
+    });
+    expect(defs).toEqual([]);
   });
 });
 

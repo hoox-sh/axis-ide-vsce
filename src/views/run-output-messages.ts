@@ -44,6 +44,7 @@ import {
   type ProfilerSnapshot,
 } from '../run/profiler-store';
 import { type ResultsSetPayload } from '../protocol/types';
+import { scrubSecrets } from '../run/scrub';
 import {
   logsStudioData,
   parseLogsCopyArgs,
@@ -386,6 +387,7 @@ export function runSummaryRows(lastRun: Record<string, unknown> | null): Results
   const ms = msOf(lastRun, meta);
   const plots = countPlots(safeRead(lastRun, 'plots'));
   const error = asString(safeRead(lastRun, 'error'));
+  const scrubbedError = error == null ? undefined : scrubSecrets(error);
   const rows: ResultsRow[] = [
     { key: 'id', label: 'Run id', value: id },
     { key: 'script', label: 'Script', value: name },
@@ -394,7 +396,7 @@ export function runSummaryRows(lastRun: Record<string, unknown> | null): Results
     { key: 'ms', label: 'Duration', value: ms == null ? '—' : `${Math.round(ms)} ms` },
     { key: 'plots', label: 'Plots', value: String(plots) },
   ];
-  if (error) rows.push({ key: 'error', label: 'Error', value: error });
+  if (scrubbedError) rows.push({ key: 'error', label: 'Error', value: scrubbedError });
   return rows;
 }
 
@@ -430,6 +432,31 @@ function readSetField(payload: unknown, key: string): unknown {
   return isPlainObject(payload) ? safeRead(payload, key) : undefined;
 }
 
+/** Recursively scrub secret-bearing strings inside an arbitrary engine payload. */
+function scrubDeep(value: unknown): unknown {
+  if (typeof value === 'string') return scrubSecrets(value);
+  if (Array.isArray(value)) {
+    try {
+      return value.map((v) => scrubDeep(v));
+    } catch {
+      return value;
+    }
+  }
+  if (value !== null && typeof value === 'object') {
+    try {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = scrubDeep(v);
+      }
+      return out;
+    } catch {
+      // Hostile proxy / throwing getter — pass the value through unchanged.
+      return value;
+    }
+  }
+  return value;
+}
+
 /** Build the Summary tab payload — verbatim fields plus a pre-computed view model. */
 export function buildRunOutputSummaryTab(
   payload: ResultsSetPayload,
@@ -439,7 +466,7 @@ export function buildRunOutputSummaryTab(
   const lastRun = isPlainObject(lastRunRaw) ? lastRunRaw : null;
   const status = statusOf(lastRun);
   const focusId = readSetField(payload, 'focusId');
-  const strategyReport = readSetField(payload, 'strategyReport');
+  const strategyReport = scrubDeep(readSetField(payload, 'strategyReport'));
   const focusLine = focusLineOf(focusId);
 
   let rows: ResultsRow[] = [];
@@ -533,7 +560,9 @@ export function buildRunOutputData(
 ): RunOutputData {
   const now = opts?.now ?? Date.now();
   const summary = buildRunOutputSummaryTab(resultsSet, now);
-  const strategy = buildRunOutputStrategyTab(readSetField(resultsSet, 'strategyReport'));
+  const strategy = buildRunOutputStrategyTab(
+    scrubDeep(readSetField(resultsSet, 'strategyReport')),
+  );
   const profilerTab = buildRunOutputProfilerTab(profiler);
   const logs = buildRunOutputLogsTab(summary.lastRun);
 

@@ -466,6 +466,34 @@ describe('hostile / malformed payloads', () => {
     expect(data.tabs.strategy.hasReport).toBe(true);
   });
 
+  test('scrubs an array strategyReport without throwing', () => {
+    const secret = `pyn_${'ab'.repeat(12)}`;
+    const data = buildRunOutputData(
+      makeResultsSet({ strategyReport: [secret, 'ok'] }),
+      null,
+      { now },
+    );
+    // Arrays are not plain objects → no strategy report, but the scrub path ran.
+    expect(data.tabs.strategy.hasReport).toBe(false);
+    const scrubbed = data.tabs.summary.strategyReport as unknown;
+    expect(Array.isArray(scrubbed)).toBe(true);
+    expect(JSON.stringify(scrubbed)).not.toContain(secret);
+  });
+
+  test('scrubDeep tolerates a hostile array strategyReport', () => {
+    const hostileArray = new Proxy([1, 2], {
+      get() {
+        throw new Error('array-boom');
+      },
+    });
+    const data = buildRunOutputData(
+      makeResultsSet({ strategyReport: hostileArray }),
+      null,
+      { now },
+    );
+    expect(data.tabs.strategy.hasReport).toBe(false);
+  });
+
   test('buildRunOutputData tolerates a proxy payload root', () => {
     const payload = new Proxy(
       {},

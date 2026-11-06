@@ -16,7 +16,8 @@
         "axis.mcp.stdio": {
           "type": "boolean",
           "default": true,
-          "description": "Advertise axis mcp stdio server via McpServerDefinitionProvider."
+          "scope": "application",
+          "description": "Advertise axis mcp stdio server via McpServerDefinitionProvider. **Application (user) scope only** — workspace settings cannot toggle the stdio child that receives `AXIS_API_KEY`."
         },
         "axis.mcp.command": {
           "type": "string",

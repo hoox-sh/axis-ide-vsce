@@ -23,6 +23,7 @@
 import { beforeEach, describe, expect, it } from 'bun:test';
 import {
   ResultsFocusStore,
+  MAX_RUN_RESULTS,
   copyRunRecord,
   pickStrategyReport,
   type ResultsFocusSnapshot,
@@ -54,6 +55,17 @@ describe('ResultsFocusStore §7.1', () => {
     expect(store.getResultsFocusId()).toBe(id);
     expect(store.getLastRun()?.meta?.script_name).toBe('A');
     expect(store.get(id)?.status).toBe('success');
+  });
+
+  it('evicts oldest records beyond MAX_RUN_RESULTS', () => {
+    for (let i = 0; i < MAX_RUN_RESULTS + 5; i += 1) {
+      store.publish(base({ focus: false, meta: { ms: i, script_name: `S${i}` } }));
+    }
+    // First five (run-1..run-5) are evicted; run-6 onward remain cached.
+    expect(store.get('run-1')).toBeUndefined();
+    expect(store.get('run-5')).toBeUndefined();
+    expect(store.get('run-6')).toBeDefined();
+    expect(store.get(`run-${MAX_RUN_RESULTS + 5}`)).toBeDefined();
   });
 
   it('focus:false does not steal focus when already focused (silent / live)', () => {

@@ -40,6 +40,27 @@ export type FetchLike = (
   text(): Promise<string>;
 }>;
 
+/** Absolute deadline for a Pro `/run` HTTP round-trip (supersede abort still wins). */
+export const ENGINE_RUN_TIMEOUT_MS = 30_000;
+
+/**
+ * Combine 0..n abort signals into one; undefined when none provided.
+ * The caller's supersede/deactivate abort is preserved, and a timeout can be
+ * layered on top so a stalled socket never hangs a run indefinitely.
+ */
+export function combineAbortSignals(
+  ...signals: Array<AbortSignal | undefined>
+): AbortSignal | undefined {
+  const present = signals.filter((s): s is AbortSignal => s != null);
+  if (present.length === 0) return undefined;
+  if (present.length === 1) return present[0];
+  if (present.some((s) => s.aborted)) return AbortSignal.abort();
+  const controller = new AbortController();
+  const onAbort = (): void => controller.abort();
+  for (const s of present) s.addEventListener('abort', onAbort, { once: true });
+  return controller.signal;
+}
+
 export interface EngineHttpRequest {
   endpoint: string;
   script: string;
@@ -50,6 +71,14 @@ export interface EngineHttpRequest {
   /** Bearer token (`pyn_…`). Required by callers that enforce Pro auth. */
   apiKey?: string;
   signal?: AbortSignal;
+  /** Absolute round-trip deadline (ms). Defaults to ENGINE_RUN_TIMEOUT_MS. */
+  timeoutMs?: number;
+  /**
+   * When false (default), the endpoint must be loopback so the Bearer key is
+   * not sent off-machine. Transport-level gate (fail-closed) — mirrors
+   * `checkEngineEndpoint` so future callers cannot forget the caller-side gate.
+   */
+  allowRemote?: boolean;
   fetchImpl?: FetchLike;
 }
 
@@ -84,6 +113,22 @@ export const MISSING_API_KEY_ERROR =
   'AXIS Pro API key required for POST /run (SecretStorage pyn_…).';
 
 export const DEFAULT_ENGINE_ENDPOINT = 'http://127.0.0.1:5002';
+
+/** Kept in sync with `REMOTE_ENDPOINT_DENIED` in `./endpoint` (no import → avoid cycle). */
+export const ENGINE_REMOTE_DENIED =
+  'AXIS engine endpoint must be loopback (127.0.0.1 / localhost / ::1) unless axis.engine.allowRemoteEndpoint is enabled.';
+
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+/** True when the endpoint host is loopback (mirrors `checkEngineEndpoint`). */
+function isLoopbackEndpoint(endpoint: string): boolean {
+  try {
+    const u = new URL(endpoint.includes('://') ? endpoint : `http://${endpoint}`);
+    return LOOPBACK_HOSTS.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
 
 /** Chart bars store unix seconds; Pine `time` expects milliseconds. */
 export function barsForPine(bars: OhlcvBar[]): Array<Record<string, number>> {
@@ -299,6 +344,20 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
       };
     }
 
+    // Transport-level loopback gate (fail-closed): never send the Bearer key
+    // to a remote host unless the caller explicitly opts in.
+    if (req.allowRemote !== true && !isLoopbackEndpoint(endpoint)) {
+      return {
+        status: 'error',
+        plots: [],
+        series: {},
+        events: [],
+        error: ENGINE_REMOTE_DENIED,
+        diagnostics: [{ message: ENGINE_REMOTE_DENIED, severity: 'error' }],
+        meta: { transport: 'rest' },
+      };
+    }
+
     const fetchImpl = req.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const url = `${endpoint}/run`;
     const body = {
@@ -312,11 +371,17 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
       Authorization: `Bearer ${key}`,
     };
 
+    const timeoutMs =
+      typeof req.timeoutMs === 'number' && Number.isFinite(req.timeoutMs)
+        ? req.timeoutMs
+        : ENGINE_RUN_TIMEOUT_MS;
+    const signal = combineAbortSignals(req.signal, AbortSignal.timeout(timeoutMs));
+
     const res = await fetchImpl(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
-      signal: req.signal,
+      signal,
     });
 
     const text = await res.text();
@@ -356,7 +421,8 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
     const ms = Date.now() - t0;
     const msg = e instanceof Error ? e.message : String(e);
     const aborted =
-      (e instanceof Error && e.name === 'AbortError') || /aborted/i.test(msg);
+      (e instanceof Error && (e.name === 'AbortError' || e.name === 'TimeoutError')) ||
+      /aborted|timeout/i.test(msg);
     return {
       status: 'error',
       plots: [],

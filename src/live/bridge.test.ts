@@ -192,6 +192,22 @@ describe('LiveSessionBridge', () => {
     expect(frames).toContain('{not-json');
   });
 
+  test('onReconnect fires on open; a throwing hook does not break the bridge', async () => {
+    let reconnects = 0;
+    const { bridge } = makeBridge({
+      onReconnect: () => {
+        reconnects += 1;
+        throw new Error('reconnect-boom');
+      },
+    });
+    const r = await bridge.start();
+    expect(r.ok).toBe(true);
+    const sock = MockWebSocket.instances[0];
+    sock.open();
+    expect(reconnects).toBe(1);
+    expect(bridge.isConnected()).toBe(true);
+  });
+
   test('stop closes socket and returns HUD to off', async () => {
     const { bridge } = makeBridge();
     await bridge.start();

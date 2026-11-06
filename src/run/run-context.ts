@@ -75,7 +75,7 @@ export interface ResolvedRunContext {
 
 export type ResolveRunContextResult =
   | { ok: true; ctx: ResolvedRunContext }
-  | { ok: false; error: string };
+  | { ok: false; error: string; reason?: 'aborted' };
 
 function fallbackMockContext(): ResolvedRunContext {
   const doc = defaultChartDocument();
@@ -155,7 +155,7 @@ export async function resolveRunContext(
       signal: settings?.signal,
     });
     if (!history.ok) {
-      return { ok: false, error: history.error };
+      return { ok: false, error: history.error, reason: history.reason };
     }
     if (!history.bars.length) {
       return {

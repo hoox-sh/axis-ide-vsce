@@ -35,8 +35,9 @@ import {
   type McpServerDefinitionProvider,
   McpStdioServerDefinition,
 } from 'vscode';
-import { DEFAULT_WORKER_URL } from '../live/ticket';
+import { checkWorkerUrl, DEFAULT_WORKER_URL } from '../live/ticket';
 import { SECRET_SLOTS } from '../secrets/slots';
+import { validateWorkerKey } from '../secrets/validate';
 import {
   resolveAxisCli,
   type AxisCliResolution,
@@ -149,6 +150,8 @@ export type McpConfigReader = ResolveAxisCliConfig & {
   /** When false, provider returns no definitions. Default true. */
   stdioEnabled(): boolean;
   workerUrl(): string;
+  /** `axis.engine.allowRemoteEndpoint` (application scope) — remote worker gate. */
+  allowRemote(): boolean;
 };
 
 export type SoftFailUi = {
@@ -199,6 +202,9 @@ function readAxisConfig(): McpConfigReader {
       if (typeof nested === 'string' && nested.trim()) return nested.trim();
       return DEFAULT_WORKER_URL;
     },
+    allowRemote(): boolean {
+      return axis.get<boolean>('engine.allowRemoteEndpoint', false) === true;
+    },
   };
 }
 
@@ -248,13 +254,25 @@ export async function provideAxisMcpServerDefinitions(
   }
 
   const workerUrl = cfg.workerUrl();
+  // Gate the worker origin exactly like the live ticket path: the stdio child
+  // receives the real Worker key in AXIS_API_KEY, so a workspace-controlled
+  // `axis.worker.url` must not point the CLI at an attacker host.
+  const gated = checkWorkerUrl(workerUrl, { allowRemote: cfg.allowRemote() });
+  if (!gated.ok) {
+    return [];
+  }
   const buildArgs = deps.buildStdioArgs ?? buildMcpStdioArgs;
-  const args = buildArgs(resolved, workerUrl);
+  const args = buildArgs(resolved, gated.endpoint);
   if (stdioArgsContainKeyFlag(args)) {
     // Defensive: never advertise a definition that puts the key on argv.
     return [];
   }
   const key = await deps.getWorkerKey();
+  // Re-validate shape at send time: a key that reached storage through a
+  // non-validating path must not be emitted into the child env verbatim.
+  if (key && !validateWorkerKey(key).ok) {
+    return [];
+  }
   const env = buildMcpStdioEnv(key);
   const create = deps.createStdioDefinition ?? defaultCreateStdioDefinition;
   return [create(MCP_STDIO_LABEL, resolved.command, args, env)];

@@ -29,6 +29,7 @@
  */
 
 import type { StudioRegistration } from './studio-registry';
+import { scrubSecrets } from '../run/scrub';
 
 /** Command ids confirmed in package.json (do not invent aliases). */
 export const SCRIPTS_RUN_COMMAND = 'axis.runScript';
@@ -202,7 +203,7 @@ export function scriptRunCardFromLastRun(raw: unknown): ScriptRunCard | null {
     readMetaString(record, 'mode') ||
     readString(record, 'mode') ||
     readString(record, 'engineId');
-  const error = readString(record, 'error');
+  const error = scrubSecrets(readString(record, 'error'));
   return {
     title,
     symbol,

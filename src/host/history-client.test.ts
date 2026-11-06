@@ -113,6 +113,23 @@ describe('history-client', () => {
     expect(seen[0]).toContain('limit=50');
   });
 
+  test('fetchHistorical applies an explicit timeoutMs to the request signal', async () => {
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl: HistoryFetchLike = async (_input, init) => {
+      seenSignal = init?.signal;
+      return jsonResponse([]);
+    };
+    const result = await fetchHistorical({
+      exchange: 'binance',
+      symbol: 'BTC/USDT',
+      timeframe: '1m',
+      timeoutMs: 1234,
+      fetchImpl,
+    });
+    expect(result.ok).toBe(true);
+    expect(seenSignal).toBeDefined();
+  });
+
   test('fetchHistorical HTTP failure path', async () => {
     const fetchImpl: HistoryFetchLike = async () =>
       jsonResponse({ error: 'exchange down' }, 502);

@@ -124,8 +124,9 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
 }
 
 /**
- * True when HTML has a script tag without src= (inline body or event-handler style).
- * `src=`-only tags are allowed.
+ * True when HTML carries an inline script vector: a `<script>` tag without
+ * `src=`, an event-handler attribute (`on*=`), or a `javascript:` URL.
+ * `src=`-only script tags are allowed.
  */
 export function htmlHasInlineScript(html: string): boolean {
   const re = /<script\b([^>]*)>/gi;
@@ -135,5 +136,9 @@ export function htmlHasInlineScript(html: string): boolean {
     if (!/\bsrc\s*=/i.test(attrs)) return true;
     match = re.exec(html);
   }
+  // Event-handler attributes and javascript: URLs — CSP already blocks these
+  // (`script-src` has no `'unsafe-inline'`), but flag them as a backstop.
+  if (/\son\w+\s*=/i.test(html)) return true;
+  if (/javascript:/i.test(html)) return true;
   return false;
 }
