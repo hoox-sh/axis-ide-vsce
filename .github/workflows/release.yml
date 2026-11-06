@@ -73,32 +73,54 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
+      # Idempotent publish: skip when the exact version already exists on the
+      # target (re-running a tag must not fail on the unchanged pack VSIX).
       - name: Publish IDE to VS Marketplace
         if: env.VSCE_PAT != ''
         run: |
-          npx --yes @vscode/vsce publish \
-            --pat "$VSCE_PAT" \
-            --packagePath "axis-ide-${{ steps.versions.outputs.ide }}.vsix" \
-            --no-dependencies
+          VER="${{ steps.versions.outputs.ide }}"
+          if npx --yes @vscode/vsce show hoox-sh.axis-ide --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
+            echo "hoox-sh.axis-ide $VER already on the Marketplace — skipping."
+          else
+            npx --yes @vscode/vsce publish \
+              --pat "$VSCE_PAT" \
+              --packagePath "axis-ide-$VER.vsix" \
+              --no-dependencies
+          fi
 
       - name: Publish IDE to Open VSX
         if: env.OVSX_PAT != ''
         run: |
-          npx --yes ovsx publish \
-            "axis-ide-${{ steps.versions.outputs.ide }}.vsix" \
-            -p "$OVSX_PAT"
+          VER="${{ steps.versions.outputs.ide }}"
+          if curl -fsSL "https://open-vsx.org/api/hoox-sh/axis-ide/$VER" >/dev/null 2>&1; then
+            echo "hoox-sh.axis-ide $VER already on Open VSX — skipping."
+          else
+            npx --yes ovsx publish \
+              "axis-ide-$VER.vsix" \
+              -p "$OVSX_PAT"
+          fi
 
       - name: Publish pack to VS Marketplace
         if: env.VSCE_PAT != ''
         run: |
-          npx --yes @vscode/vsce publish \
-            --pat "$VSCE_PAT" \
-            --packagePath "pack/axis-${{ steps.versions.outputs.pack }}.vsix" \
-            --no-dependencies
+          VER="${{ steps.versions.outputs.pack }}"
+          if npx --yes @vscode/vsce show hoox-sh.axis --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
+            echo "hoox-sh.axis $VER already on the Marketplace — skipping."
+          else
+            npx --yes @vscode/vsce publish \
+              --pat "$VSCE_PAT" \
+              --packagePath "pack/axis-$VER.vsix" \
+              --no-dependencies
+          fi
 
       - name: Publish pack to Open VSX
         if: env.OVSX_PAT != ''
         run: |
-          npx --yes ovsx publish \
-            "pack/axis-${{ steps.versions.outputs.pack }}.vsix" \
-            -p "$OVSX_PAT"
+          VER="${{ steps.versions.outputs.pack }}"
+          if curl -fsSL "https://open-vsx.org/api/hoox-sh/axis/$VER" >/dev/null 2>&1; then
+            echo "hoox-sh.axis $VER already on Open VSX — skipping."
+          else
+            npx --yes ovsx publish \
+              "pack/axis-$VER.vsix" \
+              -p "$OVSX_PAT"
+          fi
