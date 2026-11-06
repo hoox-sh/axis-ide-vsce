@@ -59,6 +59,12 @@
     "onView:axis.alerts",
     "onView:axis.watchlist",
     "onView:axis.plugins",
+    "onView:axis.results",
+    "onView:axis.strategy",
+    "onView:axis.profiler",
+    "onView:axis.colors",
+    "onView:axis.symbols",
+    "onView:axis.logs",
     "onCommand:axis.showRunOutput",
     "onCommand:axis.openChart",
     "onCommand:axis.runScript",
@@ -159,16 +165,44 @@
       "axis-panel": [
         {
           "type": "webview",
-          "id": "axis.runOutput",
-          "name": "Run Output",
+          "id": "axis.results",
+          "name": "Results",
           "icon": "media/views/results.svg",
           "retainContextWhenHidden": false
         },
         {
           "type": "webview",
-          "id": "axis.toolbox",
-          "name": "Toolbox",
+          "id": "axis.strategy",
+          "name": "Strategy",
+          "icon": "media/views/strategy.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.profiler",
+          "name": "Profiler",
+          "icon": "media/views/profiler.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.colors",
+          "name": "Colors",
           "icon": "media/views/colors.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.symbols",
+          "name": "Symbols",
+          "icon": "media/views/symbols.svg",
+          "retainContextWhenHidden": false
+        },
+        {
+          "type": "webview",
+          "id": "axis.logs",
+          "name": "Logs",
+          "icon": "media/views/logs.svg",
           "retainContextWhenHidden": false
         }
       ]

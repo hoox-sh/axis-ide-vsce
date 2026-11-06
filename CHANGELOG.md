@@ -4,6 +4,18 @@ All notable changes to **AXIS IDE** (`hoox-sh.axis-ide`) and the **AXIS Trading
 Pack** (`hoox-sh.axis`). This repository was extracted from the AXIS monorepo
 with its commit history preserved.
 
+## [Unreleased]
+
+### Fixed
+
+- Declare the merged panel studio views (Results, Strategy, Profiler,
+  Colors, Symbols, Logs) in `contributes.views["axis-panel"]` and their
+  activation events. The Nov 5 views refactor updated the runtime and the
+  structure test but left the stale `axis.runOutput` / `axis.toolbox`
+  panel declarations in package.json, so shipped 0.3.0 installs showed
+  dead panels and none of the six studio panels. Also relaxed the stale
+  `version.startsWith('0.1')` structure assertion to a semver check.
+
 ## [0.3.0] — 2026-11-06
 
 ### Fixed

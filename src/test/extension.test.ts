@@ -201,7 +201,7 @@ suite('AXIS IDE Extension Structure', () => {
     assert.strictEqual(pkg.publisher, 'hoox-sh');
     assert.strictEqual(pkg.displayName, 'AXIS IDE');
     assert.strictEqual(pkg.license, 'AGPL-3.0-only');
-    assert.ok(pkg.version.startsWith('0.1'));
+    assert.ok(/^\d+\.\d+\.\d+$/.test(pkg.version), 'package.json version must be semver');
     assert.ok(pkg.icon, 'package.json must declare icon');
     assert.ok(
       fs.existsSync(path.resolve(__dirname, '../../', pkg.icon)),
