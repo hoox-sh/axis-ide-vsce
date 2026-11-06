@@ -67,42 +67,83 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 3 · ax-tabs — segmented control (Run Output / Toolbox) */
+/* 3 · ax-tabs — underline tab bar (axis parity: animated 2px accent
+ * indicator, hairline rail, quiet hover wash) */
 .ax-tabs {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: stretch;
-  gap: 2px;
-  padding: 2px;
-  border: var(--axis-border-w) solid var(--axis-border);
-  border-radius: 999px;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: var(--axis-border-w) solid var(--axis-border);
   background: transparent;
 }
 
 .ax-tabs__tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   margin: 0;
-  padding: 0 12px;
+  margin-bottom: calc(-1 * var(--axis-border-w));
+  padding: 0 10px;
   min-height: var(--axis-control-h);
   border: 0;
-  border-radius: 999px;
+  border-radius: 0;
   background: transparent;
   color: var(--axis-dim);
   font: inherit;
   font-size: 12px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    color var(--axis-dur-fast) ease-out,
+    background-color var(--axis-dur-fast) ease-out;
 }
 
-.ax-tabs__tab:hover {
-  background: var(--axis-bg-hover);
+.ax-tabs__tab::after {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 0;
+  height: 2px;
+  background: var(--axis-accent);
+  transform: scaleX(0);
+  transform-origin: center;
+  opacity: 0;
+  transition:
+    transform var(--axis-dur-base) var(--axis-ease),
+    opacity var(--axis-dur-fast) ease-out;
+}
+
+.ax-tabs__tab:hover,
+.ax-tabs__tab:focus-visible {
   color: var(--axis-text);
+  outline: none;
+}
+
+.ax-tabs__tab:hover:not([aria-selected='true']) {
+  background: color-mix(in oklch, var(--axis-bg-hover) 70%, transparent);
+}
+
+.ax-tabs__tab:active:not([aria-selected='true']) {
+  color: var(--axis-text);
+}
+
+.ax-tabs__tab:focus-visible {
+  box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--axis-accent) 55%, transparent);
 }
 
 .ax-tabs__tab[aria-selected='true'] {
-  background: color-mix(in oklch, var(--axis-accent) 18%, transparent);
   color: var(--axis-text);
-  box-shadow: inset 0 -1px 0 var(--axis-accent);
+  font-weight: 600;
+}
+
+.ax-tabs__tab[aria-selected='true']::after {
+  transform: scaleX(1);
+  opacity: 1;
 }
 
 .ax-tabs__icon {
@@ -192,32 +233,68 @@
   opacity: 1;
 }
 
-/* 5 · ax-chip — 2px filter chip / toggle-group member */
+/* 5 · ax-chip — pill filter chip / toggle-group member (axis parity) */
 .ax-chip {
   display: inline-flex;
   align-items: center;
+  align-self: flex-start;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 100%;
   gap: 4px;
   margin: 0;
   padding: 1px 8px;
   min-height: 18px;
-  border: var(--axis-border-w) solid var(--axis-chip-border);
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-secondary-bg);
-  color: var(--axis-btn-secondary-fg);
+  border: var(--axis-border-w) solid var(--axis-border);
+  border-radius: var(--axis-radius-pill);
+  background: transparent;
+  color: var(--axis-dim);
   font: inherit;
   font-size: 11px;
+  font-weight: 500;
   line-height: 16px;
   cursor: pointer;
+  transition:
+    background-color var(--axis-dur-fast) ease-out,
+    border-color var(--axis-dur-fast) ease-out,
+    color var(--axis-dur-fast) ease-out,
+    transform var(--axis-dur-fast) var(--axis-ease),
+    box-shadow var(--axis-dur-fast) ease-out;
 }
 
-.ax-chip:hover {
-  background: var(--axis-btn-secondary-hover-bg);
+.ax-chip:hover:not(:disabled),
+.ax-chip:focus-visible:not(:disabled) {
+  color: var(--axis-text);
+  border-color: var(--axis-border);
+  background: var(--axis-bg-hover);
+  outline: none;
+}
+
+.ax-chip:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.ax-chip:focus-visible {
+  box-shadow: var(--axis-focus-ring);
+}
+
+.ax-chip:disabled,
+.ax-chip.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .ax-chip[aria-pressed='true'] {
+  border-color: var(--axis-accent);
+  color: var(--axis-accent);
+  background: color-mix(in oklch, var(--axis-accent) 12%, transparent);
+  font-weight: 600;
+}
+
+.ax-chip[aria-pressed='true']:hover:not(:disabled) {
   background: color-mix(in oklch, var(--axis-accent) 18%, transparent);
-  border-color: color-mix(in oklch, var(--axis-accent) 40%, transparent);
-  color: var(--axis-text);
+  border-color: var(--axis-accent);
+  color: var(--axis-accent);
 }
 
 .ax-chip__icon {
@@ -349,37 +426,86 @@
   }
 }
 
-/* 9 · ax-search — search input */
-.ax-search {
+/* 9 · ax-search — search input (axis parity: caret, hover edge, focus ring) */
+.ax-search,
+.ax-field__input {
   width: 100%;
+  min-height: var(--axis-control-h);
   margin: 0;
-  padding: 3px 6px;
+  padding: 3px 8px;
   border: var(--axis-border-w) solid var(--axis-input-border);
   border-radius: var(--axis-radius-input);
   background: var(--axis-input-bg);
   color: var(--axis-input-fg);
   font: inherit;
   font-size: 12px;
+  line-height: 1.3;
+  caret-color: var(--axis-accent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent);
+  transition:
+    border-color var(--axis-dur-fast) ease-out,
+    box-shadow var(--axis-dur-fast) ease-out,
+    background-color var(--axis-dur-fast) ease-out,
+    color var(--axis-dur-fast) ease-out;
 }
 
-.ax-search::placeholder {
+.ax-search::placeholder,
+.ax-field__input::placeholder {
   color: var(--axis-input-placeholder);
+  opacity: 0.72;
 }
 
-/* Search input signals focus with the border only — no outline halo. */
-.ax-search:focus-visible {
+.ax-search::selection,
+.ax-field__input::selection {
+  background: color-mix(in oklch, var(--axis-accent) 34%, transparent);
+  color: var(--axis-input-fg);
+}
+
+.ax-search:hover:not(:disabled):not(:focus):not(:focus-visible),
+.ax-field__input:hover:not(:disabled):not(:focus):not(:focus-visible) {
+  border-color: color-mix(in oklch, var(--axis-input-border) 55%, var(--axis-dim));
+}
+
+/* Inputs signal focus with the accent edge + soft ring — no outline halo. */
+.ax-search:focus-visible,
+.ax-field__input:focus-visible {
   outline: none;
 }
 
-.ax-search:focus {
+.ax-search:focus,
+.ax-search:focus-visible,
+.ax-field__input:focus,
+.ax-field__input:focus-visible {
   border-color: var(--axis-accent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #fff 3%, transparent),
+    var(--axis-focus-ring);
 }
 
-/* 10 · ax-field — floating-label input */
+.ax-search:disabled,
+.ax-field__input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ax-search[readonly],
+.ax-field__input[readonly] {
+  background: color-mix(in oklch, var(--axis-input-bg) 55%, var(--axis-bg));
+  cursor: default;
+}
+
+/* Native spinners and search cancel buttons fight the custom chrome. */
+.ax-search::-webkit-search-cancel-button,
+.ax-search::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+/* 10 · ax-field — labeled input */
 .ax-field {
   display: flex;
   flex-direction: column;
   gap: var(--axis-gap-xs);
+  min-width: 0;
 }
 
 .ax-field__label {
@@ -388,35 +514,29 @@
   font-weight: var(--axis-label-weight);
   letter-spacing: var(--axis-label-tracking);
   text-transform: uppercase;
+  transition: color var(--axis-dur-fast) ease-out;
 }
 
 .ax-field:focus-within .ax-field__label {
   color: var(--axis-accent);
 }
 
-.ax-field__input {
-  width: 100%;
-  margin: 0;
-  padding: 3px 6px;
-  border: var(--axis-border-w) solid var(--axis-input-border);
-  border-radius: var(--axis-radius-input);
-  background: var(--axis-input-bg);
-  color: var(--axis-input-fg);
-  font: inherit;
-  font-size: 12px;
-}
-
 .ax-field--mono .ax-field__input {
   font-family: var(--axis-font-mono);
 }
 
-/* Field input signals focus with the border only — no outline halo. */
-.ax-field__input:focus-visible {
-  outline: none;
+/* Invalid contract (axis parity): red edge, red label, red ring on focus. */
+.ax-field.is-invalid .ax-field__label {
+  color: var(--axis-down);
 }
 
-.ax-field__input:focus {
-  border-color: var(--axis-accent);
+.ax-field.is-invalid .ax-field__input {
+  border-color: color-mix(in oklch, var(--axis-down) 70%, var(--axis-input-border));
+}
+
+.ax-field.is-invalid .ax-field__input:focus-visible {
+  border-color: var(--axis-down);
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--axis-down) 20%, transparent);
 }
 
 /* 11 · ax-kbd — mono kbd chip */

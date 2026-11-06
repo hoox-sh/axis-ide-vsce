@@ -44,9 +44,10 @@
   /* Scrollbars */
   --axis-scroll-thumb:       var(--vscode-scrollbarSlider-background, var(--axis-border));
   --axis-scroll-thumb-hover: var(--vscode-scrollbarSlider-hoverBackground, var(--axis-border));
-  /* Focus — thin accent ring only, never an outer halo */
+  /* Focus — accent edge + soft outer ring (axis parity). Keyboard-only
+   * surfaces keep the thin outline from theme.css :focus-visible. */
   --axis-focus-outline: var(--vscode-focusBorder, var(--axis-accent));
-  --axis-focus-ring: 0 0 0 1px color-mix(in oklch, var(--axis-accent) 40%, transparent);
+  --axis-focus-ring: 0 0 0 3px color-mix(in oklch, var(--axis-accent) 18%, transparent);
   /* High-contrast */
   --axis-contrast-border:       var(--vscode-contrastBorder, var(--axis-accent));
   --axis-contrast-active-border: var(--vscode-contrastActiveBorder, var(--axis-accent));
@@ -54,8 +55,6 @@
   --axis-shadow-panel: var(--vscode-widget-shadow, rgba(0, 0, 0, 0.48));
   /* Swatch raw-literal hatching */
   --axis-swatch-raw: var(--vscode-descriptionForeground, #888888);
-  /* Chip high-contrast border (normal themes stay transparent) */
-  --axis-chip-border: var(--vscode-contrastBorder, transparent);
   /* Typography — figures stay sans + tabular-nums; codes/HUD/timestamps mono */
   --axis-font:      var(--vscode-font-family, -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif);
   --axis-font-mono: var(--vscode-editor-font-family, var(--vscode-font-family-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace));
@@ -64,8 +63,10 @@
   --axis-label-tracking: 0.06em;
   --axis-label-weight: 600;
   --axis-capsule-font: 10px;
-  /* Radii (hard rule): chip 2px · input 4px · panel 6px; pills/dots only 999px/50% */
+  /* Radii (axis parity): tab/chip pill 999px · small surfaces (kbd, kpi,
+     bar, swatch, glyph) 2px · input 4px · panel 6px; dots only 50% */
   --axis-radius-chip: 2px;
+  --axis-radius-pill: 999px;
   --axis-radius-input: 4px;
   --axis-radius-panel: 6px;
   /* Spacing & density */

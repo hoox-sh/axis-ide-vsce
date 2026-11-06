@@ -94,10 +94,10 @@
 .ax-glyph,
 .ax-empty__action {
   transition:
-    background-color 150ms ease-out,
-    color 150ms ease-out,
-    border-color 150ms ease-out,
-    opacity 150ms ease-out;
+    background-color var(--axis-dur-fast, 120ms) ease-out,
+    color var(--axis-dur-fast, 120ms) ease-out,
+    border-color var(--axis-dur-fast, 120ms) ease-out,
+    opacity var(--axis-dur-fast, 120ms) ease-out;
 }
 
 /* Global guard: collapse all motion to 0.01ms under reduced motion. */

@@ -87,13 +87,17 @@ body.vscode-high-contrast .ax-swatch,
 body.vscode-high-contrast-light .ax-swatch,
 body.vscode-high-contrast .ax-glyph,
 body.vscode-high-contrast-light .ax-glyph,
-body.vscode-high-contrast .ax-tabs__tab,
-body.vscode-high-contrast-light .ax-tabs__tab,
 body.vscode-high-contrast .ax-chip,
 body.vscode-high-contrast-light .ax-chip,
 body.vscode-high-contrast .ax-empty__action,
 body.vscode-high-contrast-light .ax-empty__action {
   border: var(--axis-border-w) solid var(--axis-contrast-border);
+}
+
+/* Underline tabs draw no per-tab border; the rail itself gets contrast. */
+body.vscode-high-contrast .ax-tabs,
+body.vscode-high-contrast-light .ax-tabs {
+  border-bottom-color: var(--axis-contrast-border);
 }
 
 /* Kill elevation shadows. */
