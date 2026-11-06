@@ -1,0 +1,137 @@
+/*
+ * Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ */
+
+/*
+ * VS Code token shim for Storybook. The ax-* layers read --vscode-* semantic
+ * variables first (tokens.css); outside VS Code they fall back to the AXIS
+ * hexes. This shim supplies a real semantic set so stories render like the
+ * shipped webviews, with a toolbar switch for dark / light / high-contrast
+ * body classes (same classes the webviews see from VS Code).
+ */
+
+:root {
+  --vscode-panel-background: #0c0e14;
+  --vscode-editorWidget-background: #10131b;
+  --vscode-sideBar-background: #10131b;
+  --vscode-list-hoverBackground: #161a24;
+  --vscode-toolbar-hoverBackground: #161a24;
+  --vscode-panel-border: #1c2230;
+  --vscode-widget-border: #151922;
+  --vscode-foreground: #e8eaee;
+  --vscode-descriptionForeground: #9aa3b2;
+  --vscode-focusBorder: #8b9cff;
+  --vscode-button-background: #0e639c;
+  --vscode-button-hoverBackground: #1177bb;
+  --vscode-button-secondaryBackground: #1b2130;
+  --vscode-button-secondaryForeground: #e8eaee;
+  --vscode-button-secondaryHoverBackground: #222a3d;
+  --vscode-input-background: #10131b;
+  --vscode-input-foreground: #e8eaee;
+  --vscode-input-border: #1c2230;
+  --vscode-input-placeholderForeground: #9aa3b2;
+  --vscode-badge-background: #616161;
+  --vscode-badge-foreground: #ffffff;
+  --vscode-textLink-foreground: #6ee7f5;
+  --vscode-scrollbarSlider-background: #1c2230;
+  --vscode-scrollbarSlider-hoverBackground: #262e42;
+  --vscode-contrastBorder: transparent;
+  --vscode-contrastActiveBorder: transparent;
+  --vscode-widget-shadow: rgba(0, 0, 0, 0.48);
+  --vscode-testing-iconPassed: #3ddc97;
+  --vscode-charts-green: #3ddc97;
+  --vscode-charts-red: #f07178;
+  --vscode-charts-yellow: #e8b84a;
+  --vscode-charts-blue: #6ee7f5;
+  --vscode-errorForeground: #f07178;
+  --vscode-editorWarning-foreground: #e8b84a;
+  --vscode-font-family: -apple-system, 'Segoe UI', Roboto, Ubuntu, sans-serif;
+  --vscode-editor-font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --vscode-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --vscode-font-size: 13px;
+}
+
+/* Light+ */
+body.vscode-light {
+  --vscode-panel-background: #f8f8f8;
+  --vscode-editorWidget-background: #f3f3f3;
+  --vscode-sideBar-background: #f3f3f3;
+  --vscode-list-hoverBackground: #e8e8e8;
+  --vscode-toolbar-hoverBackground: #e8e8e8;
+  --vscode-panel-border: #e5e5e5;
+  --vscode-widget-border: #e5e5e5;
+  --vscode-foreground: #3b3b3b;
+  --vscode-descriptionForeground: #616161;
+  --vscode-focusBorder: #005fb8;
+  --vscode-button-background: #005fb8;
+  --vscode-button-hoverBackground: #0258a8;
+  --vscode-button-secondaryBackground: #e4e6f1;
+  --vscode-button-secondaryForeground: #3b3b3b;
+  --vscode-button-secondaryHoverBackground: #dadbef;
+  --vscode-input-background: #ffffff;
+  --vscode-input-foreground: #3b3b3b;
+  --vscode-input-border: #cecece;
+  --vscode-input-placeholderForeground: #616161;
+  --vscode-badge-background: #616161;
+  --vscode-badge-foreground: #ffffff;
+  --vscode-textLink-foreground: #005fb8;
+  --vscode-scrollbarSlider-background: #c1c1c1;
+  --vscode-scrollbarSlider-hoverBackground: #a8a8a8;
+  --vscode-widget-shadow: rgba(0, 0, 0, 0.16);
+  --vscode-testing-iconPassed: #2e8f4e;
+  --vscode-charts-green: #2e8f4e;
+  --vscode-charts-red: #cc4a5c;
+  --vscode-charts-yellow: #b58a2c;
+  --vscode-charts-blue: #1a85d0;
+  --vscode-errorForeground: #cc4a5c;
+  --vscode-editorWarning-foreground: #b58a2c;
+}
+
+/* High-contrast dark */
+body.vscode-high-contrast {
+  --vscode-panel-background: #000000;
+  --vscode-editorWidget-background: #000000;
+  --vscode-sideBar-background: #000000;
+  --vscode-list-hoverBackground: #2a2d2e;
+  --vscode-toolbar-hoverBackground: #2a2d2e;
+  --vscode-panel-border: #6fc3df;
+  --vscode-widget-border: #6fc3df;
+  --vscode-foreground: #ffffff;
+  --vscode-descriptionForeground: #ffffff;
+  --vscode-focusBorder: #f38518;
+  --vscode-button-background: #0e639c;
+  --vscode-button-hoverBackground: #1177bb;
+  --vscode-button-secondaryBackground: #2a2d2e;
+  --vscode-button-secondaryForeground: #ffffff;
+  --vscode-button-secondaryHoverBackground: #3a3f41;
+  --vscode-input-background: #000000;
+  --vscode-input-foreground: #ffffff;
+  --vscode-input-border: #6fc3df;
+  --vscode-input-placeholderForeground: #ffffff;
+  --vscode-badge-background: #616161;
+  --vscode-badge-foreground: #ffffff;
+  --vscode-textLink-foreground: #37b6d9;
+  --vscode-contrastBorder: #6fc3df;
+  --vscode-contrastActiveBorder: #f38518;
+  --vscode-testing-iconPassed: #73c991;
+  --vscode-charts-green: #73c991;
+  --vscode-charts-red: #f77079;
+  --vscode-charts-yellow: #f5c064;
+  --vscode-charts-blue: #56b6e8;
+  --vscode-errorForeground: #f77079;
+  --vscode-editorWarning-foreground: #f5c064;
+}
+
+/* Storybook hosting: let the docs/canvas scroll (theme.css pins the
+ * webview viewport) and give the canvas the surface token. */
+body.sb-main-padding,
+#storybook-root {
+  padding: 16px;
+}
+
+body {
+  overflow: auto;
+  height: auto;
+  min-height: 100%;
+}

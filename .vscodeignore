@@ -4,6 +4,9 @@
 .vscode-test/**
 src/**
 webview/**
+.storybook/**
+stories/**
+storybook-static/**
 node_modules/**
 .git/**
 .gitignore
