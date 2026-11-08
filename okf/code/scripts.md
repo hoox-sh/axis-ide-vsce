@@ -7,7 +7,7 @@ tags: [code, scripts]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T03:02:18Z
+  at: 2026-11-08T02:31:37Z
 sources:
   - id: tree
     resource: "scripts"
@@ -20,6 +20,11 @@ okf_lock: generated
 
 * `check-coverage.mjs` — BASELINE, EXCLUDE, INCLUDE, PROTOCOL_MIN, TARGET_HOST, TARGET_HOST_DESIGN, TARGET_PACKAGE, accumulate, evaluateCoverage, excluded, includedHost, isPackageSrc
 * `check-coverage.test.ts` — x, y
+
+# Other files
+
+* `install-hooks.sh`
+* `verify.sh`
 
 # Packages
 
