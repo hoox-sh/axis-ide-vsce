@@ -28,7 +28,7 @@ import '@axis-shared/theme.css';
 import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
-import { header } from '@axis-shared/components';
+import { btn, header } from '@axis-shared/components';
 import { createStudio } from '@axis-shared/studio';
 import { paintLayers, queryLayersDom } from './render';
 import { decodeLayersSet, encodeLayersOpenChart, encodeLayersReady } from './protocol';
@@ -49,11 +49,12 @@ function buildShell(): DocumentFragment {
   summary.id = 'layers-summary';
   summary.className = 'layers-summary';
 
-  const open = document.createElement('button');
-  open.type = 'button';
+  const open = btn({
+    label: 'Open chart',
+    variant: 'primary',
+    className: 'layers-open',
+  });
   open.id = 'layers-open-chart';
-  open.className = 'layers-open';
-  open.textContent = 'Open chart';
 
   const headerEl = document.createElement('div');
   headerEl.className = 'layers-header';

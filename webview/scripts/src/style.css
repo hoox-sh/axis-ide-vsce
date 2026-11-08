@@ -35,11 +35,6 @@
 
 .scripts-section-title {
   margin: 0;
-  font-size: var(--axis-label);
-  font-weight: var(--axis-label-weight);
-  letter-spacing: var(--axis-label-tracking);
-  text-transform: uppercase;
-  color: var(--axis-dim);
 }
 
 .scripts-hint {
@@ -64,36 +59,6 @@
 .scripts-error {
   color: var(--axis-down);
   white-space: pre-wrap;
-}
-
-.scripts-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--axis-gap-xs);
-  margin: 0;
-  padding: 3px 10px;
-  min-height: var(--axis-control-h);
-  border: var(--axis-border-w) solid var(--axis-border);
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.scripts-btn:hover {
-  background: var(--axis-btn-hover-bg);
-}
-
-.scripts-btn:focus-visible {
-  outline: 1px solid var(--axis-focus-outline);
-  outline-offset: 1px;
-}
-
-.scripts-btn__icon {
-  flex: 0 0 auto;
-  display: block;
 }
 
 .scripts-list {
@@ -134,22 +99,7 @@
 }
 
 .scripts-row__apply {
-  display: inline-flex;
-  align-items: center;
-  margin: 0;
-  padding: 1px 8px;
-  min-height: 18px;
-  border: var(--axis-border-w) solid var(--axis-border);
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-secondary-bg);
-  color: var(--axis-btn-secondary-fg);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.scripts-row__apply:hover {
-  background: var(--axis-btn-secondary-hover-bg);
+  flex: none;
 }
 
 .scripts-chip--ok {

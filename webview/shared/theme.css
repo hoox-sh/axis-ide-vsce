@@ -90,7 +90,11 @@ body.vscode-high-contrast-light .ax-glyph,
 body.vscode-high-contrast .ax-chip,
 body.vscode-high-contrast-light .ax-chip,
 body.vscode-high-contrast .ax-empty__action,
-body.vscode-high-contrast-light .ax-empty__action {
+body.vscode-high-contrast-light .ax-empty__action,
+body.vscode-high-contrast .ax-btn,
+body.vscode-high-contrast-light .ax-btn,
+body.vscode-high-contrast .ax-badge,
+body.vscode-high-contrast-light .ax-badge {
   border: var(--axis-border-w) solid var(--axis-contrast-border);
 }
 
@@ -104,8 +108,20 @@ body.vscode-high-contrast-light .ax-tabs {
 body.vscode-high-contrast .ax-panel,
 body.vscode-high-contrast-light .ax-panel,
 body.vscode-high-contrast .ax-kpi,
-body.vscode-high-contrast-light .ax-kpi {
+body.vscode-high-contrast-light .ax-kpi,
+body.vscode-high-contrast .ax-toolbar,
+body.vscode-high-contrast-light .ax-toolbar {
   box-shadow: none;
+}
+
+body.vscode-high-contrast .ax-toolbar,
+body.vscode-high-contrast-light .ax-toolbar {
+  border-bottom-color: var(--axis-contrast-border);
+}
+
+body.vscode-high-contrast .ax-code,
+body.vscode-high-contrast-light .ax-code {
+  border-color: var(--axis-contrast-border);
 }
 
 /* Replace color-mix active tints with solid contrast fills. */

@@ -92,7 +92,9 @@
 .ax-field__input,
 .ax-swatch,
 .ax-glyph,
-.ax-empty__action {
+.ax-empty__action,
+.ax-btn,
+.ax-badge {
   transition:
     background-color var(--axis-dur-fast, 120ms) ease-out,
     color var(--axis-dur-fast, 120ms) ease-out,

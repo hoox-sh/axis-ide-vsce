@@ -6,7 +6,7 @@
 import { fn } from 'storybook/test';
 
 import type { Meta, StoryObj } from '@storybook/html';
-import { chip, header, panel, row, statusDot } from '../webview/shared/components';
+import { badge, btn, chip, header, panel, row, statusDot } from '../webview/shared/components';
 
 /**
  * Plugin card composition, mirroring the Plugins studio catalog: kind mark,
@@ -53,11 +53,11 @@ function pluginCard(options: {
   const badges = document.createElement('div');
   badges.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px';
   badges.append(chip({ label: options.kind, value: options.kind, pressed: options.active }));
-  for (const badge of options.badges) {
-    badges.append(chip({ label: badge, value: badge, pressed: false }));
+  for (const text of options.badges) {
+    badges.append(badge({ text, tone: 'neutral' }));
   }
   if (options.flagOff) {
-    badges.append(statusDot({ label: 'Flag off — enable axis.engine.allowPyodide', state: 'warn' }));
+    badges.append(badge({ text: 'Flag off', tone: 'warn' }));
   }
 
   const facts = document.createElement('dl');
@@ -170,12 +170,13 @@ export const WithActions: StoryObj = {
       badges: ['Built-in'],
       facts: [['Interval', '1m · 5m · 15m']],
     });
-    const activate = document.createElement('button');
-    activate.type = 'button';
-    activate.className = 'ax-empty__action';
-    activate.textContent = 'Activate';
-    activate.addEventListener('click', fn());
-    card.append(activate);
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex;justify-content:flex-end;gap:4px;margin-top:auto';
+    actions.append(
+      btn({ label: 'Copy id', variant: 'secondary', size: 'sm', onClick: fn() }),
+      btn({ label: 'Activate', variant: 'primary', size: 'sm', onClick: fn() }),
+    );
+    card.append(actions);
     const wrap = document.createElement('div');
     wrap.style.cssText = 'width:420px';
     wrap.append(card);

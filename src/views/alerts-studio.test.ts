@@ -35,7 +35,10 @@ describe('buildAlertsStudioBody', () => {
     expect(body).toContain('<input id="alerts-title" name="title" type="text" placeholder="Alert title" autocomplete="off" />');
     expect(body).toContain('<label class="alerts-field" for="alerts-condition">Condition');
     expect(body).toContain('<input id="alerts-condition" name="condition" type="text" placeholder="Optional condition" autocomplete="off" />');
-    expect(body).toContain('<button type="button" id="alerts-add" data-action="add">Add</button>');
+    expect(body).toContain('id="alerts-add"');
+    expect(body).toContain('data-action="add"');
+    expect(body).toContain('ax-btn ax-btn--primary ax-btn--md');
+    expect(body).toContain('Add');
     expect(body).toContain('type="button"');
     expect(body).toContain('<p id="alerts-live" class="alerts-live" aria-live="polite" aria-atomic="true"></p>');
     expect(body).toContain(

@@ -6,7 +6,28 @@ extracted from the AXIS monorepo with its commit history preserved.
 
 ## [Unreleased]
 
+### Added
+
+- Shared `ax-*` primitives: `ax-btn` (primary/secondary/ghost/danger · sm/md),
+  `ax-toolbar`, `ax-badge` (semantic tones), `ax-section-title`, `ax-loading`,
+  `ax-code`, `ax-cluster`; empty states gain optional `title`; KPIs accept
+  value `tone`. Storybook stories for Buttons and Badges/Loading/KPI tones.
+- `webview/shared/README.md` — lean inventory of layers, builders, and studio
+  rules for agents and humans.
+
 ### Changed
+
+- Studios migrate one-off buttons/section titles onto shared builders
+  (alerts, scripts, runoutput, watchlist, workers, plugins, layers, toolbox);
+  all studios import `motion.css`; chart chrome uses `--axis-*` tokens
+  (tokens.css + toolbar/button/badge alignment, reduced-motion on run pulse).
+- Host-emitted studio shells stamp frozen `ax-btn` classes (workers probe-all,
+  scripts run/open-chart, watchlist add, alerts add, layers open-chart) via
+  `src/views/ax-shell.ts`; workers probe-all is replaced with `btn()` at
+  runtime; library Apply dual-state uses `btn()` + label swap instead of a
+  one-off control.
+- Visual polish: empty-state hierarchy, button focus rings, high-contrast
+  edges for new controls, toolbox badge counts on token badges.
 
 - **AXIS Trading Pack** renamed from `hoox-sh.axis` / VSIX `axis-<ver>.vsix` to
   **`hoox-sh.axis-pack`** / **`axis-pack-<ver>.vsix`**, version **0.3.0**.

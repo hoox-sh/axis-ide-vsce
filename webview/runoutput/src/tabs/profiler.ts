@@ -16,7 +16,16 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { bar, empty, header, kpi, row, statusDot } from '@axis-shared/components';
+import {
+  bar,
+  btn,
+  empty,
+  header,
+  kpi,
+  row,
+  sectionTitle,
+  statusDot,
+} from '@axis-shared/components';
 
 /** Profiler hot line view model. */
 interface ProfilerHotLine {
@@ -84,10 +93,7 @@ function span(className: string, text: string): HTMLSpanElement {
 
 function appendPhases(container: HTMLElement, phases: readonly ProfilerPhase[] | undefined): void {
   if (!phases || phases.length === 0) return;
-  const heading = document.createElement('h3');
-  heading.className = 'runoutput-section-title';
-  heading.textContent = 'Phases';
-  container.append(heading);
+  container.append(sectionTitle({ text: 'Phases', as: 'h3', className: 'runoutput-section-title' }));
 
   const total = phases.reduce((sum, phase) => sum + (phase.ms ?? 0), 0) || 1;
   const list = document.createElement('div');
@@ -116,10 +122,7 @@ function appendHotLines(
   actions: ProfilerActions,
 ): void {
   if (!lines || lines.length === 0) return;
-  const heading = document.createElement('h3');
-  heading.className = 'runoutput-section-title';
-  heading.textContent = 'Hot lines';
-  container.append(heading);
+  container.append(sectionTitle({ text: 'Hot lines', as: 'h3', className: 'runoutput-section-title' }));
 
   const list = document.createElement('div');
   list.className = 'runoutput-rows';
@@ -143,12 +146,13 @@ function appendHotLines(
 }
 
 function button(label: string, onClick: () => void): HTMLButtonElement {
-  const node = document.createElement('button');
-  node.type = 'button';
-  node.className = 'runoutput-button';
-  node.textContent = label;
-  node.addEventListener('click', onClick);
-  return node;
+  return btn({
+    label,
+    variant: 'secondary',
+    size: 'sm',
+    className: 'runoutput-button',
+    onClick,
+  });
 }
 
 /** Render the Profiler tab into a DOM fragment. */

@@ -60,7 +60,12 @@ export const EmptyState: StoryObj = {
   render: () => {
     const box = panel({
       children: [
-        empty({ hint: 'No plugins match the current filters.', actionLabel: 'Reset filters', onAction: fn() }),
+        empty({
+          title: 'Nothing here yet',
+          hint: 'No plugins match the current filters.',
+          actionLabel: 'Reset filters',
+          onAction: fn(),
+        }),
       ],
     });
     box.style.cssText = 'width:320px;padding:var(--axis-panel-pad)';

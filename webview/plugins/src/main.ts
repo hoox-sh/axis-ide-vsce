@@ -24,6 +24,7 @@
 
 import '@axis-shared/tokens.css';
 import '@axis-shared/theme.css';
+import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
 import { header, tabs, search } from '@axis-shared/components';

@@ -76,28 +76,6 @@
 
 .watchlist-btn {
   flex: 0 0 auto;
-  min-height: 24px;
-  padding: 0 8px;
-  border: var(--axis-border-w) solid transparent;
-  border-radius: var(--axis-radius-input);
-  background: var(--axis-btn-secondary-bg);
-  color: var(--axis-btn-secondary-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.watchlist-btn--primary {
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-}
-
-.watchlist-btn:hover {
-  background: var(--axis-btn-secondary-hover-bg);
-}
-
-.watchlist-btn--primary:hover {
-  background: var(--axis-btn-hover-bg);
 }
 
 .watchlist-empty {

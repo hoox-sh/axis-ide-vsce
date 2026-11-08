@@ -98,21 +98,25 @@ export function buildScriptsWebviewHtml(opts?: ScriptsHtmlOptions | null): strin
         <dt>When</dt><dd id="scripts-at"></dd>
         <dt id="scripts-epoch-label">Epoch</dt><dd id="scripts-epoch"></dd>
       </dl>
-      <button type="button" class="scripts-btn" id="scripts-run">
-        <svg class="scripts-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path fill="currentColor" d="M4 2.5v11l10-5.5L4 2.5z"/>
-        </svg>
-        Run
+      <button type="button" class="ax-btn ax-btn--primary ax-btn--md scripts-btn" id="scripts-run">
+        <span class="ax-btn__icon" aria-hidden="true">
+          <svg class="scripts-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M4 2.5v11l10-5.5L4 2.5z"/>
+          </svg>
+        </span>
+        <span class="ax-btn__label">Run</span>
       </button>
     </section>
     <section class="scripts-card" aria-labelledby="scripts-chart-heading">
       <h2 class="scripts-card__title" id="scripts-chart-heading">Chart</h2>
       <p class="scripts-card__copy">Chart beside the editor.</p>
-      <button type="button" class="scripts-btn" id="scripts-open-chart">
-        <svg class="scripts-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path fill="currentColor" d="M2 13V3h2v8h10v2H2zm3-3 2.2-3 1.8 2.2L12 5l2 1.2-4.2 5.2-2-2.4L7 11 5 8.2V10z"/>
-        </svg>
-        Open chart
+      <button type="button" class="ax-btn ax-btn--primary ax-btn--md scripts-btn" id="scripts-open-chart">
+        <span class="ax-btn__icon" aria-hidden="true">
+          <svg class="scripts-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M2 13V3h2v8h10v2H2zm3-3 2.2-3 1.8 2.2L12 5l2 1.2-4.2 5.2-2-2.4L7 11 5 8.2V10z"/>
+          </svg>
+        </span>
+        <span class="ax-btn__label">Open chart</span>
       </button>
     </section>
     <section class="scripts-card" aria-labelledby="scripts-suggest-heading">

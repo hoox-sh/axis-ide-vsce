@@ -77,6 +77,7 @@
   --axis-row-h: 22px;
   --axis-capsule-h: 18px;
   --axis-bar-h: 4px;
+  --axis-toolbar-h: 36px;
   /* Motion */
   --axis-dur-fast: 120ms;
   --axis-dur-base: 200ms;

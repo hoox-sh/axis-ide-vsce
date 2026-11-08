@@ -376,11 +376,12 @@ export function buildLayersSnapshot(input: unknown): LayersSnapshot {
  * the webview JS depends on those ids/classes).
  */
 export function buildLayersBody(): string {
+  // Open-chart chrome uses ax-btn classes (matches webview btn()); layers-open is the layout hook.
   return `<div id="layers-root" class="layers-root" data-axis-layers-host="1">
     <header class="layers-header">
       <h1 id="layers-title" class="layers-title">Layers</h1>
       <p id="layers-summary" class="layers-summary">0 items · no chart open</p>
-      <button type="button" id="layers-open-chart" class="layers-open">Open chart</button>
+      <button type="button" id="layers-open-chart" class="ax-btn ax-btn--primary ax-btn--md layers-open"><span class="ax-btn__label">Open chart</span></button>
     </header>
     <p id="layers-live" class="layers-live" aria-live="polite" aria-atomic="true"></p>
     <div id="layers-sections" class="layers-sections"></div>

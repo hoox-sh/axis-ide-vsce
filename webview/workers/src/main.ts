@@ -15,6 +15,7 @@ import './style.css';
 import { createStudio } from '@axis-shared/studio';
 import { setText } from '@axis-shared/dom';
 import {
+  btn,
   capsule,
   empty,
   header,
@@ -68,15 +69,16 @@ function renderMetaRow(className: string, label: string, value: string): HTMLEle
 }
 
 function renderProbeButton(card: WorkerStudioCard): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'workers-action-btn';
-  button.textContent = 'Probe';
-  button.setAttribute('aria-label', `Probe ${card.name}`);
-  button.addEventListener('click', () => {
-    studio.post(encodeWorkersProbe(card.id));
+  return btn({
+    label: 'Probe',
+    variant: 'primary',
+    size: 'sm',
+    className: 'workers-action-btn',
+    ariaLabel: `Probe ${card.name}`,
+    onClick: () => {
+      studio.post(encodeWorkersProbe(card.id));
+    },
   });
-  return button;
 }
 
 function renderCard(card: WorkerStudioCard, probed: boolean): HTMLElement {
@@ -169,13 +171,28 @@ function onHostMessage(message: unknown): void {
 }
 
 function bindProbeAll(): void {
-  const button = document.getElementById('workers-probe-all');
-  if (!(button instanceof HTMLButtonElement)) return;
-  button.addEventListener('click', () => {
+  const existing = document.getElementById('workers-probe-all');
+  const onClick = (): void => {
     awaitingAll = true;
     setText('workers-live', 'Probing…');
     studio.post(encodeWorkersProbeAll());
+  };
+
+  // Replace host FOUC chrome with the shared btn() builder (same id for a11y/tests).
+  const button = btn({
+    label: 'Probe all',
+    variant: 'primary',
+    className: 'workers-probe-all',
+    onClick,
   });
+  button.id = 'workers-probe-all';
+
+  if (existing instanceof HTMLButtonElement) {
+    existing.replaceWith(button);
+    return;
+  }
+  const header = document.querySelector('.workers-root__header');
+  header?.append(button);
 }
 
 function main(): void {

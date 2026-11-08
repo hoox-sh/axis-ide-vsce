@@ -12,6 +12,9 @@ import { RESTORE_FOCUS_ATTR } from './dom';
 export type Child = Node | string | null | undefined;
 export type Tone = 'accent' | 'up' | 'down' | 'warn' | 'info';
 export type StatusDotState = 'idle' | 'ok' | 'warn' | 'err' | 'live';
+export type BtnVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type BtnSize = 'sm' | 'md';
+export type BadgeTone = 'neutral' | Tone;
 
 /** Swatch paints are only assigned for literals CSSOM can safely consume. */
 const SAFE_SWATCH =
@@ -221,16 +224,18 @@ export function chip(options: ChipOptions): HTMLButtonElement {
 export interface KpiOptions {
   label: string;
   value: string;
+  /** Optional semantic tint on the value (up/down/warn/…). */
+  tone?: Tone;
   className?: string;
 }
 
 export function kpi(options: KpiOptions): HTMLElement {
   const node = el('div', 'ax-kpi');
   if (options.className) node.classList.add(options.className);
-  node.append(
-    el('span', 'ax-kpi__label', options.label),
-    el('span', 'ax-kpi__value', options.value),
-  );
+  if (options.tone) node.classList.add(`ax-kpi--${options.tone}`);
+  const value = el('span', 'ax-kpi__value', options.value);
+  if (options.tone) value.classList.add(`ax-kpi__value--${options.tone}`);
+  node.append(el('span', 'ax-kpi__label', options.label), value);
   return node;
 }
 
@@ -348,6 +353,8 @@ export function kbd(text: string): HTMLElement {
 /* 12 · ax-empty — empty state */
 
 export interface EmptyOptions {
+  /** Optional short title above the hint (clearer hierarchy). */
+  title?: string;
   hint: string;
   actionLabel?: string;
   onAction?: () => void;
@@ -357,7 +364,10 @@ export interface EmptyOptions {
 export function empty(options: EmptyOptions): HTMLElement {
   const node = el('div', 'ax-empty');
   if (options.className) node.classList.add(options.className);
-  node.textContent = options.hint;
+  if (options.title) {
+    node.append(el('div', 'ax-empty__title', options.title));
+  }
+  node.append(el('div', 'ax-empty__hint', options.hint));
   if (options.actionLabel) {
     const action = el('button', 'ax-empty__action', options.actionLabel);
     action.type = 'button';
@@ -464,5 +474,151 @@ export function glyph(options: GlyphOptions): HTMLButtonElement {
   node.addEventListener('click', () => {
     options.onInsert?.(options.char, options.name);
   });
+  return node;
+}
+
+/* 17 · ax-btn — primary / secondary / ghost / danger control */
+
+export interface BtnOptions {
+  label: string;
+  variant?: BtnVariant;
+  size?: BtnSize;
+  type?: 'button' | 'submit' | 'reset';
+  disabled?: boolean;
+  pressed?: boolean;
+  title?: string;
+  ariaLabel?: string;
+  /** Optional leading icon node. */
+  icon?: Node;
+  onClick?: (event: MouseEvent) => void;
+  className?: string;
+  /** Extra data-* attributes (action keys, ids). */
+  dataset?: Record<string, string>;
+}
+
+export function btn(options: BtnOptions): HTMLButtonElement {
+  const variant = options.variant ?? 'secondary';
+  const size = options.size ?? 'md';
+  const node = el('button', `ax-btn ax-btn--${variant} ax-btn--${size}`);
+  node.type = options.type ?? 'button';
+  if (options.className) node.classList.add(options.className);
+  if (options.disabled) node.disabled = true;
+  if (options.title) node.title = options.title;
+  if (options.ariaLabel) node.setAttribute('aria-label', options.ariaLabel);
+  if (options.pressed !== undefined) {
+    node.setAttribute('aria-pressed', options.pressed ? 'true' : 'false');
+  }
+  if (options.dataset) {
+    for (const [key, value] of Object.entries(options.dataset)) {
+      node.dataset[key] = value;
+    }
+  }
+  if (options.icon) {
+    const icon = el('span', 'ax-btn__icon');
+    icon.append(options.icon);
+    node.append(icon);
+  }
+  node.append(el('span', 'ax-btn__label', options.label));
+  if (options.onClick) {
+    node.addEventListener('click', options.onClick);
+  }
+  return node;
+}
+
+/* 18 · ax-toolbar — compact chrome strip */
+
+export interface ToolbarOptions {
+  className?: string;
+  children?: readonly Child[];
+  /** Accessible name for the toolbar role. */
+  ariaLabel?: string;
+}
+
+export function toolbar(options?: ToolbarOptions): HTMLElement {
+  const node = el('div', 'ax-toolbar');
+  node.setAttribute('role', 'toolbar');
+  if (options?.ariaLabel) node.setAttribute('aria-label', options.ariaLabel);
+  if (options?.className) node.classList.add(options.className);
+  append(node, options?.children);
+  return node;
+}
+
+/* 19 · ax-badge — compact semantic pill */
+
+export interface BadgeOptions {
+  text: string;
+  tone?: BadgeTone;
+  className?: string;
+}
+
+export function badge(options: BadgeOptions): HTMLElement {
+  const tone = options.tone ?? 'neutral';
+  const node = el('span', `ax-badge ax-badge--${tone}`, options.text);
+  if (options.className) node.classList.add(options.className);
+  return node;
+}
+
+/* 20 · ax-section-title — uppercase section label */
+
+export interface SectionTitleOptions {
+  text: string;
+  className?: string;
+  /** Render as h2/h3 when the surrounding landmark needs a heading. */
+  as?: 'div' | 'h2' | 'h3';
+}
+
+export function sectionTitle(options: SectionTitleOptions): HTMLElement {
+  const tag = options.as ?? 'div';
+  const node = el(tag, 'ax-section-title', options.text);
+  if (options.className) node.classList.add(options.className);
+  return node;
+}
+
+/* 21 · ax-loading — compact indeterminate status */
+
+export interface LoadingOptions {
+  label?: string;
+  className?: string;
+}
+
+export function loading(options?: LoadingOptions): HTMLElement {
+  const node = el('div', 'ax-loading');
+  if (options?.className) node.classList.add(options.className);
+  node.setAttribute('role', 'status');
+  node.setAttribute('aria-live', 'polite');
+  const spinner = el('span', 'ax-loading__spinner');
+  spinner.setAttribute('aria-hidden', 'true');
+  node.append(spinner);
+  const label = options?.label ?? 'Loading…';
+  node.append(el('span', 'ax-loading__label', label));
+  return node;
+}
+
+/* 22 · ax-code — mono block for JSON / dumps */
+
+export interface CodeOptions {
+  text: string;
+  className?: string;
+}
+
+export function codeBlock(options: CodeOptions): HTMLElement {
+  const node = el('pre', 'ax-code', options.text);
+  if (options.className) node.classList.add(options.className);
+  return node;
+}
+
+/* 23 · ax-cluster — flex wrap gap helper for chips / actions */
+
+export interface ClusterOptions {
+  className?: string;
+  children?: readonly Child[];
+  gap?: 'xs' | 'sm';
+}
+
+export function cluster(options?: ClusterOptions): HTMLElement {
+  const node = el('div', 'ax-cluster');
+  if (options?.gap === 'xs') node.classList.add('ax-cluster--xs');
+  if (options?.className) node.classList.add(options.className);
+  append(node, options?.children);
   return node;
 }

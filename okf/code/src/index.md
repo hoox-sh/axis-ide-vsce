@@ -11,7 +11,7 @@
 * [src/run](run.md) - Resolve bars + seriesKey for a run from an optional sibling chart doc (PR-06b).
 * [src/secrets](secrets.md) - src/secrets contains index.ts, slots.ts, status.ts, and 4 more files.
 * [src/test](test.md) - src/test contains extension.test.ts, index.ts, runTest.ts.
-* [src/views](views.md) - src/views contains alerts-html.test.ts, alerts-html.ts, alerts-messages.test.ts, and 72 more files.
+* [src/views](views.md) - src/views contains alerts-html.test.ts, alerts-html.ts, alerts-messages.test.ts, and 74 more files.
 
 # Nested
 

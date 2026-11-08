@@ -2,6 +2,8 @@
  * SPDX-License-Identifier: AGPL-3.0-only
  *
  * Chart webview styles — shell + toolbar + LWC host + SVG drawing overlay.
+ * Prefer --axis-* tokens (with VS Code fallbacks) so chart chrome tracks the
+ * shared design system without pulling full studio CSS into the canvas path.
  */
 
 html,
@@ -13,10 +15,10 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: var(--vscode-editor-background, #050505);
-  color: var(--vscode-editor-foreground, #e0e0e0);
-  font-family: var(--vscode-font-family, system-ui, sans-serif);
-  font-size: var(--vscode-font-size, 13px);
+  background: var(--axis-bg, var(--vscode-editor-background, #050505));
+  color: var(--axis-text, var(--vscode-editor-foreground, #e0e0e0));
+  font-family: var(--axis-font, var(--vscode-font-family, system-ui, sans-serif));
+  font-size: var(--axis-font-base, var(--vscode-font-size, 13px));
 }
 
 .chart-shell {
@@ -31,10 +33,12 @@ body {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--axis-gap-xs, 4px);
+  min-height: var(--axis-toolbar-h, 36px);
   padding: 4px 6px;
-  border-bottom: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.22));
-  background: var(--vscode-editorWidget-background, transparent);
+  border-bottom: var(--axis-border-w, 1px) solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.22)));
+  background: var(--axis-bg-elev, var(--vscode-editorWidget-background, transparent));
 }
 
 .chart-toolbar__mark {
@@ -42,41 +46,71 @@ body {
   width: 12px;
   height: 12px;
   display: block;
-  color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground, #cccccc));
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
   pointer-events: none;
 }
 
 .chart-toolbar__btn {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   margin: 0;
+  min-height: 22px;
   padding: 3px 8px;
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 3px;
-  background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2));
-  color: var(--vscode-button-secondaryForeground, inherit);
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border, var(--vscode-button-border, transparent));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: var(
+    --axis-btn-secondary-bg,
+    var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.2))
+  );
+  color: var(
+    --axis-btn-secondary-fg,
+    var(--vscode-button-secondaryForeground, inherit)
+  );
   font: inherit;
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
+  transition:
+    background-color 120ms ease-out,
+    color 120ms ease-out,
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out;
 }
 
 .chart-toolbar__btn:hover {
-  background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.35));
+  background: var(
+    --axis-btn-secondary-hover-bg,
+    var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.35))
+  );
+}
+
+.chart-toolbar__btn:focus-visible {
+  outline: none;
+  box-shadow: var(
+    --axis-focus-ring,
+    0 0 0 3px color-mix(in oklch, var(--vscode-focusBorder, #007acc) 18%, transparent)
+  );
 }
 
 .chart-toolbar__btn.is-active,
 .chart-toolbar__btn[aria-pressed='true'] {
-  background: var(--vscode-button-background, #0e639c);
-  color: var(--vscode-button-foreground, #fff);
+  background: var(--axis-btn-bg, var(--vscode-button-background, #0e639c));
+  color: var(--axis-btn-fg, var(--vscode-button-foreground, #fff));
+  border-color: transparent;
 }
 
 .chart-plugins {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: var(--axis-gap-xs, 4px);
   margin-left: auto;
   font-size: 11px;
   line-height: 1.2;
-  color: var(--vscode-descriptionForeground, var(--vscode-editor-foreground, #cccccc));
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
 }
 
 .chart-plugins[hidden] {
@@ -94,11 +128,15 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 1px 6px;
-  border: 1px solid var(--vscode-panel-border, rgba(128, 128, 128, 0.35));
-  border-radius: 2px;
-  background: var(--vscode-badge-background, rgba(128, 128, 128, 0.18));
-  color: var(--vscode-badge-foreground, inherit);
+  min-height: 16px;
+  padding: 0 6px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  border-radius: var(--axis-radius-pill, 999px);
+  background: var(--axis-badge-bg, var(--vscode-badge-background, rgba(128, 128, 128, 0.18)));
+  color: var(--axis-badge-fg, var(--vscode-badge-foreground, inherit));
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+  font-size: 10px;
 }
 
 .chart-stage {
@@ -124,6 +162,7 @@ body {
   justify-content: center;
   opacity: 0.55;
   letter-spacing: 0.02em;
+  color: var(--axis-faint, var(--axis-dim, #9aa3b2));
   user-select: none;
   pointer-events: none;
 }
@@ -177,11 +216,19 @@ body {
 
 .chart-shell[data-run-status='ok'],
 .chart-shell[data-run-status='plugins'] {
-  --axis-run-pulse-color: var(--vscode-focusBorder, #007acc);
+  --axis-run-pulse-color: var(--axis-accent, var(--vscode-focusBorder, #007acc));
   animation: axis-run-pulse 300ms ease-out;
 }
 
 .chart-shell[data-run-status='error'] {
-  --axis-run-pulse-color: var(--vscode-errorForeground, #f14c4c);
+  --axis-run-pulse-color: var(--axis-down, var(--vscode-errorForeground, #f14c4c));
   animation: axis-run-pulse 300ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-shell[data-run-status='ok'],
+  .chart-shell[data-run-status='plugins'],
+  .chart-shell[data-run-status='error'] {
+    animation: none;
+  }
 }

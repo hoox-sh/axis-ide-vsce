@@ -22,7 +22,7 @@
  * Filtering is client-side through the shared filter machine.
  */
 
-import { search } from '@axis-shared/components';
+import { btn, search } from '@axis-shared/components';
 import { createFilter } from '@axis-shared/state';
 
 export interface ColorsActions {
@@ -135,13 +135,15 @@ export function createColorsTab(actions: ColorsActions): {
   source.className = 'toolbox-colors__source';
   source.textContent = '';
 
-  const refresh = document.createElement('button');
-  refresh.type = 'button';
-  refresh.className = 'toolbox-colors__refresh';
-  refresh.textContent = 'Refresh';
-  refresh.title = 'Rescan the active Pine editor';
-  refresh.addEventListener('click', () => {
-    actions.refreshColors();
+  const refresh = btn({
+    label: 'Refresh',
+    variant: 'secondary',
+    size: 'sm',
+    title: 'Rescan the active Pine editor',
+    className: 'toolbox-colors__refresh',
+    onClick: () => {
+      actions.refreshColors();
+    },
   });
 
   header.append(title, count, source, refresh);

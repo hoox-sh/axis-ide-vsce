@@ -45,6 +45,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "lightweight-charts": resolveLwcEntry(),
+      "@axis-shared": resolve(__dirname, "../shared"),
     },
   },
   build: {

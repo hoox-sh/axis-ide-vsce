@@ -16,7 +16,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { capsule, empty, header, row } from '@axis-shared/components';
+import { btn, capsule, empty, header, row } from '@axis-shared/components';
 
 /** Log row view model. */
 interface LogRow {
@@ -78,12 +78,13 @@ function appendRows(
 }
 
 function button(label: string, onClick: () => void): HTMLButtonElement {
-  const node = document.createElement('button');
-  node.type = 'button';
-  node.className = 'runoutput-button';
-  node.textContent = label;
-  node.addEventListener('click', onClick);
-  return node;
+  return btn({
+    label,
+    variant: 'secondary',
+    size: 'sm',
+    className: 'runoutput-button',
+    onClick,
+  });
 }
 
 /** Render the Logs tab into a DOM fragment. */
