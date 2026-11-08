@@ -1,15 +1,15 @@
 # Publishing AXIS IDE + Trading Pack
 
 Maintainer guide for dual-publishing **`hoox-sh.axis-ide`** (repository root)
-and the optional extension pack **`hoox-sh.axis`** ([`pack/`](./pack/)) to the
+and the optional extension pack **`hoox-sh.axis-pack`** ([`pack/`](./pack/)) to the
 **Visual Studio Marketplace** (`@vscode/vsce`) and **Open VSX** (`ovsx`).
 
 | | IDE | Pack |
 | --- | --- | --- |
 | Path | repository root | `pack/` |
-| Extension id | `hoox-sh.axis-ide` | `hoox-sh.axis` |
+| Extension id | `hoox-sh.axis-ide` | `hoox-sh.axis-pack` |
 | Publisher | `hoox-sh` | `hoox-sh` |
-| VSIX name | `axis-ide-<ver>.vsix` | `axis-<ver>.vsix` |
+| VSIX name | `axis-ide-<ver>.vsix` | `axis-pack-<ver>.vsix` |
 | Manifest edge | `extensionDependencies: ["hoox-sh.pyne"]` | `extensionPack: ["hoox-sh.pyne", "hoox-sh.axis-ide"]` |
 
 Hard dependency **`hoox-sh.pyne`** must already be listed on both marketplaces
@@ -54,14 +54,14 @@ bun run package
 code --install-extension "./axis-ide-$(node -p "require('./package.json').version").vsix"
 ```
 
-### Pack (`hoox-sh.axis`)
+### Pack (`hoox-sh.axis-pack`)
 
 ```bash
-bun run --cwd pack ls
-bun run --cwd pack package
-# → pack/axis-0.1.0.vsix
+bun run pack:ls
+bun run pack:package
+# → pack/axis-pack-0.3.0.vsix
 
-code --install-extension "./pack/axis-$(node -p "require('./pack/package.json').version").vsix"
+code --install-extension "./pack/axis-pack-$(node -p "require('./pack/package.json').version").vsix"
 ```
 
 Root aliases: `bun run pack:package` / `bun run pack:ls`.
@@ -74,7 +74,7 @@ Publish **member extensions before the pack**:
 
 1. **`hoox-sh.pyne`** already live on Marketplace + Open VSX (sibling repo).
 2. **`hoox-sh.axis-ide`** → Marketplace, then Open VSX (or both in one release job).
-3. **`hoox-sh.axis`** pack → Marketplace, then Open VSX **after** both members
+3. **`hoox-sh.axis-pack`** pack → Marketplace, then Open VSX **after** both members
    resolve on that registry.
 
 Rationale: Marketplace/Open VSX resolve `extensionDependencies` /
@@ -98,7 +98,7 @@ npx --yes ovsx publish "$VSIX" -p "$OVSX_PAT"
 
 # --- Pack (only after IDE is visible on both galleries) ---
 bun run pack:package
-VSIX="pack/axis-$(node -p "require('./pack/package.json').version").vsix"
+VSIX="pack/axis-pack-$(node -p "require('./pack/package.json').version").vsix"
 
 npx --yes @vscode/vsce publish --pat "$VSCE_PAT" --packagePath "$VSIX" --no-dependencies
 npx --yes ovsx publish "$VSIX" -p "$OVSX_PAT"

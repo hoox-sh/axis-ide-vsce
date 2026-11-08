@@ -18,7 +18,7 @@
 
 ---
 title: AXIS VS Code Extension (AXIS IDE) — plan
-description: Condensed authoritative plan for hoox-sh.axis-ide + hoox-sh.axis pack. Locked decisions KD-1..KD-15, architecture, packaging, security, testing gates, phasing P0–P6, and PR map. Design run 118d12d1.
+description: Condensed authoritative plan for hoox-sh.axis-ide + hoox-sh.axis-pack pack. Locked decisions KD-1..KD-15, architecture, packaging, security, testing gates, phasing P0–P6, and PR map. Design run 118d12d1.
 ---
 
 # AXIS VS Code Extension (AXIS IDE) — plan
@@ -30,7 +30,7 @@ description: Condensed authoritative plan for hoox-sh.axis-ide + hoox-sh.axis pa
 
 ## 1. Objective
 
-Ship **`hoox-sh.axis-ide`** as a native-first VS Code clone of the AXIS PWA chart / run / live / results / library / MCP surface, hard-dependent on **`hoox-sh.pyne`**, with SecretStorage keys and a Bun coverage ratchet. Optional one-click pack **`hoox-sh.axis`**.
+Ship **`hoox-sh.axis-ide`** as a native-first VS Code clone of the AXIS PWA chart / run / live / results / library / MCP surface, hard-dependent on **`hoox-sh.pyne`**, with SecretStorage keys and a Bun coverage ratchet. Optional one-click pack **`hoox-sh.axis-pack`**.
 
 Non-negotiables:
 
@@ -46,7 +46,7 @@ Non-negotiables:
 | # | Decision | Rationale |
 | --- | --- | --- |
 | KD-1 | Package under **`packages/vscode-axis-ide/`** (+ `packages/vscode-axis-pack/`) as sibling packages via `bun --cwd` — **not** npm/bun workspaces | Root has no `workspaces`; `bunfig.toml` already ignores `packages/**`. IDE semver independent of root `VERSION` / `sync-versions.mjs`. |
-| KD-2 | Extension id **`hoox-sh.axis-ide`**, pack **`hoox-sh.axis`** | Hard edge = `extensionDependencies: ["hoox-sh.pyne"]`; pack is soft one-click UX. |
+| KD-2 | Extension id **`hoox-sh.axis-ide`**, pack **`hoox-sh.axis-pack`** | Hard edge = `extensionDependencies: ["hoox-sh.pyne"]`; pack is soft one-click UX. |
 | KD-3 | License **AGPL-3.0-only** (headers must not say “or later”) | Match AXIS SPDX/`NOTICE`. VSIX NOTICE must list Lightweight Charts Apache-2.0. Do not relicense PYNE. |
 | KD-4 | **Native editor only** for Pine; chart = **`CustomEditorProvider`** on `*.axis.json` from PR-04 onward | No Readonly→Editable mid-flight; never default custom editor on `*.pyne`. |
 | KD-5 | **Do not fork LSP**; `extensionDependencies` is **id-only**; recommend ≥0.5.4 | Electron test warns if installed PYNE older. |
@@ -120,7 +120,7 @@ flowchart TB
 
 ```
 packages/vscode-axis-ide/     # hoox-sh.axis-ide — host esbuild + Vite webviews
-packages/vscode-axis-pack/    # hoox-sh.axis — extensionPack only
+packages/vscode-axis-pack/    # hoox-sh.axis-pack — extensionPack only
 ```
 
 | Bundle | Tool | Output |
@@ -128,7 +128,7 @@ packages/vscode-axis-pack/    # hoox-sh.axis — extensionPack only
 | Extension host | esbuild | `dist/extension.js` (`external: ['vscode']`) |
 | Chart / Results webviews | Vite | `dist/webview/{chart,results}/` |
 | IDE VSIX | `@vscode/vsce package --no-dependencies` | `axis-ide-<ver>.vsix` |
-| Pack VSIX | vsce | `axis-<ver>.vsix` |
+| Pack VSIX | vsce | `axis-pack-<ver>.vsix` |
 
 Root scripts: `vscode:ide:compile|test|package` via `bun --cwd packages/vscode-axis-ide …`.
 

@@ -69,7 +69,7 @@ jobs:
         with:
           files: |
             axis-ide-${{ steps.versions.outputs.ide }}.vsix
-            pack/axis-${{ steps.versions.outputs.pack }}.vsix
+            pack/axis-pack-${{ steps.versions.outputs.pack }}.vsix
           generate_release_notes: true
           fail_on_unmatched_files: true
 
@@ -100,32 +100,28 @@ jobs:
               -p "$OVSX_PAT"
           fi
 
-      # Pack: Open VSX first so a Marketplace-side block (the reserved
-      # hoox-sh.axis name) cannot prevent the Open VSX publication.
-      # The Marketplace step is continue-on-error until the reserved name
-      # is cleared in the publisher portal — see PUBLISH.md.
+      # Pack after IDE so extensionPack members resolve on each gallery.
       - name: Publish pack to Open VSX
         if: env.OVSX_PAT != ''
         run: |
           VER="${{ steps.versions.outputs.pack }}"
-          if curl -fsSL "https://open-vsx.org/api/hoox-sh/axis/$VER" >/dev/null 2>&1; then
-            echo "hoox-sh.axis $VER already on Open VSX — skipping."
+          if curl -fsSL "https://open-vsx.org/api/hoox-sh/axis-pack/$VER" >/dev/null 2>&1; then
+            echo "hoox-sh.axis-pack $VER already on Open VSX — skipping."
           else
             npx --yes ovsx publish \
-              "pack/axis-$VER.vsix" \
+              "pack/axis-pack-$VER.vsix" \
               -p "$OVSX_PAT"
           fi
 
       - name: Publish pack to VS Marketplace
         if: env.VSCE_PAT != ''
-        continue-on-error: true
         run: |
           VER="${{ steps.versions.outputs.pack }}"
-          if npx --yes @vscode/vsce show hoox-sh.axis --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
-            echo "hoox-sh.axis $VER already on the Marketplace — skipping."
+          if npx --yes @vscode/vsce show hoox-sh.axis-pack --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
+            echo "hoox-sh.axis-pack $VER already on the Marketplace — skipping."
           else
             npx --yes @vscode/vsce publish \
               --pat "$VSCE_PAT" \
-              --packagePath "pack/axis-$VER.vsix" \
+              --packagePath "pack/axis-pack-$VER.vsix" \
               --no-dependencies
           fi

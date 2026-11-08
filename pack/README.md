@@ -4,7 +4,7 @@
 
 | | |
 | --- | --- |
-| **Pack id** | `hoox-sh.axis` |
+| **Pack id** | `hoox-sh.axis-pack` |
 | **License** | [AGPL-3.0-only](./LICENSE) |
 | **Members** | `hoox-sh.pyne`, `hoox-sh.axis-ide` |
 
@@ -18,8 +18,8 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 From the VS Code / Open VSX Marketplace, search for **AXIS Trading Pack**, or install the VSIX:
 
 ```bash
-bun run --cwd pack package   # → pack/axis-0.1.0.vsix
-code --install-extension pack/axis-0.1.0.vsix
+bun run pack:package                 # from repo root → pack/axis-pack-0.3.0.vsix
+code --install-extension pack/axis-pack-0.3.0.vsix
 ```
 
 From the repository root: `bun run pack:package`.

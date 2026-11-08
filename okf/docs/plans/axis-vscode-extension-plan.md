@@ -1,13 +1,13 @@
 ---
 type: "Document"
 title: "AXIS VS Code Extension (AXIS IDE) — plan"
-description: "Condensed authoritative plan for hoox-sh.axis-ide + hoox-sh.axis pack. Locked decisions KD-1..KD-15, architecture, packaging, security, testing gates, phasing P0–P6, and PR map.…"
+description: "Condensed authoritative plan for hoox-sh.axis-ide + hoox-sh.axis-pack pack. Locked decisions KD-1..KD-15, architecture, packaging, security, testing gates, phasing P0–P6, and PR…"
 resource: "docs/plans/axis-vscode-extension-plan.mdx"
 tags: [axis-vscode-extension-plan, doc, docs, plans]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T03:02:18Z
+  at: 2026-11-08T20:23:43Z
 sources:
   - id: tree
     resource: "docs/plans/axis-vscode-extension-plan.mdx"

@@ -1,8 +1,8 @@
 {
-  "name": "axis",
+  "name": "axis-pack",
   "displayName": "AXIS Trading Pack",
   "description": "One-click install: PYNE Language Support + AXIS IDE. Part of the HOOX open trading stack. Unofficial — not affiliated with TradingView, Inc.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
   "author": {
@@ -32,6 +32,7 @@
   ],
   "keywords": [
     "axis",
+    "axis-pack",
     "hoox",
     "pyne",
     "pinescript",
@@ -45,7 +46,7 @@
     "hoox-sh.axis-ide"
   ],
   "scripts": {
-    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-'+v+'.vsix',{stdio:'inherit'})\"",
+    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-pack-'+v+'.vsix',{stdio:'inherit'})\"",
     "ls": "npx --yes @vscode/vsce ls --no-dependencies"
   },
   "devDependencies": {

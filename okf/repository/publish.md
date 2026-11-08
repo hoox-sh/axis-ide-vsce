@@ -7,7 +7,7 @@ tags: [doc, publish]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T03:02:18Z
+  at: 2026-11-08T20:23:43Z
 sources:
   - id: tree
     resource: "PUBLISH.md"
@@ -25,7 +25,7 @@ Repo path `PUBLISH.md`.
 * Tokens and namespace
 * Dry-run: package only (no upload)
   * IDE (hoox-sh.axis-ide)
-  * Pack (hoox-sh.axis)
+  * Pack (hoox-sh.axis-pack)
 * Publish order
 * Real publish (release only)
 * CI release workflow
