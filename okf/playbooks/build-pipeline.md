@@ -47,7 +47,7 @@ Each studio under `webview/<studio>/` has its own `vite.config.ts`. The root `co
 ```bash
 bun run compile
 bun run package        # axis-ide-<ver>.vsix
-bun run pack:package   # pack/axis-<ver>.vsix
+bun run pack:package   # pack/axis-pack-<ver>.vsix
 ```
 
 VSCE runs with `--no-dependencies` because `node_modules` is excluded. Runtime dependencies (e.g. `lightweight-charts`) are bundled by Vite into the chart webview. `.vscodeignore` allowlists only the runtime artifacts.[^vsce]

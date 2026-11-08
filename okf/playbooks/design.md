@@ -37,7 +37,7 @@ Bridge VS Code, the PYNE Pine engine, and AXIS runtime surfaces so traders can a
 | Package | Path | Id | Notes |
 |---------|------|-----|-------|
 | AXIS IDE | repo root | `hoox-sh.axis-ide` | Hard-depends on `hoox-sh.pyne`. |
-| AXIS Trading Pack | `pack/` | `hoox-sh.axis` | `extensionPack` of PYNE + IDE. Manifest-only. |
+| AXIS Trading Pack | `pack/` | `hoox-sh.axis-pack` | `extensionPack` of PYNE + IDE. Manifest-only. |
 
 ## Architecture
 

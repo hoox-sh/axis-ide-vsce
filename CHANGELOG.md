@@ -1,8 +1,17 @@
 # Changelog
 
 All notable changes to **AXIS IDE** (`hoox-sh.axis-ide`) and the **AXIS Trading
-Pack** (`hoox-sh.axis`). This repository was extracted from the AXIS monorepo
-with its commit history preserved.
+Pack** (`hoox-sh.axis-pack`, formerly `hoox-sh.axis`). This repository was
+extracted from the AXIS monorepo with its commit history preserved.
+
+## [Unreleased]
+
+### Changed
+
+- **AXIS Trading Pack** renamed from `hoox-sh.axis` / VSIX `axis-<ver>.vsix` to
+  **`hoox-sh.axis-pack`** / **`axis-pack-<ver>.vsix`**, version **0.3.0**.
+  Release and CI workflows, `PUBLISH.md`, and pack docs updated. Marketplace
+  pack publish no longer uses `continue-on-error`.
 
 ## [0.3.1] — 2026-11-06
 

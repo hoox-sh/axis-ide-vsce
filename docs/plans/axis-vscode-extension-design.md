@@ -8,7 +8,7 @@
 | **Status** | Draft — open questions **user-locked** 2026-11-02 |
 | **License target** | AGPL-3.0-only (match AXIS PWA; see § Key Decisions / license) |
 | **Extension id** | `hoox-sh.axis-ide` |
-| **Extension pack id** | `hoox-sh.axis` |
+| **Extension pack id** | `hoox-sh.axis-pack` |
 | **Hard dependency** | `hoox-sh.pyne` (id-only in `extensionDependencies`; **recommended ≥0.5.4** in README + runtime warn) |
 | **Monorepo path** | `packages/vscode-axis-ide/` (+ thin `packages/vscode-axis-pack/`) — sibling packages via `bun --cwd`, **not** npm/bun workspaces |
 | **IDE semver** | Independent of root `VERSION` / `scripts/sync-versions.mjs` (those stamp app/worker/tauri only) |
@@ -84,7 +84,7 @@ Marketplace prior art (research-task-format § Prior Art) stops at language/lint
 | # | Decision | Rationale |
 | --- | --- | --- |
 | KD-1 | Package under AXIS monorepo at **`packages/vscode-axis-ide/`** (pack at `packages/vscode-axis-pack/`) as a **sibling package** (like `packages/cli`), invoked via `bun --cwd` root scripts — **not** npm/bun `workspaces` | Root `package.json` has no `workspaces` field; `bunfig.toml` `pathIgnorePatterns` already excludes `packages/**` from root `bun test`. Prefer monorepo over a separate git repo for AGPL headers + eventual `src/` extraction (see A7). IDE **semver is independent** of root `VERSION` / `scripts/sync-versions.mjs` (those stamp app/worker/tauri only). |
-| KD-2 | Extension id **`hoox-sh.axis-ide`**, pack **`hoox-sh.axis`** | IDE is the functional product; pack is soft one-click UX (`extensionPack`). Hard edge is `extensionDependencies: ["hoox-sh.pyne"]` on the IDE. |
+| KD-2 | Extension id **`hoox-sh.axis-ide`**, pack **`hoox-sh.axis-pack`** | IDE is the functional product; pack is soft one-click UX (`extensionPack`). Hard edge is `extensionDependencies: ["hoox-sh.pyne"]` on the IDE. (Pack id was briefly `hoox-sh.axis`; renamed to avoid Marketplace name collision.) |
 | KD-3 | License **AGPL-3.0-only** for AXIS IDE (and pack); file headers **must not** say “or later” | Matches AXIS `NOTICE` / root SPDX. Many PWA `src/**` headers still say “or later” while SPDX is only — **do not copy that inconsistency**. IDE boilerplate: SPDX `AGPL-3.0-only` + header text “version 3 only”. PYNE ext remains **AGPL-3.0-or-later**; pack README call-out; do not relicense PYNE. VSIX NOTICE must list Lightweight Charts Apache-2.0. |
 | KD-4 | **Native editor only** for Pine; chart = **`CustomEditorProvider`** on `*.axis.json` from **PR-04 onward** (not Readonly→Editable mid-flight) | Dirty/save/revert/backup for layout + drawings land with the same provider kind. Use `CustomDocumentContentChangeEvent` early; promote to full `CustomDocumentEditEvent` undo when drawing ops need it. Never bind custom editor as `default` on `*.pyne`. |
 | KD-5 | **Do not fork LSP**; `extensionDependencies: ["hoox-sh.pyne"]` is **id-only** (VS Code has no semver here) | Document **recommended ≥0.5.4** in README; electron test reads installed PYNE `packageJSON.version` and **warns** if older. |
@@ -132,7 +132,7 @@ axis/                                      # monorepo root (private, AGPL-3.0-on
 │   │   │   └── shared/                    # theme bridge, messenger client
 │   │   ├── media/                         # icons, CSP-safe assets
 │   │   └── coverage/                      # bun test --coverage (lcov)
-│   └── vscode-axis-pack/                  # NEW — hoox-sh.axis (extensionPack only)
+│   └── vscode-axis-pack/                  # NEW — hoox-sh.axis-pack (extensionPack only)
 │       └── package.json                   # own package.json; own bun install if needed
 └── src/                                   # PWA modules (import / extract later)
 ```
@@ -147,7 +147,7 @@ axis/                                      # monorepo root (private, AGPL-3.0-on
 | Chart webview | Vite | `dist/webview/chart/` | No Node built-ins; LWC standalone |
 | Results webview | Vite | `dist/webview/results/` | Equity curve canvas/SVG |
 | Package | `@vscode/vsce package --no-dependencies` | `axis-ide-<ver>.vsix` | Same flag as PYNE; host deps bundled |
-| Pack | vsce | `axis-<ver>.vsix` | Manifest-only pack |
+| Pack | vsce | `axis-pack-<ver>.vsix` | Manifest-only pack |
 
 Root scripts (suggested):
 
@@ -767,10 +767,10 @@ Ship Pyodide assets only when the feature flag `axis.engine.allowPyodide` is on 
 
 ```json
 {
-  "name": "axis",
+  "name": "axis-pack",
   "displayName": "AXIS Trading Pack",
   "description": "One-click install: PYNE Language Support + AXIS IDE.",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
   "engines": { "vscode": "^1.95.0" },

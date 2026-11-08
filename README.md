@@ -30,12 +30,12 @@ bun run package                       # → axis-ide-<version>.vsix
 code --install-extension axis-ide-0.1.0.vsix
 ```
 
-The optional **AXIS Trading Pack** (`hoox-sh.axis`) installs PYNE + AXIS IDE
+The optional **AXIS Trading Pack** (`hoox-sh.axis-pack`) installs PYNE + AXIS IDE
 together:
 
 ```bash
-bun run pack:package                  # → pack/axis-<version>.vsix
-code --install-extension pack/axis-0.1.0.vsix
+bun run pack:package                  # → pack/axis-pack-<version>.vsix
+code --install-extension pack/axis-pack-0.3.0.vsix
 ```
 
 ## Status
@@ -164,7 +164,7 @@ bun run test:coverage              # unit + lcov under coverage/
 bun run test:coverage:gate         # coverage + BASELINE/protocol ratchet
 bun run test                       # @vscode/test-electron (needs PYNE VSIX)
 bun run package                    # → axis-ide-<version>.vsix
-bun run pack:package               # → pack/axis-<version>.vsix
+bun run pack:package               # → pack/axis-pack-<version>.vsix
 bun run verify                     # check + coverage gate
 ```
 
@@ -194,7 +194,7 @@ default the harness globs `pyne-vscode-*.vsix` from a sibling `pynescript` /
 ├── media/                # icons, builtin catalog, activity art
 ├── scripts/              # coverage gate
 ├── docs/                 # CSP matrix + design/plan notes
-├── pack/                 # hoox-sh.axis extension pack
+├── pack/                 # hoox-sh.axis-pack extension pack
 ├── fixtures/             # sample *.axis.json
 ├── .github/workflows/    # CI + release
 └── out/ dist/ coverage/  # build output (gitignored)

@@ -40,5 +40,5 @@ repair them with:
 
 ## Related
 
-- [Architecture](architecture.md)
-- [Security](security.md)
+- [Architecture](/architecture.md)
+- [Security](/security.md)

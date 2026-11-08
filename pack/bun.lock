@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "axis",
+      "name": "axis-pack",
       "devDependencies": {
         "@vscode/vsce": "^3.3.2",
       },

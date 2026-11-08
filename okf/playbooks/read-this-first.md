@@ -9,9 +9,9 @@ okf_lock: human
 
 # Read this first
 
-1. Read [Architecture](../architecture.md) for the project shape and the team.
-2. Read [Development](../development.md) before changing code.
-3. Read [Security](../security.md) before changing permissions or gates.
+1. Read [Architecture](/architecture.md) for the project shape and the team.
+2. Read [Development](/development.md) before changing code.
+3. Read [Security](/security.md) before changing permissions or gates.
 
 ## The one-paragraph model
 
