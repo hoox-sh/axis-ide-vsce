@@ -8,7 +8,7 @@ beside Pine / PYNE buffers — **core: chart custom editor + Pyodide engine + si
 | **Extension id** | `hoox-sh.axis-ide` |
 | **Repository** | [hoox-sh/axis-ide-vsce](https://github.com/hoox-sh/axis-ide-vsce) |
 | **License** | [AGPL-3.0-only](./LICENSE) |
-| **Hard dependency** | [`hoox-sh.pyne`](https://marketplace.visualstudio.com/items?itemName=hoox-sh.pyne) (PYNE Language Support) — **recommended ≥ 0.5.4** |
+| **Hard dependency** | [`hoox-sh.pyne`](https://marketplace.visualstudio.com/items?itemName=hoox-sh.pyne) (PYNE Language Support) — **recommended ≥ 0.5.8** |
 | **Editor floor** | VS Code / compatible editor `^1.95.0` |
 
 Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products:
@@ -39,15 +39,17 @@ code --install-extension pack/axis-pack-<version>.vsix
 
 ## Status
 
-Lightweight **core** release:
+Lightweight **core** (no activity-bar studios):
 
-- **AXIS Chart** custom editor on `*.axis.json` (paint-only CSP webview + bundled Lightweight Charts; mock or datafeed)
+- **AXIS Chart** custom editor on `*.axis.json` (paint-only CSP webview + bundled Lightweight Charts; mock, datafeed, or workspace CSV)
 - **AXIS: Open Chart** opens or creates sibling `*.axis.json`
-- **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → Pyodide (opt-in via `axis.engine.allowPyodide`) or remote `/run` (Pro auto-wired or self-hosted CF PYNE worker)
-- Run surfaces via output channel + chart webview updates (paint-only)
-- Typed `axis.webview.v1` host↔webview protocol for chart
-- Secrets (Pro + worker) via SecretStorage only; auto-wired on run when present
-- Pyodide: bars-in calculator (Wasm not vendored; opt-in widens chart CSP only)
+- **AXIS: Run Script** (`Ctrl/Cmd+Enter`) → **Pyodide by default** (`axis.engine.allowPyodide`) or remote `/run` (Pro auto-wired or self-hosted CF PYNE worker). Banner `engine=pyodide … uploaded=0`
+- **AXIS: Pick Data** — symbol, timeframe, mock / datafeed / **workspace CSV** (`barsPath` on `*.axis.json`)
+- **Get Started** walkthrough `axis.firstPlot` (`fixtures/orb.pine`)
+- Run surfaces via output channel + chart webview (paint-only). **Live-safe** hides overlays when static lookahead grep fires (not a live-taint proof)
+- Secrets (Pro + worker) via SecretStorage only — never settings
+- Pyodide 0.29.5 from jsDelivr into `globalStorage` (Wasm **not** in the VSIX)
+- Bar debugger: DAP type **`axis-bar`** (not `pyne`) — bar-step, chart-bar breakpoints, click a strategy trade to seek
 
 See "Lightweight PYNE Options" below for Pro / worker details.
 
@@ -55,7 +57,7 @@ See "Lightweight PYNE Options" below for Pro / worker details.
 
 AXIS IDE keeps execution simple: chart + local Pyodide + one of two remote paths.
 
-**Pyodide (local, opt-in):** set `axis.engine.allowPyodide: true`. Widens **chart** webview CSP only (`wasm-unsafe-eval` + `worker-src blob:`) for in-browser calc. Results/others stay paint-only. No network.
+**Pyodide (local, default on):** `axis.engine.allowPyodide` defaults **true**. AXIS loads **Pyodide 0.29.5** from the official jsDelivr CDN (`https://cdn.jsdelivr.net/pyodide/v0.29.5/full/`) in the extension host — Wasm is **not** in the VSIX. After the first fetch, `pyodide.mjs` is cached in extension `globalStorage` (airplane-mode after that first fetch). `ready` is true only after a `1+1` smoke **and** a pynescript Runtime smoke. The host micropip-installs a trusted `hoox-pyne` wheel (`media/pyodide/`, optional `axis.engine.pyodideWheelUrl`, or sibling `pynescript/dist`) plus `antlr4-python3-runtime`, then `media/pyodide/pynescript_runtime.py` calls `pynescript.runtime.Runtime.run` — the same envelope as Flask/worker POST `/run`. Source is not uploaded (`engine=pyodide … uploaded=0`). Not in Wasm: Numba compile, Cloudflare R2, cron. The chart CSP widens (`wasm-unsafe-eval` + `worker-src blob:` + jsDelivr `connect-src`/`script-src`) so a blob worker can fetch the same origin. Set the flag **false** to force remote `/run` only. See `docs/competitive/axis-capability-list.md`.
 
 ### Pro (free)
 
@@ -63,7 +65,7 @@ AXIS IDE keeps execution simple: chart + local Pyodide + one of two remote paths
 - Stores only in `ExtensionContext.secrets` (validated `pyn_` shape; empty input clears).
 - Optional: configure `axis.engine.endpoint` (default loopback or Pro host) + `axis.engine.allowRemoteEndpoint` (application scope) for off-loopback.
 - **Auto-wired** (prominent): when a valid Pro key is present, run orchestration POSTs to `${endpoint}/run` using `Authorization: Bearer <key>`. No extra commands or settings for the key.
-- Status bar shows **set** / **missing** (never the value).
+- No status bar in the lightweight core (keys never shown).
 - Clear via **AXIS: Clear Stored Secrets**.
 
 **Keys are never settings** — no `axis.*.apiKey` in configuration. Run paths read SecretStorage only.
@@ -137,8 +139,15 @@ globs intentionally match the PYNE language extension list: `*.pyne`, `*.pine`,
 | Command | Id |
 | --- | --- |
 | AXIS: Open Chart | `axis.openChart` (open/create sibling `*.axis.json`) |
-| AXIS: Run Script | `axis.runScript` (Ctrl/Cmd+Enter on pinescript) |
+| AXIS: Run Script | `axis.runScript` (Ctrl/Cmd+Enter on Pine / `.pyne` / `.pine`) |
+| AXIS: Stop Run | `axis.stopRun` (title-bar swap while a run is in flight) |
 | AXIS: Run Script (Silent) | `axis.runScriptSilent` |
+| AXIS: Show Run Output | `axis.showRunOutput` |
+| AXIS: Pick Data | `axis.pickData` (symbol / timeframe / mock / datafeed / workspace CSV) |
+| AXIS: Start Bar Debug | `axis.debug.start` (DAP type `axis-bar`) |
+| AXIS: Step Bar | `axis.debug.stepBar` |
+| AXIS: Toggle Bar Breakpoint | `axis.debug.toggleBarBreakpoint` |
+| AXIS: Open First-Plot Fixture | `axis.openWalkthroughFixture` |
 | AXIS: Set Pro API Key | `axis.secrets.setProKey` |
 | AXIS: Set Worker API Key (CF) | `axis.secrets.setWorkerKey` |
 | AXIS: Clear Stored Secrets | `axis.secrets.clear` (Pro + Worker) |
@@ -155,7 +164,7 @@ Keys live only in `ExtensionContext.secrets` (VS Code SecretStorage):
 
 - Set flows use `showInputBox({ password: true })`; invalid input is rejected **before** store.
 - Empty input on a set command clears that slot.
-- Status bar shows **set/missing** only — never key material.
+- Commands confirm set/cleared — never key material, no status bar.
 - Keys are **never** `contributes.configuration` properties.
 - Run paths read SecretStorage only.
 
@@ -167,7 +176,7 @@ Keys live only in `ExtensionContext.secrets` (VS Code SecretStorage):
 | `axis.engine.id` | `server` | Engine mode |
 | `axis.engine.endpoint` | `http://127.0.0.1:5002` | Base for Pro / worker `/run` (no `/run` suffix); remote needs allow |
 | `axis.engine.allowRemoteEndpoint` | `false` | Opt-in before sending to non-loopback (**application** scope) |
-| `axis.engine.allowPyodide` | `false` | Opt-in for local Pyodide calc in chart webview |
+| `axis.engine.allowPyodide` | `true` | Local Pyodide 0.29.5 calculator (CDN Wasm cached in `globalStorage`; not in VSIX). Set false for `/run` only |
 | `axis.chart.useMockBars` | `false` | Opt-in mock bars |
 | `axis.chart.historyBars` | `1500` | History window |
 | `axis.datafeed.url` | `http://127.0.0.1:5003` | Datafeed base (remote needs allow) |
@@ -182,7 +191,7 @@ Chart webview is paint-only by default (host proxies network). See full matrix:
 
 [docs/csp-matrix.md](./docs/csp-matrix.md).
 
-When `axis.engine.allowPyodide` is true the chart webview widens for Wasm; others unchanged.
+When `axis.engine.allowPyodide` is true the chart webview widens for Wasm + jsDelivr; others unchanged.
 
 ## Develop
 
@@ -226,7 +235,7 @@ default the harness globs `pyne-vscode-*.vsix` from a sibling `pynescript` /
 .
 ├── src/                  # extension host (TypeScript) — core: editors (chart), run, host, protocol, secrets
 ├── webview/              # Vite projects (chart primary)
-├── media/                # icons, activity art, builtins catalog
+├── media/                # icon, walkthrough, trusted Pyodide wheels
 ├── scripts/              # coverage gate
 ├── docs/                 # CSP matrix + lightweight notes
 ├── pack/                 # hoox-sh.axis-pack extension pack

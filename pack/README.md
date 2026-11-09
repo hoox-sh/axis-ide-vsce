@@ -8,7 +8,7 @@
 | **License** | [AGPL-3.0-only](./LICENSE) |
 | **Members** | `hoox-sh.pyne`, `hoox-sh.axis-ide` |
 
-Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[PYNE](https://hoox.sh/pyne)** (Pine language tooling) and **[AXIS](https://hoox.sh/axis)** (charting PWA). Lightweight core: chart custom editor + Pyodide + Pro/CF worker options.
+Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[PYNE](https://hoox.sh/pyne)** (Pine language tooling) and **[AXIS](https://hoox.sh/axis)** (charting PWA). Lightweight core: chart custom editor + **Pyodide default on** + Pro/CF worker options. **No activity-bar studios.**
 
 > Independent, unofficial pack. **Not** affiliated with, endorsed by, or sponsored by TradingView, Inc.
 > Pine Script™ and TradingView® are trademarks of TradingView, Inc.
@@ -18,8 +18,8 @@ Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[
 From the VS Code / Open VSX Marketplace, search for **AXIS Trading Pack**, or install the VSIX:
 
 ```bash
-bun run pack:package                 # from repo root → pack/axis-pack-0.3.0.vsix
-code --install-extension pack/axis-pack-0.3.0.vsix
+bun run pack:package                 # from repo root → pack/axis-pack-0.4.0.vsix
+code --install-extension pack/axis-pack-0.4.0.vsix
 ```
 
 From the repository root: `bun run pack:package`.

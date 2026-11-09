@@ -32,6 +32,7 @@ const HOST_TYPES = new Set([
   'host.run.status',
   'host.error',
   'results.set',
+  'chart.debugCursor',
 ]);
 
 export type WebviewDecodeOk = {

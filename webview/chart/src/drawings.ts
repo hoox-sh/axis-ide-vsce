@@ -21,7 +21,7 @@
  */
 
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts';
-import type { UserDrawing } from './state';
+import type { EngineDrawing, UserDrawing } from './state';
 
 export const TOOL_TRENDLINE = 'trendline' as const;
 
@@ -31,7 +31,7 @@ export interface ChartPoint {
 }
 
 export interface DrawingOverlay {
-  redraw(drawings: UserDrawing[], draft?: ChartPoint | null): void;
+  redraw(drawings: UserDrawing[], draft?: ChartPoint | null, engine?: EngineDrawing[]): void;
   dispose(): void;
 }
 
@@ -92,6 +92,8 @@ function appendLine(
   x2: number,
   y2: number,
   className: string,
+  color?: string,
+  width?: number,
 ): void {
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   line.setAttribute('x1', String(x1));
@@ -99,7 +101,101 @@ function appendLine(
   line.setAttribute('x2', String(x2));
   line.setAttribute('y2', String(y2));
   line.setAttribute('class', className);
+  if (color) line.setAttribute('stroke', color);
+  if (width) line.setAttribute('stroke-width', String(width));
   svg.appendChild(line);
+}
+
+function chartTime(raw: number | undefined): number | null {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return null;
+  return raw > 1e11 ? Math.round(raw / 1000) : raw;
+}
+
+function paintEngineDrawing(
+  svg: SVGSVGElement,
+  d: EngineDrawing,
+  coords: CoordAdapter,
+): void {
+  const type = d.type;
+  if (type === 'table') return;
+  if (type === 'line' || type === 'polyline') {
+    const pts =
+      d.points && d.points.length >= 2
+        ? d.points
+        : d.t1 !== undefined && d.p1 !== undefined && d.t2 !== undefined && d.p2 !== undefined
+          ? [
+              { time: d.t1, price: d.p1 },
+              { time: d.t2, price: d.p2 },
+            ]
+          : [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = coords.toPixel({ time: chartTime(pts[i].time) ?? pts[i].time, price: pts[i].price });
+      const b = coords.toPixel({
+        time: chartTime(pts[i + 1].time) ?? pts[i + 1].time,
+        price: pts[i + 1].price,
+      });
+      if (!a || !b) continue;
+      appendLine(svg, a.x, a.y, b.x, b.y, 'drawing-overlay__engine', d.color, d.width);
+    }
+    return;
+  }
+  if (type === 'box' && d.t1 !== undefined && d.p1 !== undefined && d.t2 !== undefined && d.p2 !== undefined) {
+    const a = coords.toPixel({ time: chartTime(d.t1) ?? d.t1, price: d.p1 });
+    const b = coords.toPixel({ time: chartTime(d.t2) ?? d.t2, price: d.p2 });
+    if (!a || !b) return;
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', String(Math.min(a.x, b.x)));
+    rect.setAttribute('y', String(Math.min(a.y, b.y)));
+    rect.setAttribute('width', String(Math.abs(b.x - a.x)));
+    rect.setAttribute('height', String(Math.abs(b.y - a.y)));
+    rect.setAttribute('class', 'drawing-overlay__box');
+    if (d.bgcolor) rect.setAttribute('fill', d.bgcolor);
+    if (d.color) rect.setAttribute('stroke', d.color);
+    svg.appendChild(rect);
+    return;
+  }
+  if (type === 'label' && d.t1 !== undefined && d.p1 !== undefined) {
+    const p = coords.toPixel({ time: chartTime(d.t1) ?? d.t1, price: d.p1 });
+    if (!p) return;
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', String(p.x));
+    text.setAttribute('y', String(p.y));
+    text.setAttribute('class', 'drawing-overlay__label');
+    if (d.textcolor) text.setAttribute('fill', d.textcolor);
+    text.textContent = d.text ?? '';
+    svg.appendChild(text);
+    return;
+  }
+  if (
+    type === 'linefill' &&
+    d.t1 !== undefined &&
+    d.p1 !== undefined &&
+    d.t2 !== undefined &&
+    d.p2 !== undefined &&
+    d.t3 !== undefined &&
+    d.p3 !== undefined &&
+    d.t4 !== undefined &&
+    d.p4 !== undefined
+  ) {
+    const pts = [
+      coords.toPixel({ time: chartTime(d.t1) ?? d.t1, price: d.p1 }),
+      coords.toPixel({ time: chartTime(d.t2) ?? d.t2, price: d.p2 }),
+      coords.toPixel({ time: chartTime(d.t4) ?? d.t4, price: d.p4 }),
+      coords.toPixel({ time: chartTime(d.t3) ?? d.t3, price: d.p3 }),
+    ];
+    if (pts.some((p) => !p)) return;
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+    poly.setAttribute(
+      'points',
+      pts
+        .filter((p): p is { x: number; y: number } => !!p)
+        .map((p) => `${p.x},${p.y}`)
+        .join(' '),
+    );
+    poly.setAttribute('class', 'drawing-overlay__fill');
+    if (d.bgcolor || d.color) poly.setAttribute('fill', d.bgcolor || d.color || '');
+    svg.appendChild(poly);
+  }
 }
 
 /** SVG overlay that maps committed (+ optional draft) drawings via coords. */
@@ -110,7 +206,7 @@ export function createDrawingOverlay(
   let disposed = false;
 
   return {
-    redraw(drawings: UserDrawing[], draft?: ChartPoint | null): void {
+    redraw(drawings: UserDrawing[], draft?: ChartPoint | null, engine?: EngineDrawing[]): void {
       if (disposed) return;
       clearSvg(svg);
       const coords = getCoords();
@@ -120,6 +216,13 @@ export function createDrawingOverlay(
         const b = coords.toPixel(d.points[1]);
         if (!a || !b) continue;
         appendLine(svg, a.x, a.y, b.x, b.y, 'drawing-overlay__line');
+      }
+      for (const ed of engine ?? []) {
+        try {
+          paintEngineDrawing(svg, ed, coords);
+        } catch {
+          // skip hostile
+        }
       }
       if (draft) {
         const p = coords.toPixel(draft);

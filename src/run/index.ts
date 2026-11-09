@@ -40,6 +40,7 @@ export {
   MISSING_ENDPOINT_ERROR,
   barsForPine,
   mapEngineResponse,
+  mapToWorkerTimeframe,
   postEngineRun,
   type EngineCompileDiagnostic,
   type EngineHttpRequest,
@@ -48,6 +49,7 @@ export {
   type RunMode,
 } from './engine-http';
 export {
+  PYODIDE_DISABLED_ERROR,
   UNSUPPORTED_ENGINE_ERROR,
   RunOrchestrator,
   type RunDeps,
@@ -59,9 +61,45 @@ export {
   type RunSecrets,
 } from './orchestrator';
 export {
+  barWindowFromVisibleRange,
+  lastChartViewport,
+  recordChartViewport,
+  resetChartViewportForTests,
   resolveRunContext,
+  runWindowFields,
   type ResolvedRunContext,
   type ResolveRunContextResult,
   type RunContextSettings,
 } from './run-context';
+export {
+  attachRunEnvelope,
+  chartFullFromRunResult,
+  withLookahead,
+  extractStrategy,
+  strategyTradesCsv,
+  type RunEnvelopeFields,
+  type RunWindow,
+  type StrategyReport,
+  type StrategyTrade,
+} from './run-envelope';
+export { loadPyodideFromCdn, type PyodideCdnLoaderDeps } from './pyodide-cdn-loader';
+export {
+  createPyodideCalculator,
+  type PyodideCalculator,
+  type PyodideInstallFn,
+  type PyodideLoadFn,
+  type PyodideRuntime,
+  type PyodideRunRequest,
+} from './pyodide-calculator';
+export { evaluateMinimalSubset } from './pyodide-subset';
+export {
+  callPyodideRunScript,
+  installPynescriptRuntime,
+  PYODIDE_RUNTIME_SMOKE,
+} from './pyodide-runtime-bridge';
+export {
+  PYODIDE_WHEEL_SETTING,
+  pyodideWheelMissingReason,
+  resolvePyodideAssets,
+} from './pyodide-wheel';
 export { scrubSecrets } from './scrub';

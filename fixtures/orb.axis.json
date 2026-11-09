@@ -1,0 +1,15 @@
+{
+  "schema": "axis.chart.v1",
+  "symbol": "BTCUSDT",
+  "exchange": "binance",
+  "market": "spot",
+  "interval": "1h",
+  "historyBars": 300,
+  "chartType": "candles",
+  "theme": "void",
+  "panes": [{ "id": "price", "kind": "price" }],
+  "scripts": [{ "path": "orb.pine" }],
+  "drawings": [],
+  "engine": "pyodide",
+  "source": "orb.pine"
+}

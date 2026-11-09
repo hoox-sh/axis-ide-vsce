@@ -18,14 +18,18 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  ALLOW_PYODIDE_DEFAULT,
   ALLOW_PYODIDE_SETTING,
   LOCAL_PYODIDE_VERSION,
   PYODIDE_CALCULATOR_PROFILE,
+  PYODIDE_CDN_INDEX,
+  PYODIDE_PINE_WHEEL_NEXT,
+  formatPyodideRunBanner,
   isPyodideAllowed,
   pyodideRuntimeStatus,
 } from './pyodide-profile';
 
-describe('pyodide calculator profile (Task 27 stub)', () => {
+describe('pyodide calculator profile', () => {
   test('locks LOCAL_PYODIDE_VERSION to 0.29.5', () => {
     expect(LOCAL_PYODIDE_VERSION).toBe('0.29.5');
     expect(PYODIDE_CALCULATOR_PROFILE.version).toBe('0.29.5');
@@ -38,7 +42,8 @@ describe('pyodide calculator profile (Task 27 stub)', () => {
     expect(PYODIDE_CALCULATOR_PROFILE.streamOwning).toBe(false);
   });
 
-  test('isPyodideAllowed defaults off for non-true values', () => {
+  test('isPyodideAllowed is only explicit true; product default is true', () => {
+    expect(ALLOW_PYODIDE_DEFAULT).toBe(true);
     expect(isPyodideAllowed(undefined)).toBe(false);
     expect(isPyodideAllowed(false)).toBe(false);
     expect(isPyodideAllowed(null)).toBe(false);
@@ -47,17 +52,49 @@ describe('pyodide calculator profile (Task 27 stub)', () => {
     expect(isPyodideAllowed(true)).toBe(true);
   });
 
-  test('runtime stub is never ready; flag-off vs assets-not-shipped reasons', () => {
+  test('formatPyodideRunBanner is uploaded=0', () => {
+    expect(formatPyodideRunBanner('hoox_pyne-0.6.29')).toBe(
+      'engine=pyodide wheel=hoox_pyne-0.6.29 uploaded=0',
+    );
+    expect(formatPyodideRunBanner('')).toContain('uploaded=0');
+  });
+
+  test('flag off is not ready; flag on is ready only after Wasm load', () => {
     const off = pyodideRuntimeStatus(false);
     expect(off.ready).toBe(false);
     expect(off.version).toBe(LOCAL_PYODIDE_VERSION);
     expect(off.reason).toContain(ALLOW_PYODIDE_SETTING);
     expect(off.reason).toContain('false');
 
-    const on = pyodideRuntimeStatus(true);
-    expect(on.ready).toBe(false);
-    expect(on.version).toBe('0.29.5');
-    expect(on.reason).toMatch(/not shipped/i);
-    expect(on.profile.streamOwning).toBe(false);
+    const pending = pyodideRuntimeStatus(true);
+    expect(pending.ready).toBe(false);
+    expect(pending.version).toBe('0.29.5');
+    expect(pending.reason).toContain(PYODIDE_CDN_INDEX);
+    expect(pending.reason).toMatch(/not loaded yet/i);
+    expect(pending.profile.streamOwning).toBe(false);
+
+    const failed = pyodideRuntimeStatus(true, { wasmLoaded: false, error: 'cdn down' });
+    expect(failed.ready).toBe(false);
+    expect(failed.reason).toBe('cdn down');
+
+    const blank = pyodideRuntimeStatus(true, { wasmLoaded: false, error: '  ' });
+    expect(blank.ready).toBe(false);
+    expect(blank.reason).toContain('not loaded yet');
+
+    const wasmOnly = pyodideRuntimeStatus(true, { wasmLoaded: true });
+    expect(wasmOnly.ready).toBe(false);
+    expect(wasmOnly.reason).toContain(PYODIDE_PINE_WHEEL_NEXT);
+
+    const wheelErr = pyodideRuntimeStatus(true, {
+      wasmLoaded: true,
+      runtimeReady: false,
+      error: 'wheel missing',
+    });
+    expect(wheelErr.ready).toBe(false);
+    expect(wheelErr.reason).toBe('wheel missing');
+
+    const ready = pyodideRuntimeStatus(true, { wasmLoaded: true, runtimeReady: true });
+    expect(ready.ready).toBe(true);
+    expect(ready.reason).toMatch(/Runtime ready/i);
   });
 });
