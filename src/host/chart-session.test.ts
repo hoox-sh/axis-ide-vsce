@@ -124,21 +124,17 @@ describe('chart session', () => {
     }
   });
 
-  test('buildChartSession copies plugins onto init', () => {
+  test('buildChartSession omits plugins on init (lightweight core)', () => {
     const session = buildChartSession({
       doc: defaultChartDocument(),
       useMockBars: false,
-      plugins: { source: 'binance-rest', stream: 'binance-ws' },
     });
-    expect(session.init.plugins).toEqual({ source: 'binance-rest', stream: 'binance-ws' });
+    expect(session.init.plugins).toBeUndefined();
     const env = encode(HOST_TO_VIEW.ChartInit, session.init);
     const decoded = decode(env);
     expect(decoded.ok).toBe(true);
     if (decoded.ok) {
-      expect((decoded.envelope.payload as { plugins?: unknown }).plugins).toEqual({
-        source: 'binance-rest',
-        stream: 'binance-ws',
-      });
+      expect((decoded.envelope.payload as { plugins?: unknown }).plugins).toBeUndefined();
     }
   });
 

@@ -8,7 +8,7 @@
 | **License** | [AGPL-3.0-only](./LICENSE) |
 | **Members** | `hoox-sh.pyne`, `hoox-sh.axis-ide` |
 
-Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[PYNE](https://hoox.sh/pyne)** (Pine language tooling) and **[AXIS](https://hoox.sh/axis)** (charting IDE).
+Part of the **[HOOX](https://hoox.sh) open trading stack**. Sister products: **[PYNE](https://hoox.sh/pyne)** (Pine language tooling) and **[AXIS](https://hoox.sh/axis)** (charting PWA). Lightweight core: chart custom editor + Pyodide + Pro/CF worker options.
 
 > Independent, unofficial pack. **Not** affiliated with, endorsed by, or sponsored by TradingView, Inc.
 > Pine Script™ and TradingView® are trademarks of TradingView, Inc.

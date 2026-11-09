@@ -25,7 +25,6 @@ import {
   type AxisEnvelope,
   type ChartFullPayload,
   type ChartInitPayload,
-  type ChartPluginsPayload,
   type ProtocolError,
   type WebviewReadyPayload,
 } from '../protocol';
@@ -69,22 +68,11 @@ export function defaultChartCssVars(): Record<string, string> {
 
 const PLUGIN_HUD_KEYS = ['source', 'stream', 'engine', 'storage'] as const;
 
-/** Copy known plugin id strings; arrays / non-objects dropped. */
+/** Copy known plugin id strings stub (plugins removed in lightweight core). */
 export function copyChartPlugins(
-  raw: ChartInitPayload['plugins'] | undefined,
-): ChartPluginsPayload | undefined {
-  if (raw === undefined || raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return undefined;
-  }
-  const rec = raw as Record<string, unknown>;
-  const out: ChartPluginsPayload = {};
-  for (const key of PLUGIN_HUD_KEYS) {
-    const v = rec[key];
-    if (typeof v !== 'string') continue;
-    const trimmed = v.trim();
-    if (trimmed) out[key] = trimmed;
-  }
-  return out;
+  _raw: ChartInitPayload['plugins'] | undefined,
+): any {
+  return undefined;
 }
 
 /**
@@ -100,10 +88,7 @@ export function buildChartInitStub(partial?: Partial<ChartInitPayload>): ChartIn
   if ('drawings' in (partial ?? {}) && partial) {
     init.drawings = partial.drawings;
   }
-  if (partial && partial.plugins !== undefined) {
-    const plugins = copyChartPlugins(partial.plugins);
-    if (plugins) init.plugins = plugins;
-  }
+  // plugins omitted (lightweight core)
   return init;
 }
 

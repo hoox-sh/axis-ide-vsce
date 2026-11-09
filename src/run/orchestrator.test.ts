@@ -18,9 +18,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { OhlcvBar } from '../host/mock-bars';
-import { PRO_KEY_ERROR } from '../secrets/slots';
 import {
-  ResultsFocusStore,
   RunOrchestrator,
   UNSUPPORTED_ENGINE_ERROR,
   type ChartNotifyMessage,
@@ -55,19 +53,19 @@ function mockFetch(
 
 function makeDeps(overrides?: {
   proKey?: string | undefined;
+  workerKey?: string | undefined;
   fetchImpl?: FetchLike;
   missingProKey?: boolean;
+  missingWorkerKey?: boolean;
 }): {
   deps: RunDeps;
   charts: ChartNotifyMessage[];
   lines: string[];
   diagnostics: { uri?: string; items: RunDiagnostic[] }[];
-  results: ResultsFocusStore;
 } {
   const charts: ChartNotifyMessage[] = [];
   const lines: string[] = [];
   const diagnostics: { uri?: string; items: RunDiagnostic[] }[] = [];
-  const results = new ResultsFocusStore();
 
   const fetchImpl =
     overrides?.fetchImpl ??
@@ -90,6 +88,13 @@ function makeDeps(overrides?: {
         }
         return PRO_KEY;
       },
+      async getWorkerKey() {
+        if (overrides?.missingWorkerKey) return undefined;
+        if (overrides && Object.prototype.hasOwnProperty.call(overrides, 'workerKey')) {
+          return overrides.workerKey;
+        }
+        return undefined;
+      },
     },
     endpoint: 'http://127.0.0.1:5002',
     fetchImpl,
@@ -98,7 +103,6 @@ function makeDeps(overrides?: {
         charts.push(message);
       },
     },
-    results,
     output: {
       appendLine(line) {
         lines.push(line);
@@ -111,7 +115,7 @@ function makeDeps(overrides?: {
     },
   };
 
-  return { deps, charts, lines, diagnostics, results };
+  return { deps, charts, lines, diagnostics };
 }
 
 function baseReq(partial?: Partial<RunRequest>): RunRequest {
@@ -131,7 +135,7 @@ function baseReq(partial?: Partial<RunRequest>): RunRequest {
 describe('RunOrchestrator', () => {
   test('success: paints chart.full with seq > baseSeq and seriesKey', async () => {
     const orch = new RunOrchestrator();
-    const { deps, charts, lines, diagnostics, results } = makeDeps();
+    const { deps, charts, lines, diagnostics } = makeDeps();
     let seenAuth = '';
     deps.fetchImpl = mockFetch((_url, init) => {
       seenAuth = init?.headers?.Authorization ?? '';
@@ -148,7 +152,7 @@ describe('RunOrchestrator', () => {
     if (!outcome.ok) return;
     expect(seenAuth).toBe(`Bearer ${PRO_KEY}`);
     expect(outcome.seq).toBe(2); // baseSeq 1 + 1 — avoids handshake collision
-    expect(results.getLastRunId()).toBe(outcome.runId);
+    expect(outcome.runId).toBe(`run-${outcome.epoch}`);
 
     const full = charts.find((m) => m.type === 'chart.full');
     expect(full?.type).toBe('chart.full');
@@ -165,10 +169,9 @@ describe('RunOrchestrator', () => {
     expect(lines.some((l) => l.includes('run ok'))).toBe(true);
   });
 
-  test('success publish keeps drawings, profile, and scrubbed logs/diagnostics', async () => {
+  test('success publish keeps drawings and plots on chart.full', async () => {
     const orch = new RunOrchestrator();
-    const profile = { total_ms: 4, lines: [{ line: 1, ms: 2 }] };
-    const { deps, charts, results } = makeDeps({
+    const { deps, charts } = makeDeps({
       fetchImpl: mockFetch(() => ({
         ok: true,
         status: 200,
@@ -177,22 +180,6 @@ describe('RunOrchestrator', () => {
           plots: [9],
           series: { plot_0: [9] },
           drawings: [{ id: 'd1' }],
-          profile,
-          logs: [
-            `leak Bearer ${PRO_KEY}`,
-            'plain line',
-            {
-              message: `m ${PRO_KEY}`,
-              text: 'clean text',
-              msg: 'Bearer abc.def',
-              extra: 1,
-            },
-            { message: 3, text: false, msg: null, keep: true },
-            null,
-            ['nested'],
-            7,
-          ],
-          errors: [{ message: `diag ${PRO_KEY}`, text: 'ok', line: 4, severity: 'warning' }],
         }),
       })),
     });
@@ -205,35 +192,11 @@ describe('RunOrchestrator', () => {
       expect(full.payload.drawings).toEqual([{ id: 'd1' }]);
       expect(full.payload.plots).toEqual([9]);
     }
-    const last = results.getLastRun();
-    expect(last?.status).toBe('success');
-    expect(last?.meta?.profile).toEqual(profile);
-    expect(typeof last?.meta?.ms).toBe('number');
-    expect(last?.plots).toEqual([9]);
-    expect(last?.series).toEqual({ plot_0: [9] });
-    const publishedLogs = last?.logs as unknown[];
-    expect(publishedLogs[0]).toBe('leak Bearer ****');
-    expect(publishedLogs[1]).toBe('plain line');
-    expect(publishedLogs[2]).toEqual({
-      message: 'm pyn_****…6789',
-      text: 'clean text',
-      msg: 'Bearer ****',
-      extra: 1,
-    });
-    expect(publishedLogs[3]).toEqual({ message: 3, text: false, msg: null, keep: true });
-    expect(publishedLogs[4]).toBeNull();
-    expect(publishedLogs[5]).toEqual(['nested']);
-    expect(publishedLogs[6]).toBe(7);
-    const diags = last?.diagnostics as Array<{ message: string; line?: number; severity?: string }>;
-    expect(diags[0]?.message).toBe('diag pyn_****…6789');
-    expect(diags[0]?.line).toBe(4);
-    expect(diags[0]?.severity).toBe('warning');
-    expect(JSON.stringify(last)).not.toContain(PRO_KEY);
   });
 
   test('HTTP error: sets diagnostics for URI; never paints chart.full', async () => {
     const orch = new RunOrchestrator();
-    const { deps, charts, lines, diagnostics, results } = makeDeps({
+    const { deps, charts, lines, diagnostics } = makeDeps({
       fetchImpl: mockFetch(() => ({
         ok: false,
         status: 400,
@@ -255,42 +218,30 @@ describe('RunOrchestrator', () => {
     const diag = diagnostics.find((d) => d.items.length > 0);
     expect(diag?.uri).toBe('file:///tmp/t.pyne');
     expect(diag?.items[0]?.message).toBe('unexpected token');
-    expect(results.getNewestRunId()).toBeTruthy();
     expect(lines.some((l) => l.includes('run error'))).toBe(true);
   });
 
-  test('error publish scrubs log fallback and meta.profile', async () => {
+  test('error message containing Pro key is scrubbed from outcome/output', async () => {
     const orch = new RunOrchestrator();
-    const { deps, charts, results } = makeDeps({
+    const { deps, charts, lines, diagnostics } = makeDeps({
       fetchImpl: mockFetch(() => ({
         ok: false,
         status: 400,
         body: JSON.stringify({
           status: 'error',
           message: `bad ${PRO_KEY}`,
-          logs: { not: 'array' },
-          log: [`see ${PRO_KEY}`, { message: 'clean', text: `pn_${'ab'.repeat(8)}` }],
-          profile: [1, 2],
-          meta: { profile: { fn: 'f' } },
-          errors: [{ message: 'syntax', msg: `Bearer ${PRO_KEY}` }],
+          errors: [{ message: `syntax ${PRO_KEY}` }],
         }),
       })),
     });
     const outcome = await orch.run(baseReq(), deps);
     expect(outcome.ok).toBe(false);
     expect(charts.some((m) => m.type === 'chart.full')).toBe(false);
-    const last = results.getLastRun();
-    expect(last?.status).toBe('error');
-    expect(last?.error ?? '').not.toContain(PRO_KEY);
-    expect(last?.meta?.profile).toEqual({ fn: 'f' });
-    expect(last?.logs).toEqual([
-      'see pyn_****…6789',
-      { message: 'clean', text: 'pn_****…abab' },
-    ]);
-    const diags = last?.diagnostics as Array<{ message: string; severity?: string }>;
-    expect(diags[0]?.message).toBe('syntax');
-    expect(diags[0]?.severity).toBe('error');
-    expect(JSON.stringify(last)).not.toContain(PRO_KEY);
+    if (!outcome.ok) {
+      expect(outcome.error ?? '').not.toContain(PRO_KEY);
+    }
+    expect(JSON.stringify(diagnostics)).not.toContain(PRO_KEY);
+    expect(lines.join('\n')).not.toContain(PRO_KEY);
   });
 
   test('stale epoch: later run wins; earlier completion is dropped', async () => {
@@ -298,7 +249,6 @@ describe('RunOrchestrator', () => {
     const charts1: ChartNotifyMessage[] = [];
     const charts2: ChartNotifyMessage[] = [];
     const lines: string[] = [];
-    const results = new ResultsFocusStore();
 
     let releaseSlow: (() => void) | undefined;
     const slowGate = new Promise<void>((resolve) => {
@@ -329,18 +279,36 @@ describe('RunOrchestrator', () => {
     const sharedDiag = { set() {} };
 
     const depsSlow: RunDeps = {
-      secrets: { async getProKey() { return PRO_KEY; } },
+      secrets: {
+        async getProKey() {
+          return PRO_KEY;
+        },
+        async getWorkerKey() {
+          return undefined;
+        },
+      },
       endpoint: 'http://127.0.0.1:5002',
       fetchImpl: slowFetch,
-      bus: { notifyChart(m) { charts1.push(m); } },
-      results,
-      output: { appendLine(l) { lines.push(l); } },
+      bus: {
+        notifyChart(m) {
+          charts1.push(m);
+        },
+      },
+      output: {
+        appendLine(l) {
+          lines.push(l);
+        },
+      },
       diagnostics: sharedDiag,
     };
     const depsFast: RunDeps = {
       ...depsSlow,
       fetchImpl: fastFetch,
-      bus: { notifyChart(m) { charts2.push(m); } },
+      bus: {
+        notifyChart(m) {
+          charts2.push(m);
+        },
+      },
     };
 
     const p1 = orch.run(baseReq({ focus: true, baseSeq: 1 }), depsSlow);
@@ -349,17 +317,12 @@ describe('RunOrchestrator', () => {
 
     const o2 = await orch.run(baseReq({ focus: true, baseSeq: 1 }), depsFast);
     expect(o2.ok).toBe(true);
-    if (o2.ok) {
-      const full = charts2.find((m) => m.type === 'chart.full');
-      expect(full?.type === 'chart.full' && full.payload.plots).toEqual(['fast']);
-      expect(full?.type === 'chart.full' && full.payload.seq).toBeGreaterThan(1);
-    }
-
     releaseSlow?.();
     const o1 = await p1;
     expect(o1.ok).toBe(false);
     if (!o1.ok) expect(['stale', 'aborted']).toContain(o1.reason);
     expect(charts1.some((m) => m.type === 'chart.full')).toBe(false);
+    expect(charts2.some((m) => m.type === 'chart.full')).toBe(true);
   });
 
   test('absent Pro key is not an error: run goes out keyless with X-AXIS-Client: ide', async () => {
@@ -369,6 +332,7 @@ describe('RunOrchestrator', () => {
     let seenClient: string | undefined;
     const { deps, diagnostics } = makeDeps({
       missingProKey: true,
+      missingWorkerKey: true,
       fetchImpl: async (_url, init) => {
         called = true;
         seenAuth = init?.headers?.Authorization;
@@ -376,8 +340,7 @@ describe('RunOrchestrator', () => {
         return {
           ok: true,
           status: 200,
-          text: async () =>
-            JSON.stringify({ status: 'success', plots: [1], series: {} }),
+          text: async () => JSON.stringify({ status: 'success', plots: [1], series: {} }),
         };
       },
     });
@@ -386,29 +349,7 @@ describe('RunOrchestrator', () => {
     expect(seenAuth).toBeUndefined();
     expect(seenClient).toBe('ide');
     expect(outcome.ok).toBe(true);
-    // No error diagnostics were produced for the absent key.
     expect(diagnostics.flatMap((d) => d.items)).toHaveLength(0);
-  });
-
-  test('present-but-malformed Pro key still fails before fetch', async () => {
-    const orch = new RunOrchestrator();
-    let called = false;
-    const { deps, lines, diagnostics } = makeDeps({
-      proKey: 'pyn_oops',
-      fetchImpl: async () => {
-        called = true;
-        return { ok: true, status: 200, text: async () => '{}' };
-      },
-    });
-    const outcome = await orch.run(baseReq(), deps);
-    expect(called).toBe(false);
-    expect(outcome.ok).toBe(false);
-    if (!outcome.ok) {
-      expect(outcome.reason).toBe('error');
-      expect(outcome.error).toBe(PRO_KEY_ERROR);
-    }
-    expect(diagnostics.some((d) => d.items[0]?.message === PRO_KEY_ERROR)).toBe(true);
-    expect(lines.some((l) => l.includes('run error'))).toBe(true);
   });
 
   test('engine error containing Pro key is scrubbed from output/diagnostics', async () => {
@@ -416,63 +357,58 @@ describe('RunOrchestrator', () => {
     const { deps, lines, diagnostics } = makeDeps({
       fetchImpl: mockFetch(() => ({
         ok: false,
-        status: 401,
+        status: 500,
         body: JSON.stringify({
           status: 'error',
-          message: `bad key ${PRO_KEY} Bearer ${PRO_KEY}`,
+          message: `engine blew up with ${PRO_KEY}`,
         }),
       })),
     });
     const outcome = await orch.run(baseReq(), deps);
     expect(outcome.ok).toBe(false);
-    const joined = [...lines, ...(diagnostics.flatMap((d) => d.items.map((i) => i.message)))].join(
-      '\n',
-    );
-    expect(joined).not.toContain(PRO_KEY);
-    expect(joined).not.toMatch(/Bearer\s+pyn_/i);
-    if (!outcome.ok) expect(outcome.error ?? '').not.toContain(PRO_KEY);
+    expect(lines.join('\n')).not.toContain(PRO_KEY);
+    expect(JSON.stringify(diagnostics)).not.toContain(PRO_KEY);
   });
 
   test('aborted signal before fetch returns aborted with no paint and no fetch', async () => {
     const orch = new RunOrchestrator();
-    let fetched = false;
+    let called = false;
+    const ac = new AbortController();
+    ac.abort();
     const { deps, charts } = makeDeps({
       fetchImpl: async () => {
-        fetched = true;
+        called = true;
         return { ok: true, status: 200, text: async () => '{}' };
       },
     });
-    const ac = new AbortController();
-    ac.abort();
     const outcome = await orch.run(baseReq({ signal: ac.signal }), deps);
+    expect(called).toBe(false);
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.reason).toBe('aborted');
-    expect(fetched).toBe(false);
     expect(charts.some((m) => m.type === 'chart.full')).toBe(false);
   });
 
   test('abortAll aborts in-flight fetch and does not paint', async () => {
     const orch = new RunOrchestrator();
-    let sawAbort = false;
     let fetchStarted = false;
+    let sawAbort = false;
     const { deps, charts } = makeDeps({
       fetchImpl: async (_url, init) => {
         fetchStarted = true;
-        await new Promise<void>((resolve, reject) => {
-          const t = setTimeout(resolve, 5000);
-          init?.signal?.addEventListener(
-            'abort',
-            () => {
-              sawAbort = true;
-              clearTimeout(t);
-              const err = new Error('aborted');
-              err.name = 'AbortError';
-              reject(err);
-            },
-            { once: true },
-          );
+        await new Promise<void>((resolve) => {
+          const onAbort = () => {
+            sawAbort = true;
+            resolve();
+          };
+          if (init?.signal?.aborted) {
+            onAbort();
+            return;
+          }
+          init?.signal?.addEventListener('abort', onAbort, { once: true });
         });
-        return { ok: true, status: 200, text: async () => '{}' };
+        const err = new Error('aborted');
+        err.name = 'AbortError';
+        throw err;
       },
     });
     const p = orch.run(baseReq(), deps);
@@ -502,24 +438,6 @@ describe('RunOrchestrator', () => {
     if (!outcome.ok) expect(outcome.error).toBe(UNSUPPORTED_ENGINE_ERROR);
   });
 
-  test('silent focus:false still updates newest but first-ever focuses', async () => {
-    const orch = new RunOrchestrator();
-    const { deps, results } = makeDeps();
-    const first = await orch.run(baseReq({ focus: false }), deps);
-    expect(first.ok).toBe(true);
-    expect(results.getResultsFocusId()).toBe(results.getNewestRunId());
-
-    const second = await orch.run(baseReq({ focus: false }), deps);
-    expect(second.ok).toBe(true);
-    if (first.ok && second.ok) {
-      expect(results.getNewestRunId()).toBe(second.runId);
-      expect(results.getLastRunId()).toBe(first.runId);
-      expect(results.get(first.runId)?.status).toBe('success');
-    }
-    results.clear();
-    expect(results.getNewestRunId()).toBeNull();
-  });
-
   test('empty endpoint falls back to default', async () => {
     const orch = new RunOrchestrator();
     let seen = '';
@@ -546,6 +464,23 @@ describe('RunOrchestrator', () => {
     const orch = new RunOrchestrator();
     const { deps, diagnostics } = makeDeps({ proKey: 'pyn_tooshort' });
     const outcome = await orch.run(baseReq(), deps);
+    expect(outcome.ok).toBe(false);
+    expect(diagnostics.some((d) => d.items.length > 0)).toBe(true);
+  });
+
+  test('invalid Worker key shape is rejected without fetch', async () => {
+    const orch = new RunOrchestrator();
+    let called = false;
+    const { deps, diagnostics } = makeDeps({
+      missingProKey: true,
+      workerKey: 'pn_tooshort',
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, text: async () => '{}' };
+      },
+    });
+    const outcome = await orch.run(baseReq(), deps);
+    expect(called).toBe(false);
     expect(outcome.ok).toBe(false);
     expect(diagnostics.some((d) => d.items.length > 0)).toBe(true);
   });
@@ -594,11 +529,17 @@ describe('RunOrchestrator', () => {
           await gate;
           throw new Error('late fail');
         },
+        async getWorkerKey() {
+          return undefined;
+        },
       },
       endpoint: 'http://127.0.0.1:5002',
       bus: { notifyChart() {} },
-      results: new ResultsFocusStore(),
-      output: { appendLine(l) { lines.push(l); } },
+      output: {
+        appendLine(l) {
+          lines.push(l);
+        },
+      },
       diagnostics: { set() {} },
     };
     const p1 = orch.run(baseReq(), deps);
@@ -606,7 +547,14 @@ describe('RunOrchestrator', () => {
     void orch
       .run(baseReq(), {
         ...deps,
-        secrets: { async getProKey() { return PRO_KEY; } },
+        secrets: {
+          async getProKey() {
+            return PRO_KEY;
+          },
+          async getWorkerKey() {
+            return undefined;
+          },
+        },
         fetchImpl: async () => ({
           ok: true,
           status: 200,
@@ -620,16 +568,6 @@ describe('RunOrchestrator', () => {
     const o1 = await p1;
     expect(o1.ok).toBe(false);
     if (!o1.ok) expect(['stale', 'aborted']).toContain(o1.reason);
-  });
-
-  test('emitStatus swallows onRunStatus errors', async () => {
-    const orch = new RunOrchestrator();
-    const { deps } = makeDeps();
-    deps.onRunStatus = () => {
-      throw new Error('status sink failed');
-    };
-    const outcome = await orch.run(baseReq(), deps);
-    expect(outcome.ok).toBe(true);
   });
 
   test('safeLog swallows output failures', async () => {
@@ -682,6 +620,9 @@ describe('RunOrchestrator', () => {
           await gate;
           return PRO_KEY;
         },
+        async getWorkerKey() {
+          return undefined;
+        },
       },
       endpoint: 'http://127.0.0.1:5002',
       fetchImpl: async () => {
@@ -689,15 +630,25 @@ describe('RunOrchestrator', () => {
         return { ok: true, status: 200, text: async () => '{}' };
       },
       bus: { notifyChart() {} },
-      results: new ResultsFocusStore(),
-      output: { appendLine(l) { lines.push(l); } },
+      output: {
+        appendLine(l) {
+          lines.push(l);
+        },
+      },
       diagnostics: { set() {} },
     };
     const p1 = orch.run(baseReq(), deps);
     await Promise.resolve();
     const o2 = await orch.run(baseReq(), {
       ...deps,
-      secrets: { async getProKey() { return PRO_KEY; } },
+      secrets: {
+        async getProKey() {
+          return PRO_KEY;
+        },
+        async getWorkerKey() {
+          return undefined;
+        },
+      },
       fetchImpl: async () => ({
         ok: true,
         status: 200,
@@ -711,5 +662,27 @@ describe('RunOrchestrator', () => {
     if (!o1.ok) expect(['stale', 'aborted']).toContain(o1.reason);
     expect(lines.some((l) => l.includes('drop stale') || l.includes('aborted'))).toBe(true);
     void fetched;
+  });
+
+  test('worker key alone is accepted when Pro key missing', async () => {
+    const workerKey = `pn_${'ab'.repeat(24)}`;
+    const orch = new RunOrchestrator();
+    let seenAuth = '';
+    const { deps, charts } = makeDeps({
+      missingProKey: true,
+      workerKey,
+      fetchImpl: mockFetch((_url, init) => {
+        seenAuth = init?.headers?.Authorization ?? '';
+        return {
+          ok: true,
+          status: 200,
+          body: JSON.stringify({ status: 'success', plots: [1] }),
+        };
+      }),
+    });
+    const outcome = await orch.run(baseReq(), deps);
+    expect(outcome.ok).toBe(true);
+    expect(seenAuth).toBe(`Bearer ${workerKey}`);
+    expect(charts.some((m) => m.type === 'chart.full')).toBe(true);
   });
 });

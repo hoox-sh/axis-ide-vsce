@@ -307,27 +307,15 @@ export function pickChartPlugins(raw: unknown): ChartPlugins | undefined {
   return out;
 }
 
-/** Chip specs for the toolbar strip; empty ids omitted. */
+/** Chip specs stub — plugins removed in lightweight core. */
 export function pluginChipSpecs(
-  plugins: ChartPlugins | undefined,
+  _plugins: ChartPlugins | undefined,
 ): Array<{
   kind: (typeof PLUGIN_CHIP_ORDER)[number][0];
   prefix: (typeof PLUGIN_CHIP_ORDER)[number][1];
   id: string;
 }> {
-  if (!plugins) return [];
-  const out: Array<{
-    kind: (typeof PLUGIN_CHIP_ORDER)[number][0];
-    prefix: (typeof PLUGIN_CHIP_ORDER)[number][1];
-    id: string;
-  }> = [];
-  for (const [kind, prefix] of PLUGIN_CHIP_ORDER) {
-    const id = plugins[kind];
-    if (typeof id === 'string' && id.trim()) {
-      out.push({ kind, prefix, id: id.trim() });
-    }
-  }
-  return out;
+  return [];
 }
 
 function applyDelta(

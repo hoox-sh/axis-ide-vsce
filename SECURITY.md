@@ -20,7 +20,6 @@ We will acknowledge receipt when possible and coordinate disclosure.
 
 ## Scope notes
 
-AXIS IDE stores Worker / Pro API keys only in VS Code `SecretStorage` and never
-writes them to settings. Please treat any path that could leak `pn_…` / `pyn_…`
-values (logs, webview messages, MCP config, diagnostics exports) as security
-relevant.
+AXIS IDE stores Pro (`pyn_…`) and Worker (`pn_…`) keys only in VS Code `SecretStorage` and never
+writes them to settings (no keys in worker examples either). Treat paths that could
+leak keys (logs, webview messages, diagnostics) as security relevant. Lightweight core: only chart + minimal run + secrets (full studios/live/MCP removed).

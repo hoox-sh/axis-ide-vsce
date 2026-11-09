@@ -1,7 +1,7 @@
 # AXIS shared webview design system (`ax-*`)
 
-Vanilla TS + CSS layers used by every studio webview. No framework. Class
-names on builders are the frozen contract with `components.css`.
+Vanilla TS + CSS layers used by the chart webview (lightweight core). No framework. Class
+names on builders are the frozen contract with `components.css`. (No studio webviews.)
 
 ## Layers (import order)
 
@@ -12,8 +12,8 @@ names on builders are the frozen contract with `components.css`.
 | `motion.css` | Keyframes, chrome transitions, reduced-motion guard |
 | `components.css` | All `.ax-*` rules |
 
-Studios import via `@axis-shared/…` (see `vite.ts`). Chart imports
-`tokens.css` only so canvas chrome tracks tokens without studio chrome tax.
+Chart (and any minimal) import via `@axis-shared/…` (see `vite.ts` in chart). Chart primarily imports
+`tokens.css` so canvas chrome tracks tokens without full studio chrome tax. (Shared still provides full for future minimal use.)
 
 ## Builders (`components.ts`)
 
@@ -45,30 +45,21 @@ Studios import via `@axis-shared/…` (see `vite.ts`). Chart imports
 
 ## Storybook
 
-Stories live in `/stories`. Run:
+(Storybook + stories/ removed with bloat in lightweight core simplification; design system still used by chart webview.)
 
-```bash
-bun run storybook          # http://localhost:6006
-bun run build-storybook    # → storybook-static/
-```
-
-Toolbar switch: Dark / Light / High contrast (VS Code body classes).
-
-## Studio rules
+## Chart / minimal webview rules
 
 1. Prefer builders over one-off buttons/headers/badges.
-2. Studio CSS is **layout only** — colors through `--axis-*`, never raw hex
+2. CSS is **layout only** — colors through `--axis-*`, never raw hex
    or stray `--vscode-*` (except chart canvas-specific paints).
-3. Always import the four shared CSS layers (chart may skip theme/motion/
+3. Always import the shared CSS layers as needed (chart may skip theme/motion/
    components when paint-only chrome is intentional).
-4. Host-emitted FOUC chrome must stamp the same frozen `ax-btn` classes
-   (`src/views/ax-shell.ts` `axBtnClass` / `axBtnHtml`). Webview JS may
-   `replaceWith(btn())` after load; ids stay stable.
-5. Do not invent Pine / `TV.*` APIs. Engine plot kinds stay the fixed set.
-6. CSP stays paint-only; no inline scripts; host proxies network.
+4. Do not invent Pine / `TV.*` APIs. Engine plot kinds stay the fixed set.
+5. CSP stays paint-only; no inline scripts; host proxies network.
+(Note: src/views/ax-shell removed in lightweight; host uses direct chart html.)
 
 ## Related
 
-- `.storybook/preview.css` — VS Code token shim for Storybook
 - `docs/csp-matrix.md` — webview CSP
 - `AGENTS.md` — hard constraints for agents
+- (storybook removed)

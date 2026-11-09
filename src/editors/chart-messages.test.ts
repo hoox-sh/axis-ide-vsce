@@ -46,7 +46,7 @@ describe('chart webview message handler', () => {
     expect(Object.keys(defaultChartCssVars())).toEqual([...CHART_INIT_CSS_VAR_KEYS]);
   });
 
-  test('buildChartInitStub copies plugins object and drops arrays', () => {
+  test('buildChartInitStub omits plugins (lightweight core)', () => {
     const withPlugins = buildChartInitStub({
       plugins: {
         source: 'okx-rest',
@@ -56,18 +56,13 @@ describe('chart webview message handler', () => {
         extra: 'drop',
       } as never,
     });
-    expect(withPlugins.plugins).toEqual({
-      source: 'okx-rest',
-      stream: 'binance-ws',
-      engine: 'server',
-      storage: 'local',
-    });
+    expect(withPlugins.plugins).toBeUndefined();
     expect(buildChartInitStub().plugins).toBeUndefined();
     expect(buildChartInitStub({ plugins: ['x'] as never }).plugins).toBeUndefined();
     expect(copyChartPlugins(undefined)).toBeUndefined();
     expect(copyChartPlugins(null as never)).toBeUndefined();
     expect(copyChartPlugins(1 as never)).toBeUndefined();
-    expect(copyChartPlugins({ source: '  ', stream: 1 as never })).toEqual({});
+    expect(copyChartPlugins({ source: 'okx-rest' })).toBeUndefined();
   });
 
   const session = { init, full: { bars: [], seq: 1 } };
@@ -173,7 +168,7 @@ describe('chart webview message handler', () => {
     }
   });
 
-  test('handshake init includes plugins from session', () => {
+  test('handshake init omits plugins even when session tried to pass them', () => {
     const ready = encode(VIEW_TO_HOST.WebviewReady, {
       view: 'chart',
       capabilities: [],
@@ -187,10 +182,7 @@ describe('chart webview message handler', () => {
     });
     expect(result.kind).toBe('init');
     if (result.kind === 'init') {
-      expect(result.envelope.payload.plugins).toEqual({
-        source: 'okx-rest',
-        storage: 'local',
-      });
+      expect(result.envelope.payload.plugins).toBeUndefined();
     }
   });
 

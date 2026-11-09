@@ -164,7 +164,7 @@ describe('chart.full encode → decode → reducer apply', () => {
     expect(state).toEqual(initialChartState());
   });
 
-  test('chart.init stores plugins; host.run.status updates plugins and keeps bars', () => {
+  test('chart.init / host.run.status plugin fields are inert (lightweight core)', () => {
     let state = initialChartState();
     state = reduceChartMessage(state, 'chart.init', {
       theme: 'void',
@@ -173,6 +173,7 @@ describe('chart.full encode → decode → reducer apply', () => {
       cssVars: {},
       plugins: { source: 'binance-rest', engine: 'server', extra: 'drop' },
     });
+    // pickChartPlugins may still parse wire payload for forward-compat, but chips are gone
     expect(state.plugins).toEqual({ source: 'binance-rest', engine: 'server' });
     expect(state.bars).toEqual([]);
 
@@ -212,12 +213,8 @@ describe('chart.full encode → decode → reducer apply', () => {
     });
     expect(badPlugins.state.plugins).toEqual(status.state.plugins);
 
-    expect(pluginChipSpecs(status.state.plugins)).toEqual([
-      { kind: 'source', prefix: 'src', id: 'okx-rest' },
-      { kind: 'stream', prefix: 'stm', id: 'binance-ws' },
-      { kind: 'engine', prefix: 'eng', id: 'pyodide' },
-      { kind: 'storage', prefix: 'sto', id: 'local' },
-    ]);
+    // HUD chips removed — always empty
+    expect(pluginChipSpecs(status.state.plugins)).toEqual([]);
     expect(pluginChipSpecs(undefined)).toEqual([]);
     expect(pluginChipSpecs({})).toEqual([]);
     expect(pluginChipSpecs({ source: '  ' })).toEqual([]);

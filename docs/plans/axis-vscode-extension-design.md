@@ -19,7 +19,7 @@
 
 AXIS today is a SolidJS + Vite charting PWA (`/mnt/data/home/jango/Git/axis`) that runs Pine Script™ via PYNE engines (Pro API, Cloudflare Worker, Pyodide), paints TradingView Lightweight Charts, and exposes library/layers/alerts/plugins/MCP. Editing in the PWA uses CodeMirror 6. Language support already ships separately as the **PYNE Language Support** extension `hoox-sh.pyne` v0.5.4 (`/mnt/data/home/jango/Git/pynescript/vscode-extension`) — LSP, grammar, themes, format, convert, and a synthetic one-bar `pynescript.runOnPro`. There is no marketplace extension that embeds a full AXIS-class chart IDE beside a Pine buffer.
 
-This design specifies **AXIS IDE**: a production VS Code extension that clones the AXIS PWA feature surface **inside VS Code**, native-first. Pine source editing stays on the VS Code `TextEditor` + `hoox-sh.pyne` LSP (no CodeMirror/Monaco embed, no LSP fork). Chart chrome, Lightweight Charts, drawings, and equity visuals live in webviews / custom editors. Run orchestration, secrets, live WS, diagnostics publishers, MCP registration, and plugin registry live in the extension host. Packaging is a hard-dependent IDE VSIX plus an optional one-click extension pack with PYNE.
+This (historical) design was for full surface. Current lightweight simplification focuses on chart + Pyodide + Pro/CF worker (see root README "Lightweight PYNE Options" and board). Many planned studios (Workers, Plugins, Alerts, Watchlist, Scripts, Layers, live, MCP) removed.
 
 ---
 

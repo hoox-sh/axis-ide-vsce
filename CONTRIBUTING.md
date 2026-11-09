@@ -1,7 +1,7 @@
 # Contributing to AXIS IDE
 
-Thanks for helping with **AXIS IDE** — the VS Code extension for running Pine
-Script™ / PYNE beside the editor with AXIS charts, results, and live sessions.
+Thanks for helping with **AXIS IDE** — the lightweight VS Code extension for
+**core: chart custom editor + Pyodide engine + simple option for CF PYNE worker or auto-wired Pro** beside Pine / PYNE.
 
 ## Sister repos & websites
 

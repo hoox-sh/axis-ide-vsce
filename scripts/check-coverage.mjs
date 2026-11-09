@@ -32,8 +32,7 @@ export const PROTOCOL_MIN = 100;
 
 /**
  * Pure-host INCLUDE — paths under these prefixes contribute to the BASELINE.
- * `src/protocol|host|secrets|editors|run|views` are live; `src/live/` is listed so
- * future live-bridge files join the gate automatically when they appear on disk.
+ * Lightweight core only: protocol | host | secrets | editors | run.
  */
 export const INCLUDE = [
   'src/protocol/',
@@ -41,10 +40,6 @@ export const INCLUDE = [
   'src/secrets/',
   'src/editors/',
   'src/run/',
-  'src/views/',
-  'src/live/',
-  'src/plugins/',
-  'src/mcp/',
 ];
 
 /** Unanchored substrings so relative SF paths like `out/x` still match. */
@@ -61,34 +56,6 @@ export const EXCLUDE = [
   'lightweight-charts',
   // VS Code API shims — covered by electron; pure helpers live beside them.
   'editors/chart-editor.ts',
-  'views/results-panel.ts',
-  'views/profiler-panel.ts',
-  'views/colors-panel.ts',
-  'views/symbols-panel.ts',
-  'views/logs-panel.ts',
-  'host/profiler-decorations.ts',
-  'host/inline-debug-decorations.ts',
-  'views/library-panel.ts',
-  'views/layers-panel.ts',
-  'views/scripts-panel.ts',
-  'views/watchlist-panel.ts',
-  'views/alerts-panel.ts',
-  'views/workers-panel.ts',
-  'views/results.ts',
-  'views/strategy.ts',
-  'views/trees.ts',
-  'views/library.ts',
-  'views/layers.ts',
-  'views/indicators.ts',
-  'views/workers.ts',
-  'views/alerts.ts',
-  'views/watchlist.ts',
-  'plugins/index.ts',
-  'plugins/tree.ts',
-  // StatusBarItem shim — electron / sibling feature-agent tests.
-  'plugins/status-bar.ts',
-  // Per-kind TreeView shims (`axis.plugins.*`) — electron / feature-agent tests.
-  'plugins/views/',
 ];
 
 export function normalize(file) {

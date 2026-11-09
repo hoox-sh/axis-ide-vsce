@@ -36,7 +36,6 @@ import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
 import {
   applyChartHostMessage,
   initialChartState,
-  pluginChipSpecs,
   type ChartViewState,
   type UserDrawing,
 } from './state';
@@ -147,7 +146,7 @@ function ensureOverlay(): DrawingOverlay | null {
   return overlay;
 }
 
-const RUN_STATUS_PULSE = new Set(['ok', 'error', 'plugins']);
+const RUN_STATUS_PULSE = new Set(['ok', 'error']);
 
 function renderPlotCount(plots: ChartViewState['plots']): void {
   const el = document.getElementById('chart-plot-count');
@@ -162,24 +161,7 @@ function renderPlotCount(plots: ChartViewState['plots']): void {
   }
 }
 
-function renderPluginChips(plugins: ChartViewState['plugins']): void {
-  const root = document.getElementById('chart-plugins');
-  if (!root) return;
-  const chips = pluginChipSpecs(plugins);
-  root.replaceChildren();
-  if (chips.length === 0) {
-    root.hidden = true;
-    return;
-  }
-  root.hidden = false;
-  for (const chip of chips) {
-    const el = document.createElement('span');
-    el.className = 'chart-plugins__chip';
-    el.dataset.kind = chip.kind;
-    el.textContent = `${chip.prefix} ${chip.id}`;
-    root.appendChild(el);
-  }
-}
+// plugin chips removed in lightweight core (no plugins studio)
 
 function applyRunStatus(raw: unknown): void {
   const shell = document.getElementById('chart-shell');
@@ -227,7 +209,7 @@ function onHostMessage(event: MessageEvent): void {
   ensureOverlay();
   redrawOverlay();
   renderPlotCount(state.plots);
-  renderPluginChips(state.plugins);
+  // no plugin chips in lightweight core
   if (decoded.type === 'host.run.status') {
     applyRunStatus(decoded.payload.state);
   }

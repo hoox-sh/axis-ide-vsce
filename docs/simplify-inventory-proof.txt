@@ -1,0 +1,11 @@
+AXIS IDE simplify inventory (live disk 2026-11-09)
+GONE: src/live src/mcp src/views src/plugins
+GONE: webview/alerts layers library plugins runoutput scripts toolbox watchlist workers
+GONE: okf .storybook
+KEEP src: constants editors extension host protocol run secrets semver test
+KEEP webview: chart shared
+KEEP dist/webview: chart only
+package.json: valid JSON; activation onCustomEditor+6 cmds+workspaceContains axis.json; no viewsContainers/views/MCP
+extension.ts: chart provider + open/run/secrets only (no run-on-save showRunOutput statusbar live mcp plugins)
+verify exits: lint0 check0 compile0 package0 coverage:gate0 (pure-host 2028/2028=100% protocol 444/444=100%)
+vsix axis-ide-0.3.1.vsix: 12 files; junk paths matching live/mcp/plugins/alerts/watchlist/runoutput/toolbox/layers/scripts/storybook/okf = 0

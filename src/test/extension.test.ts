@@ -20,7 +20,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { RUN_NO_PINE_MESSAGE, RUN_OUTPUT_CHANNEL_NAME } from '../constants';
+import { RUN_NO_PINE_MESSAGE } from '../constants';
 import { CHART_VIEW_TYPE } from '../editors/chart-document';
 import { OPEN_CHART_NO_PINE_MESSAGE } from '../host/open-chart';
 import { isVersionOlderThan } from '../semver';
@@ -63,118 +63,34 @@ const pkg = JSON.parse(fs.readFileSync(PACKAGE_PATH, 'utf8')) as {
   };
 };
 
-/** Exact contribute inventory — expand only when package.json contributes grow (KD-14). */
+/** Exact contribute inventory — lightweight core only (chart + run + secrets). */
 const EXPECTED_COMMANDS = [
-  'axis.showRunOutput',
   'axis.openChart',
   'axis.runScript',
   'axis.runScriptSilent',
-  'axis.focusResults',
-  'axis.secrets.setWorkerKey',
   'axis.secrets.setProKey',
+  'axis.secrets.setWorkerKey',
   'axis.secrets.clear',
-  'axis.applyBuiltin',
-  'axis.liveStart',
-  'axis.liveStop',
-  'axis.workers.probeAll',
-  'axis.plugins.activate',
-  'axis.plugins.statusMenu',
-  'axis.alerts.add',
-  'axis.alerts.remove',
-  'axis.watchlist.add',
-  'axis.watchlist.remove',
-  'axis.chart.drawing.trendline',
-  'axis.mcp.showConfig',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
-  'axis.engine.id',
   'axis.engine.endpoint',
   'axis.engine.allowRemoteEndpoint',
   'axis.engine.allowPyodide',
   'axis.chart.historyBars',
-  'axis.run.onSave',
   'axis.chart.useMockBars',
   'axis.datafeed.url',
-  'axis.worker.url',
-  'axis.live.enabled',
-  'axis.plugins.allowUrlInstall',
-  'axis.mcp.stdio',
-  'axis.mcp.command',
-  'axis.mcp.allowNpx',
 ] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
 const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
-const EXPECTED_WORKSPACE_CONTAINS = [
-  'workspaceContains:**/*.axis.json',
-  'workspaceContains:**/*.pyne',
-  'workspaceContains:**/*.pine',
-  'workspaceContains:**/*.pinev5',
-  'workspaceContains:**/*.pinev6',
-  'workspaceContains:**/*.pinescript',
-] as const;
+const EXPECTED_WORKSPACE_CONTAINS = ['workspaceContains:**/*.axis.json'] as const;
 const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'commands',
   'configuration',
   'customEditors',
   'menus',
   'keybindings',
-  'viewsContainers',
-  'views',
-  'mcpServerDefinitionProviders',
-  'languageModelTools',
 ]);
-const EXPECTED_MCP_PROVIDERS = [{ id: 'axis.mcp', label: 'AXIS MCP' }] as const;
-const EXPECTED_LM_TOOLS = [
-  'axis_run_script',
-  'axis_get_results_focus',
-  'axis_chart_snapshot_meta',
-  'axis_get_run_logs',
-  'axis_get_profiler',
-] as const;
-const EXPECTED_PANEL_VIEWS = [
-  'axis.results',
-  'axis.strategy',
-  'axis.profiler',
-  'axis.colors',
-  'axis.symbols',
-  'axis.logs',
-] as const;
-const ACTIVITY_VIEW_ICONS: Record<string, string> = {
-  'axis.library': 'media/views/library.svg',
-  'axis.layers': 'media/views/layers.svg',
-  'axis.indicators': 'media/views/scripts.svg',
-  'axis.watchlist': 'media/views/watchlist.svg',
-  'axis.alerts': 'media/views/alerts.svg',
-  'axis.plugins': 'media/views/plugins.svg',
-  'axis.workers': 'media/views/workers.svg',
-};
-const PANEL_VIEW_ICONS: Record<string, string> = {
-  'axis.results': 'media/views/results.svg',
-  'axis.strategy': 'media/views/strategy.svg',
-  'axis.profiler': 'media/views/profiler.svg',
-  'axis.colors': 'media/views/colors.svg',
-  'axis.symbols': 'media/views/symbols.svg',
-  'axis.logs': 'media/views/logs.svg',
-};
-const EXPECTED_ACTIVITY_VIEWS = [
-  'axis.library',
-  'axis.layers',
-  'axis.indicators',
-  'axis.watchlist',
-  'axis.alerts',
-  'axis.plugins',
-  'axis.workers',
-] as const;
-const FORBIDDEN_PLUGIN_KIND_VIEWS = [
-  'axis.plugins.source',
-  'axis.plugins.stream',
-  'axis.plugins.engine',
-  'axis.plugins.storage',
-  'axis.plugins.dataset',
-  'axis.plugins.component',
-] as const;
-const ACTIVITY_ICON = 'media/axis-activity.svg';
 const EXPECTED_KEYBINDINGS = [
   {
     command: 'axis.runScript',
@@ -238,6 +154,15 @@ suite('AXIS IDE Extension Structure', () => {
     for (const glob of EXPECTED_WORKSPACE_CONTAINS) {
       assert.ok(events.includes(glob), `missing activationEvent ${glob}`);
     }
+    assert.deepStrictEqual(
+      [...events].sort(),
+      [
+        ...EXPECTED_COMMANDS.map((id) => `onCommand:${id}`),
+        `onCustomEditor:${CHART_VIEW_TYPE}`,
+        ...EXPECTED_WORKSPACE_CONTAINS,
+      ].sort(),
+      'activationEvents inventory drifted',
+    );
   });
 
   test('contributes customEditors axis.chart for *.axis.json (KD-4)', () => {
@@ -258,146 +183,15 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('contributes panel + activity views (results/strategy/profiler/library/layers/indicators/watchlist/alerts/plugins/workers)', () => {
-    const panelContainers = pkg.contributes?.viewsContainers?.panel ?? [];
-    const axisPanel = panelContainers.find((c) => c.id === 'axis-panel');
-    assert.ok(axisPanel, 'missing viewsContainers.panel axis-panel');
-    assert.strictEqual(axisPanel?.title, 'AXIS');
-    assert.strictEqual(axisPanel?.icon, ACTIVITY_ICON);
-
-    const activity = pkg.contributes?.viewsContainers?.activitybar ?? [];
-    const axisBar = activity.find((c) => c.id === 'axis');
-    assert.ok(axisBar, 'missing viewsContainers.activitybar axis (merged from trees fragment)');
-    assert.strictEqual(axisBar?.icon, ACTIVITY_ICON);
-
-    const iconAbs = path.resolve(__dirname, '../../', ACTIVITY_ICON);
-    assert.ok(fs.existsSync(iconAbs), `activity icon missing on disk: ${ACTIVITY_ICON}`);
-    const svg = fs.readFileSync(iconAbs, 'utf8');
-    assert.ok(
-      svg.includes('m 1024.04,675.876'),
-      'activity icon must keep the HOOX geometric path',
-    );
-    assert.ok(svg.includes('aria-label="HOOX"'), 'activity icon must label HOOX');
-
-    const panelViews = pkg.contributes?.views?.['axis-panel'] ?? [];
-    const panelIds = panelViews.map((v) => v.id);
-    assert.deepStrictEqual(
-      panelIds,
-      [...EXPECTED_PANEL_VIEWS],
-      'panel view inventory/order drifted — update test when intentionally expanding contributes',
-    );
-    for (const id of EXPECTED_PANEL_VIEWS) {
-      const entry = panelViews.find((v) => v.id === id);
-      assert.strictEqual(entry?.type, 'webview', `${id} must be type webview`);
-      assert.strictEqual(
-        entry?.retainContextWhenHidden,
-        false,
-        `${id} must not retainContextWhenHidden`,
-      );
-    }
-    const profilerView = panelViews.find((v) => v.id === 'axis.profiler');
-    assert.strictEqual(profilerView?.name, 'Profiler');
-    assert.strictEqual(panelViews.find((v) => v.id === 'axis.colors')?.name, 'Colors');
-    assert.strictEqual(panelViews.find((v) => v.id === 'axis.symbols')?.name, 'Symbols');
-    assert.strictEqual(panelViews.find((v) => v.id === 'axis.logs')?.name, 'Logs');
-    for (const id of EXPECTED_PANEL_VIEWS) {
-      const icon = PANEL_VIEW_ICONS[id];
-      const entry = panelViews.find((v) => v.id === id);
-      assert.strictEqual(entry?.icon, icon, `${id} panel icon`);
-      const iconAbs = path.resolve(__dirname, '../../', icon);
-      assert.ok(fs.existsSync(iconAbs), `panel icon missing on disk: ${icon}`);
-      const svg = fs.readFileSync(iconAbs, 'utf8');
-      assert.ok(svg.includes('#C5C5C5'), `${icon} must use fill #C5C5C5`);
-    }
-
-    const sideViews = pkg.contributes?.views?.axis ?? [];
-    const sideIds: string[] = sideViews.map((v) => v.id);
-    assert.deepStrictEqual(
-      sideIds,
-      [...EXPECTED_ACTIVITY_VIEWS],
-      'activity view inventory/order drifted — update test when intentionally expanding contributes',
-    );
-    for (const id of EXPECTED_ACTIVITY_VIEWS) {
-      const entry = sideViews.find((v) => v.id === id);
-      assert.strictEqual(entry?.type, 'webview', `${id} must be type webview`);
-      assert.strictEqual(
-        entry?.retainContextWhenHidden,
-        true,
-        `${id} must retainContextWhenHidden`,
-      );
-    }
-    for (const v of sideViews) {
-      const icon = ACTIVITY_VIEW_ICONS[v.id];
-      if (!icon) continue;
-      assert.strictEqual(v.icon, icon, `${v.id} icon path`);
-      const viewIconAbs = path.resolve(__dirname, '../../', icon);
-      assert.ok(fs.existsSync(viewIconAbs), `activity view icon missing on disk: ${icon}`);
-      const viewSvg = fs.readFileSync(viewIconAbs, 'utf8');
-      assert.ok(viewSvg.includes('#C5C5C5'), `${icon} must use fill #C5C5C5`);
-      assert.ok(!/animat/i.test(viewSvg), `${icon} must not animate`);
-    }
-    for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
-      assert.ok(!(sideIds as string[]).includes(id), `split plugin TreeView ${id} must be gone`);
-    }
-
-    const activation = pkg.activationEvents ?? [];
-    assert.ok(
-      activation.includes('onView:axis.plugins'),
-      'activationEvents should include onView:axis.plugins',
-    );
-    assert.ok(
-      activation.includes('onView:axis.results'),
-      'activationEvents should include onView:axis.results',
-    );
-    assert.ok(
-      activation.includes('onView:axis.strategy'),
-      'activationEvents should include onView:axis.strategy',
-    );
-    assert.ok(
-      activation.includes('onView:axis.profiler'),
-      'activationEvents should include onView:axis.profiler',
-    );
-    assert.ok(
-      activation.includes('onView:axis.colors'),
-      'activationEvents should include onView:axis.colors',
-    );
-    assert.ok(
-      activation.includes('onView:axis.symbols'),
-      'activationEvents should include onView:axis.symbols',
-    );
-    assert.ok(
-      activation.includes('onView:axis.logs'),
-      'activationEvents should include onView:axis.logs',
-    );
-    for (const id of FORBIDDEN_PLUGIN_KIND_VIEWS) {
-      assert.ok(
-        !activation.includes(`onView:${id}`),
-        `activationEvents must not include onView:${id}`,
-      );
-    }
-    assert.ok(
-      activation.includes('onCommand:axis.plugins.activate'),
-      'activationEvents should include onCommand:axis.plugins.activate',
-    );
-    assert.ok(
-      activation.includes('onCommand:axis.plugins.statusMenu'),
-      'activationEvents should include onCommand:axis.plugins.statusMenu',
-    );
-    assert.ok(
-      activation.includes('onView:axis.workers'),
-      'activationEvents should include onView:axis.workers',
-    );
-    assert.ok(
-      activation.includes('onView:axis.watchlist'),
-      'activationEvents should include onView:axis.watchlist',
-    );
-    assert.ok(
-      activation.includes('onView:axis.alerts'),
-      'activationEvents should include onView:axis.alerts',
-    );
+  test('no viewsContainers / views / MCP / LM tools in lightweight core', () => {
+    assert.strictEqual(pkg.contributes?.viewsContainers, undefined);
+    assert.strictEqual(pkg.contributes?.views, undefined);
+    const asRecord = pkg.contributes as Record<string, unknown> | undefined;
+    assert.strictEqual(asRecord?.mcpServerDefinitionProviders, undefined);
+    assert.strictEqual(asRecord?.languageModelTools, undefined);
   });
 
-  test('contributes expected commands (KD-14 inventory)', () => {
+  test('contributes expected commands (lightweight inventory)', () => {
     const commandIds = (pkg.contributes?.commands ?? []).map((c) => c.command);
     for (const id of EXPECTED_COMMANDS) {
       assert.ok(commandIds.includes(id), `Missing command: ${id}`);
@@ -432,7 +226,7 @@ suite('AXIS IDE Extension Structure', () => {
     );
   });
 
-  test('contributes keys stay on the allowlist (incl. views / viewsContainers)', () => {
+  test('contributes keys stay on the lightweight allowlist', () => {
     const keys = Object.keys(pkg.contributes ?? {});
     for (const key of keys) {
       assert.ok(
@@ -470,7 +264,7 @@ suite('AXIS IDE Extension Structure', () => {
     assert.strictEqual(run?.when, 'resourceLangId == pinescript');
   });
 
-  test('context menus cover editor, explorer, views, and plugins webview', () => {
+  test('context menus cover editor and explorer only (no view menus)', () => {
     const menus = (
       pkg.contributes as {
         menus?: Record<string, Array<{ command: string; when?: string }>>;
@@ -486,20 +280,9 @@ suite('AXIS IDE Extension Structure', () => {
       explorer.some((e) => e.command === 'axis.openChart' && e.when === 'resourceLangId == pinescript'),
       'explorer/context openChart',
     );
-    const titles = menus?.['view/title'] ?? [];
-    assert.ok(titles.some((e) => e.command === 'axis.workers.probeAll' && (e.when ?? '').includes('axis.workers')));
-    assert.ok(titles.some((e) => e.command === 'axis.plugins.statusMenu' && (e.when ?? '').includes('axis.plugins')));
-    assert.ok(titles.some((e) => e.command === 'axis.focusResults'));
-    const items = menus?.['view/item/context'] ?? [];
-    assert.ok(items.some((e) => e.command === 'axis.alerts.remove'));
-    assert.ok(items.some((e) => e.command === 'axis.workers.probeAll'));
-    const web = menus?.['webview/context'] ?? [];
-    assert.ok(
-      web.some(
-        (e) =>
-          e.command === 'axis.plugins.statusMenu' && (e.when ?? '').includes("webviewId == 'axis.plugins'"),
-      ),
-    );
+    assert.strictEqual(menus?.['view/title'], undefined);
+    assert.strictEqual(menus?.['view/item/context'], undefined);
+    assert.strictEqual(menus?.['webview/context'], undefined);
   });
 
   test('commandPalette includes axis.runScriptSilent for pinescript', () => {
@@ -509,50 +292,6 @@ suite('AXIS IDE Extension Structure', () => {
     const silent = palette.find((e) => e.command === 'axis.runScriptSilent');
     assert.ok(silent, 'commandPalette must contribute axis.runScriptSilent');
     assert.strictEqual(silent?.when, 'editorLangId == pinescript');
-  });
-
-  test('commandPalette shows axis.plugins.statusMenu (not when:false)', () => {
-    const menus = (pkg.contributes as { menus?: Record<string, Array<{ command: string; when?: string }>> })
-      ?.menus;
-    const palette = menus?.commandPalette ?? [];
-    const hiddenActivate = palette.find((e) => e.command === 'axis.plugins.activate');
-    assert.ok(hiddenActivate, 'commandPalette must contribute axis.plugins.activate');
-    assert.strictEqual(hiddenActivate?.when, 'false');
-    const statusMenu = palette.find((e) => e.command === 'axis.plugins.statusMenu');
-    assert.ok(statusMenu, 'commandPalette must contribute axis.plugins.statusMenu');
-    assert.ok(
-      statusMenu?.when !== 'false',
-      'axis.plugins.statusMenu must stay visible in the command palette',
-    );
-  });
-
-  test('contributes MCP provider + languageModelTools (KD-9 / Task 21–22)', () => {
-    const providers = (
-      pkg.contributes as {
-        mcpServerDefinitionProviders?: Array<{ id: string; label?: string }>;
-      }
-    )?.mcpServerDefinitionProviders ?? [];
-    assert.strictEqual(providers.length, EXPECTED_MCP_PROVIDERS.length);
-    for (const expected of EXPECTED_MCP_PROVIDERS) {
-      const found = providers.find((p) => p.id === expected.id);
-      assert.ok(found, `missing mcpServerDefinitionProvider ${expected.id}`);
-      assert.strictEqual(found?.label, expected.label);
-    }
-
-    const tools = (
-      pkg.contributes as {
-        languageModelTools?: Array<{ name: string }>;
-      }
-    )?.languageModelTools ?? [];
-    const names = tools.map((t) => t.name);
-    for (const id of EXPECTED_LM_TOOLS) {
-      assert.ok(names.includes(id), `missing languageModelTool ${id}`);
-    }
-    assert.deepStrictEqual(
-      [...names].sort(),
-      [...EXPECTED_LM_TOOLS].sort(),
-      'languageModelTools inventory drifted',
-    );
   });
 });
 
@@ -569,11 +308,6 @@ suite('AXIS IDE Extension Activation', () => {
     }
   });
 
-  test('axis.showRunOutput shows AXIS Run channel', async () => {
-    const result = await vscode.commands.executeCommand('axis.showRunOutput');
-    assert.strictEqual(result, RUN_OUTPUT_CHANNEL_NAME);
-  });
-
   test('axis.openChart without active Pine returns clear error (no await UI)', async () => {
     // No Pine buffer in the default electron workspace — expect the no-Pine path.
     const result = await vscode.commands.executeCommand('axis.openChart');
@@ -583,24 +317,6 @@ suite('AXIS IDE Extension Activation', () => {
   test('axis.runScript without active Pine returns clear error (no await UI)', async () => {
     const result = await vscode.commands.executeCommand('axis.runScript');
     assert.strictEqual(result, RUN_NO_PINE_MESSAGE);
-  });
-
-  test('default axis.run.onSave is off with evaluate|run enum', () => {
-    const config = vscode.workspace.getConfiguration('axis.run');
-    assert.strictEqual(config.get('onSave'), 'off');
-    const configuration = Array.isArray(pkg.contributes?.configuration)
-      ? pkg.contributes.configuration
-      : pkg.contributes?.configuration
-        ? [pkg.contributes.configuration]
-        : [];
-    const props = configuration.flatMap((group) =>
-      Object.entries(group.properties ?? {}),
-    );
-    const entry = props.find(([key]) => key === 'axis.run.onSave');
-    assert.ok(entry, 'missing axis.run.onSave');
-    const meta = entry?.[1] as { enum?: string[]; default?: string };
-    assert.deepStrictEqual(meta.enum, ['off', 'evaluate', 'run']);
-    assert.strictEqual(meta.default, 'off');
   });
 
   test('default axis.chart.useMockBars is false (HistoryClient dogfood)', () => {
@@ -613,9 +329,8 @@ suite('AXIS IDE Extension Activation', () => {
     assert.strictEqual(config.get('url'), 'http://127.0.0.1:5003');
   });
 
-  test('default axis.engine.id / endpoint / allowRemoteEndpoint', () => {
+  test('default axis.engine.endpoint / allowRemoteEndpoint', () => {
     const config = vscode.workspace.getConfiguration('axis.engine');
-    assert.strictEqual(config.get('id'), 'server');
     assert.strictEqual(config.get('endpoint'), 'http://127.0.0.1:5002');
     assert.strictEqual(config.get('allowRemoteEndpoint'), false);
   });
@@ -634,40 +349,6 @@ suite('AXIS IDE Extension Activation', () => {
     const meta = entry?.[1] as { scope?: string; default?: boolean };
     assert.strictEqual(meta.scope, 'application');
     assert.strictEqual(meta.default, false);
-  });
-
-  test('axis.mcp.command / allowNpx are application-scoped (not workspace)', () => {
-    const configuration = Array.isArray(pkg.contributes?.configuration)
-      ? pkg.contributes.configuration
-      : pkg.contributes?.configuration
-        ? [pkg.contributes.configuration]
-        : [];
-    const props = configuration.flatMap((group) =>
-      Object.entries(group.properties ?? {}),
-    );
-    for (const key of ['axis.mcp.command', 'axis.mcp.allowNpx'] as const) {
-      const entry = props.find(([k]) => k === key);
-      assert.ok(entry, `missing ${key}`);
-      const meta = entry?.[1] as { scope?: string };
-      assert.strictEqual(meta.scope, 'application', `${key} must be application-scoped`);
-    }
-  });
-
-  test('axis.mcp.command / allowNpx are application-scoped (not workspace)', () => {
-    const configuration = Array.isArray(pkg.contributes?.configuration)
-      ? pkg.contributes.configuration
-      : pkg.contributes?.configuration
-        ? [pkg.contributes.configuration]
-        : [];
-    const props = configuration.flatMap((group) =>
-      Object.entries(group.properties ?? {}),
-    );
-    for (const key of ['axis.mcp.command', 'axis.mcp.allowNpx'] as const) {
-      const entry = props.find(([k]) => k === key);
-      assert.ok(entry, `missing ${key}`);
-      const meta = entry?.[1] as { scope?: string };
-      assert.strictEqual(meta.scope, 'application', `${key} must be application-scoped`);
-    }
   });
 
   test('default axis.telemetry.offline is true', () => {
