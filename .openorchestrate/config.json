@@ -168,7 +168,13 @@
     "includeSecrets": false
   },
   "optionalSkills": {
-    "enabledPacks": []
+    "enabledPacks": [
+      "catalog/addyosmani-agent-skills",
+      "catalog/cloudflare-security-audit",
+      "catalog/google-elephant-goldfish",
+      "catalog/kepano-obsidian-skills",
+      "catalog/mattpocock-skills"
+    ]
   },
   "setup": {
     "createdAt": "2026-11-07T21:12:54.528Z",
