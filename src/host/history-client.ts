@@ -25,6 +25,7 @@
 
 import { checkHttpBaseUrl, type EndpointCheck } from '../run/endpoint';
 import { combineAbortSignals } from '../run/engine-http';
+import { withAxisClientHeader } from '../http/client';
 import { MOCK_BARS_CAP, type OhlcvBar } from './mock-bars';
 import { pairFormSymbol } from './series-key';
 
@@ -178,7 +179,7 @@ export async function fetchHistorical(
     const signal = combineAbortSignals(req.signal, AbortSignal.timeout(timeoutMs));
     let res: { ok: boolean; status: number; text(): Promise<string> };
     try {
-      res = await fetchImpl(url, { method: 'GET', signal });
+      res = await fetchImpl(url, { method: 'GET', headers: withAxisClientHeader({}), signal });
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       if (req.signal?.aborted) {

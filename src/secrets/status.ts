@@ -16,6 +16,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { BETA_KEY_COPY } from './slots';
+
 /** Presence labels for StatusBar — never key material. */
 export type SecretPresence = 'set' | 'missing';
 
@@ -25,6 +27,14 @@ export type SecretStatusLabel = {
   /** Multi-line tooltip with set/missing words only. */
   tooltip: string;
 };
+
+/**
+ * During open beta an absent key is optional, not an error. Keep the word
+ * "missing" out of the tooltip so the status bar never reads as broken.
+ */
+function presenceWord(presence: SecretPresence): string {
+  return presence === 'set' ? 'set' : 'not set — optional during open beta';
+}
 
 /**
  * Pure StatusBar label helper — unit-tested; never embeds secret values.
@@ -38,6 +48,6 @@ export function formatSecretStatus(
   const pMark = pro === 'set' ? 'P✓' : 'P·';
   return {
     text: `$(graph) AXIS ${wMark} ${pMark}`,
-    tooltip: `AXIS IDE\nWorker key: ${worker}\nPro key: ${pro}`,
+    tooltip: `AXIS IDE\nWorker key: ${presenceWord(worker)}\nPro key: ${presenceWord(pro)}\n${BETA_KEY_COPY}`,
   };
 }

@@ -53,9 +53,6 @@ export interface RunRequest {
   symbol?: string;
 }
 
-export const MISSING_PRO_KEY_ERROR =
-  'AXIS Pro API key missing. Run “AXIS: Set Pro API Key” (SecretStorage pyn_…) before running.';
-
 export const UNSUPPORTED_ENGINE_ERROR =
   'AXIS Run supports engine id "server" only in this release (pyne-worker lands later).';
 
@@ -253,18 +250,24 @@ export class RunOrchestrator {
         safeLog(deps.output, `drop stale epoch ${my}`);
         return { ok: false, epoch: my, reason: 'stale' };
       }
-      const checked = validateProKey(rawKey ?? '');
-      if (!checked.ok || !rawKey) {
-        const error = !rawKey ? MISSING_PRO_KEY_ERROR : PRO_KEY_ERROR;
-        this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
-        safeLog(deps.output, `run error epoch=${my}: ${error}`);
-        this.emitStatus(deps, {
-          epoch: my,
-          state: 'error',
-          message: error,
-          seriesKey: req.seriesKey,
-        });
-        return { ok: false, epoch: my, reason: 'error', error };
+      // Open beta: an absent Pro key is not an error — the run goes out with
+      // X-AXIS-Client: ide and no Authorization header. A present-but-malformed
+      // key is still a user error and must not be silently dropped.
+      const proKey = typeof rawKey === 'string' ? rawKey.trim() : '';
+      if (proKey) {
+        const checked = validateProKey(proKey);
+        if (!checked.ok) {
+          const error = PRO_KEY_ERROR;
+          this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
+          safeLog(deps.output, `run error epoch=${my}: ${error}`);
+          this.emitStatus(deps, {
+            epoch: my,
+            state: 'error',
+            message: error,
+            seriesKey: req.seriesKey,
+          });
+          return { ok: false, epoch: my, reason: 'error', error };
+        }
       }
 
       const endpoint = String(deps.endpoint ?? '').trim() || DEFAULT_ENGINE_ENDPOINT;
@@ -274,7 +277,7 @@ export class RunOrchestrator {
         bars: req.bars,
         mode: req.mode || 'auto',
         symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
-        apiKey: rawKey,
+        apiKey: proKey || undefined,
         allowRemote: deps.allowRemote,
         signal,
         fetchImpl: deps.fetchImpl,

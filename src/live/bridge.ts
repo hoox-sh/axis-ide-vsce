@@ -194,6 +194,8 @@ export class LiveSessionBridge {
   /**
    * Mint a ticket and open the live WebSocket.
    * Remints on every start (TTL 60s). Does not put `pn_` on the URL.
+   * A Worker key is optional during open beta — the mint carries
+   * `X-AXIS-Client: ide` and connects without Authorization when absent.
    * Generation is captured before any await so stop()/deactivate mid-mint
    * cannot open a socket after cancel.
    */
@@ -230,16 +232,6 @@ export class LiveSessionBridge {
     }
     if (gen !== this.generation) {
       return { ok: false, error: 'AXIS live start cancelled.' };
-    }
-    if (!apiKey) {
-      this.connecting = false;
-      this.errored = true;
-      this.emitStatus();
-      return {
-        ok: false,
-        error:
-          'AXIS Worker API key missing. Run “AXIS: Set Worker API Key” (SecretStorage pn_…) before live.',
-      };
     }
 
     let ticket: string;

@@ -139,14 +139,36 @@ describe('LiveSessionBridge', () => {
     expect(mintUrls).toHaveLength(1);
   });
 
-  test('start fails without Worker key / when live disabled', async () => {
+  test('starts keyless during beta with X-AXIS-Client: ide / still fails when live disabled', async () => {
+    let seenHeaders: Record<string, string> | undefined;
     const missing = makeBridge({
       secrets: { getWorkerKey: async () => undefined },
+      fetchImpl: async (_url, init) => {
+        seenHeaders = init?.headers;
+        return jsonOk({ status: 'success', ticket: TICKET });
+      },
     });
     const r1 = await missing.bridge.start();
-    expect(r1.ok).toBe(false);
-    if (!r1.ok) expect(r1.error).toMatch(/Worker API key missing/i);
-    expect(missing.bridge.getHudState()).toBe('degraded');
+    expect(r1.ok).toBe(true);
+    if (r1.ok) expect(r1.wsUrl).toContain(`ticket=${TICKET}`);
+    expect(seenHeaders?.['X-AXIS-Client']).toBe('ide');
+    expect(seenHeaders?.Authorization).toBeUndefined();
+    expect(missing.bridge.getHudState()).toBe('degraded'); // connecting until open
+
+    // A present-but-malformed Worker key is still a user error: mint fails
+    // before any socket opens and no fetch is attempted.
+    let fetched = false;
+    const bad = makeBridge({
+      secrets: { getWorkerKey: async () => 'pn_oops' },
+      fetchImpl: async () => {
+        fetched = true;
+        return jsonOk({ status: 'success', ticket: TICKET });
+      },
+    });
+    const badResult = await bad.bridge.start();
+    expect(badResult.ok).toBe(false);
+    if (!badResult.ok) expect(badResult.error).toMatch(/invalid/i);
+    expect(fetched).toBe(false);
 
     const off = makeBridge({ liveEnabled: false });
     const r2 = await off.bridge.start();
@@ -367,7 +389,7 @@ describe('LiveSessionBridge', () => {
     if (!r.ok) expect(r.error).toMatch(/mcp\/bridge/i);
   });
 
-  test('swallows hostile onStatus / onFrame / output; secrets throw → missing key', async () => {
+  test('swallows hostile onStatus / onFrame / output; secrets throw → keyless beta start', async () => {
     const { bridge } = makeBridge({
       onStatus: () => {
         throw new Error('status boom');
@@ -397,7 +419,8 @@ describe('LiveSessionBridge', () => {
       },
     });
     const r2 = await vault.bridge.start();
-    expect(r2.ok).toBe(false);
+    // A throwing secret store resolves to "no key" — open beta still connects.
+    expect(r2.ok).toBe(true);
   });
 
   test('WebSocket missing / constructor throw / close throw / stale generation', async () => {

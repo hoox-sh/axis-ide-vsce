@@ -48,7 +48,6 @@ export {
   type RunMode,
 } from './engine-http';
 export {
-  MISSING_PRO_KEY_ERROR,
   UNSUPPORTED_ENGINE_ERROR,
   RunOrchestrator,
   type RunDeps,

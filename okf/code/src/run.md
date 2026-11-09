@@ -7,7 +7,7 @@ tags: [code, run]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T03:02:18Z
+  at: 2026-11-09T00:22:47Z
 sources:
   - id: tree
     resource: "src/run"
@@ -24,9 +24,9 @@ okf_lock: generated
 * `endpoint.ts` — BAD_ENDPOINT_SCHEME, EndpointCheck, HttpBaseUrlOptions, REMOTE_ENDPOINT_DENIED, checkEngineEndpoint, checkHttpBaseUrl
 * `engine-http.test.ts`
 * `engine-http.ts` — DEFAULT_ENGINE_ENDPOINT, ENGINE_REMOTE_DENIED, ENGINE_RUN_TIMEOUT_MS, EngineCompileDiagnostic, EngineHttpRequest, EngineRunResult, FetchLike, MISSING_API_KEY_ERROR, MISSING_ENDPOINT_ERROR, RunMode, barsForPine, combineAbortSignals
-* `index.ts` — BAD_ENDPOINT_SCHEME, DEFAULT_ENGINE_ENDPOINT, MISSING_API_KEY_ERROR, MISSING_ENDPOINT_ERROR, MISSING_PRO_KEY_ERROR, ProfilerStore, REMOTE_ENDPOINT_DENIED, ResultsFocusStore, RunOrchestrator, UNSUPPORTED_ENGINE_ERROR, attachProfiler, barsForPine
+* `index.ts` — BAD_ENDPOINT_SCHEME, DEFAULT_ENGINE_ENDPOINT, MISSING_API_KEY_ERROR, MISSING_ENDPOINT_ERROR, ProfilerStore, REMOTE_ENDPOINT_DENIED, ResultsFocusStore, RunOrchestrator, UNSUPPORTED_ENGINE_ERROR, attachProfiler, barsForPine, checkEngineEndpoint
 * `orchestrator.test.ts`
-* `orchestrator.ts` — MISSING_PRO_KEY_ERROR, RunDeps, RunDiagnostic, RunDiagnostics, RunMode, RunOrchestrator, RunOutcome, RunOutput, RunRequest, RunSecrets, UNSUPPORTED_ENGINE_ERROR
+* `orchestrator.ts` — RunDeps, RunDiagnostic, RunDiagnostics, RunMode, RunOrchestrator, RunOutcome, RunOutput, RunRequest, RunSecrets, UNSUPPORTED_ENGINE_ERROR
 * `profiler-store.test.ts`
 * `profiler-store.ts` — ProfilerHotLine, ProfilerListener, ProfilerPhase, ProfilerRunInput, ProfilerSnapshot, ProfilerStore, attachProfiler, countPlots, countSeries, encodeProfilerSet, pickPhases, profileLineCount
 * `results-store.test.ts`
@@ -44,6 +44,7 @@ okf_lock: generated
 
 * [src/editors](/code/src/editors.md)
 * [src/host](/code/src/host.md)
+* [src/http](/code/src/http.md)
 * [src/protocol](/code/src/protocol.md)
 * [src/secrets](/code/src/secrets.md)
 

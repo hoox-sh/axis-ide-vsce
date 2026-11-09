@@ -242,13 +242,42 @@ describe('mintLiveTicket', () => {
     }
   });
 
-  test('rejects missing key, bad shape, and non-JSON / bad ticket', async () => {
-    await expect(
-      mintLiveTicket({ endpoint: 'https://worker.axis.hoox.sh', apiKey: '' }),
-    ).rejects.toBeInstanceOf(LiveTicketError);
+  test('absent key mints during beta with X-AXIS-Client: ide and no Authorization', async () => {
+    let seenHeaders: Record<string, string> | undefined;
+    const ticket = await mintLiveTicket(
+      { endpoint: 'https://worker.axis.hoox.sh', apiKey: '' },
+      {
+        fetchImpl: async (_url, init) => {
+          seenHeaders = init?.headers;
+          return json({ status: 'success', ticket: TICKET });
+        },
+      },
+    );
+    expect(ticket).toBe(TICKET);
+    expect(seenHeaders?.['X-AXIS-Client']).toBe('ide');
+    expect(seenHeaders?.Authorization).toBeUndefined();
+  });
+
+  test('stamps X-AXIS-Client: ide on ticket mint when a key is present', async () => {
+    let seenHeaders: Record<string, string> | undefined;
+    const ticket = await mintLiveTicket(
+      { endpoint: 'https://worker.axis.hoox.sh', apiKey: KEY },
+      {
+        fetchImpl: async (_url, init) => {
+          seenHeaders = init?.headers;
+          return json({ status: 'success', ticket: TICKET });
+        },
+      },
+    );
+    expect(ticket).toBe(TICKET);
+    expect(seenHeaders?.['X-AXIS-Client']).toBe('ide');
+    expect(seenHeaders?.Authorization).toBe(`Bearer ${KEY}`);
+  });
+
+  test('present-but-malformed key, non-JSON, and bad ticket still reject', async () => {
     await expect(
       mintLiveTicket({ endpoint: 'https://worker.axis.hoox.sh', apiKey: 'pn_oops' }),
-    ).rejects.toThrow(/invalid/i);
+    ).rejects.toBeInstanceOf(LiveTicketError);
     await expect(
       mintLiveTicket(
         { endpoint: 'https://worker.axis.hoox.sh', apiKey: KEY },
