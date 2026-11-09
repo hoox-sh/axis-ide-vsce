@@ -1,0 +1,338 @@
+/* Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Strategy report under the chart. Scoped to #chart-strategy so the
+ * toolbar, drawings, and plots keep their own rules.
+ */
+
+#chart-strategy.chart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: min(40%, 312px);
+  overflow: hidden;
+  padding: 6px 8px 4px;
+}
+
+#chart-strategy.chart-panel[hidden] {
+  display: none;
+}
+
+#chart-strategy .chart-strategy__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 22px;
+}
+
+#chart-strategy .chart-strategy__name {
+  margin: 0;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--axis-text, var(--vscode-foreground, #e8eaee));
+}
+
+#chart-strategy-stats.chart-panel__stats {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--axis-text, var(--vscode-foreground, #e8eaee));
+}
+
+#chart-strategy-csv {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+#chart-strategy-equity {
+  flex: 0 0 auto;
+  height: 28px;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+}
+
+#chart-strategy-equity[hidden] {
+  display: none;
+}
+
+#chart-strategy-equity.is-up {
+  color: var(--axis-up, var(--vscode-charts-green, #3ddc97));
+}
+
+#chart-strategy-equity.is-down {
+  color: var(--axis-down, var(--vscode-charts-red, #f07178));
+}
+
+#chart-strategy-equity svg {
+  display: block;
+  width: 100%;
+  height: 28px;
+}
+
+#chart-strategy .chart-strategy__metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+#chart-strategy .chart-strategy__metric {
+  min-width: 0;
+  padding: 3px 6px 4px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.22)));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: color-mix(in srgb, var(--axis-bg, #0c0e14) 55%, transparent);
+}
+
+#chart-strategy .chart-strategy__metric-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#chart-strategy .chart-strategy__metric-value {
+  display: block;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  line-height: 1.25;
+  color: var(--axis-text, var(--vscode-foreground, #e8eaee));
+}
+
+#chart-strategy .is-up {
+  color: var(--axis-up, var(--vscode-charts-green, #3ddc97));
+}
+
+#chart-strategy .is-down {
+  color: var(--axis-down, var(--vscode-charts-red, #f07178));
+}
+
+#chart-strategy-trips {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+#chart-strategy-trips[hidden] {
+  display: none;
+}
+
+#chart-strategy .chart-strategy__note {
+  margin: 0;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  font-size: 10px;
+  line-height: 20px;
+}
+
+#chart-strategy .chart-strategy__trips-list {
+  display: flex;
+  gap: 4px;
+  margin: 0;
+  padding: 0 0 1px;
+  list-style: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#chart-strategy .chart-strategy__trips-list li {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+#chart-strategy .chart-strategy__trip {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  margin: 0;
+  padding: 0 6px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.22)));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: transparent;
+  color: var(--axis-text, var(--vscode-foreground, #e8eaee));
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: default;
+}
+
+button.chart-strategy__trip {
+  cursor: pointer;
+}
+
+#chart-strategy .chart-strategy__trip:hover {
+  background: var(--axis-bg-hover, var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.16)));
+}
+
+#chart-strategy .chart-strategy__arrow {
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  font-size: 10px;
+}
+
+#chart-strategy .chart-strategy__filters {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+#chart-strategy .chart-strategy__chip {
+  appearance: none;
+  height: 20px;
+  margin: 0;
+  padding: 0 7px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+  border-radius: var(--axis-radius-pill, 999px);
+  background: transparent;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  font: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+#chart-strategy .chart-strategy__chip:hover,
+#chart-strategy .chart-strategy__chip.is-active,
+#chart-strategy .chart-strategy__chip[aria-pressed='true'] {
+  color: var(--axis-text, var(--vscode-foreground, #e8eaee));
+  border-color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  background: var(--axis-bg-hover, var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.16)));
+}
+
+#chart-strategy .chart-strategy__chip:focus-visible,
+#chart-strategy .chart-strategy__trip:focus-visible {
+  outline: none;
+  box-shadow: var(
+    --axis-focus-ring,
+    0 0 0 3px color-mix(in oklch, var(--vscode-focusBorder, #007acc) 18%, transparent)
+  );
+}
+
+#chart-strategy-table.chart-panel__table {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(22px * 6);
+  overflow: auto;
+  scrollbar-color: var(--axis-scroll-thumb, var(--vscode-scrollbarSlider-background, #1c2230))
+    transparent;
+}
+
+#chart-strategy-table table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 11px;
+}
+
+#chart-strategy-table th,
+#chart-strategy-table td {
+  box-sizing: border-box;
+  height: 22px;
+  padding: 0 6px;
+  border-bottom: var(--axis-border-w, 1px) solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.18)));
+  text-align: left;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+#chart-strategy-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--axis-bg-elev, var(--vscode-editorWidget-background, #10131b));
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+#chart-strategy-table tbody tr:hover {
+  background: var(--axis-bg-hover, var(--vscode-list-hoverBackground, rgba(255, 255, 255, 0.04)));
+}
+
+#chart-strategy-table tbody tr[data-bar-index] {
+  cursor: pointer;
+}
+
+#chart-strategy .chart-strategy__num {
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+#chart-strategy-table .chart-strategy__num {
+  text-align: right;
+}
+
+#chart-strategy-table .chart-strategy__side {
+  width: 2.4em;
+  text-align: center;
+}
+
+#chart-strategy .chart-strategy__id {
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+}
+
+#chart-strategy-table .chart-strategy__comment {
+  max-width: 16em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+}
+
+#chart-strategy-table .is-missing {
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+}
+
+#chart-strategy .chart-strategy__mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+#chart-strategy .chart-strategy__mark--long {
+  color: var(--axis-up, var(--vscode-charts-green, #3ddc97));
+}
+
+#chart-strategy .chart-strategy__mark--short {
+  color: var(--axis-down, var(--vscode-charts-red, #f07178));
+}
+
+#chart-strategy .chart-strategy__mark--flat {
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+}
+
+#chart-strategy .chart-strategy__empty {
+  margin: 0;
+  padding: 6px 2px 8px;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #9aa3b2));
+  font-size: 11px;
+}

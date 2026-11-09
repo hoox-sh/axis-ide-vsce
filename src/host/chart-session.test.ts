@@ -87,6 +87,7 @@ describe('chart session', () => {
     expect(session.init.seriesKey).toBe(session.seriesKey);
     expect(session.bars).toHaveLength(60);
     expect(session.full.seq).toBe(1);
+    expect(session.init.inputs).toBeUndefined();
 
     const env = encode(HOST_TO_VIEW.ChartFull, session.full);
     const decoded = decode(env);
@@ -122,6 +123,15 @@ describe('chart session', () => {
         'volume',
       ]);
     }
+  });
+
+  test('buildChartSession copies scripts[].inputs onto chart.init', () => {
+    const doc = {
+      ...defaultChartDocument(),
+      scripts: [{ id: 's', uri: './s.pyne', inputs: { Length: 9 } }],
+    };
+    const session = buildChartSession({ doc, useMockBars: true, seq: 1 });
+    expect(session.init.inputs).toEqual({ Length: 9 });
   });
 
   test('buildChartSession omits plugins on init (lightweight core)', () => {

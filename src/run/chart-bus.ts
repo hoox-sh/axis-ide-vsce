@@ -33,6 +33,7 @@
  */
 
 import type {
+  ChartDebugCursorPayload,
   ChartDeltaPayload,
   ChartFullPayload,
   HostRunStatusPayload,
@@ -53,7 +54,8 @@ export type ChartDeltaNotify = {
 export type ChartNotifyMessage =
   | ChartFullNotify
   | ChartDeltaNotify
-  | { type: 'host.run.status'; payload: HostRunStatusPayload; seriesKey?: string };
+  | { type: 'host.run.status'; payload: HostRunStatusPayload; seriesKey?: string }
+  | { type: 'chart.debugCursor'; payload: ChartDebugCursorPayload; seriesKey?: string };
 
 export type ChartNotifyHandler = (message: ChartNotifyMessage) => void;
 

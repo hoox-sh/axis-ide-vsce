@@ -23,8 +23,10 @@ import {
   CHART_SCHEMA,
   CHART_VIEW_TYPE,
   defaultChartDocument,
+  mergeScriptInputs,
   normalizeChartDocument,
   parseChartDocument,
+  scriptInputsFromDoc,
   serializeChartDocument,
 } from './chart-document';
 
@@ -40,6 +42,7 @@ describe('chart document helpers', () => {
     expect(doc.panes).toEqual([{ id: 'price', kind: 'price' }]);
     expect(doc.drawings).toEqual([]);
     expect(doc.interval).toBe('1m');
+    expect(doc.barsPath).toBe('');
   });
 
   test('empty / whitespace string parses to default doc', () => {
@@ -89,6 +92,16 @@ describe('chart document helpers', () => {
     expect(doc.historyBars).toBe(100);
     expect(doc.panes).toEqual([{ id: 'price', kind: 'price' }]);
     expect(doc.exchange).toBe('');
+    expect(doc.barsPath).toBe('');
+  });
+
+  test('normalize keeps barsPath', () => {
+    const doc = normalizeChartDocument({ barsPath: ' fixtures/sample-bars.csv ' });
+    expect(doc.barsPath).toBe('fixtures/sample-bars.csv');
+    const text = serializeChartDocument(doc);
+    const again = parseChartDocument(text);
+    expect(again.ok).toBe(true);
+    if (again.ok) expect(again.doc.barsPath).toBe('fixtures/sample-bars.csv');
   });
 
   test('normalize coerces unknown schema and non-positive historyBars to default', () => {
@@ -148,6 +161,53 @@ describe('chart document helpers', () => {
     expect(parseChartDocument('{"schema":"axis.chart.v1"}').ok).toBe(true);
     expect(parseChartDocument('false').ok).toBe(false);
     expect(parseChartDocument({ symbol: 'BTC/USDT' }).ok).toBe(true);
+  });
+
+  test('scriptInputsFromDoc reads first non-empty scripts[].inputs', () => {
+    expect(scriptInputsFromDoc(defaultChartDocument())).toBeUndefined();
+    expect(
+      scriptInputsFromDoc({
+        ...defaultChartDocument(),
+        scripts: [{ id: 'a', uri: 'a.pyne', inputs: {} }, { id: 'b', uri: 'b.pyne' }],
+      }),
+    ).toBeUndefined();
+    expect(
+      scriptInputsFromDoc({
+        ...defaultChartDocument(),
+        scripts: [
+          { id: 'a', uri: 'a.pyne', inputs: {} },
+          { id: 'b', uri: 'b.pyne', inputs: { Length: 9 } },
+        ],
+      }),
+    ).toEqual({ Length: 9 });
+    const hostile = defaultChartDocument();
+    Object.defineProperty(hostile, 'scripts', {
+      get() {
+        throw new Error('boom');
+      },
+    });
+    expect(scriptInputsFromDoc(hostile)).toBeUndefined();
+  });
+
+  test('mergeScriptInputs writes title→value onto first script', () => {
+    const created = mergeScriptInputs(defaultChartDocument(), { Length: 14 });
+    expect(created.scripts[0]).toMatchObject({ id: 'script', inputs: { Length: 14 } });
+    const merged = mergeScriptInputs(
+      { ...defaultChartDocument(), scripts: [{ id: 's', uri: './s.pyne', inputs: { Length: 9 } }] },
+      { Length: 21, On: true },
+    );
+    expect(merged.scripts[0]).toEqual({
+      id: 's',
+      uri: './s.pyne',
+      inputs: { Length: 21, On: true },
+    });
+    const noMap = mergeScriptInputs(
+      { ...defaultChartDocument(), scripts: [{ id: 's', uri: './s.pyne', inputs: 3 }] },
+      { Fast: 5 },
+    );
+    expect(noMap.scripts[0]).toMatchObject({ id: 's', inputs: { Fast: 5 } });
+    const json = serializeChartDocument(created);
+    expect(json).toContain('"Length": 14');
   });
 
   test('parseChartDocument catches hostile object getters', () => {

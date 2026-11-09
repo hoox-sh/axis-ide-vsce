@@ -18,11 +18,13 @@
 
 /**
  * Thin Pro `/run` HTTP adapter (PR-06). Injectable fetch for unit tests.
- * Body mirrors PYNE `runOnPro` / AXIS catalog REST: `{ script, data, mode, symbol? }`.
+ * Body: `{ script, data, mode, symbol?, inputs?, timeframe?, from_bar?, to_bar? }`.
+ * `timeframe` is retried off once on Flask `UNKNOWN_FIELDS` (schema landing in parallel).
  */
 
 import type { OhlcvBar } from '../host/mock-bars';
 import { withAxisClientHeader } from '../http/client';
+import { attachRunEnvelope, type RunWindow, type StrategyReport } from './run-envelope';
 
 export type RunMode = 'auto' | 'interpret' | 'compile';
 
@@ -69,9 +71,21 @@ export interface EngineHttpRequest {
   mode: RunMode;
   /** Optional chart symbol label (defaults to CHART). */
   symbol?: string;
+  /** Optional `input.*` overrides (title → value). Omitted when empty. */
+  inputs?: Record<string, unknown>;
   /**
-   * Bearer token (`pyn_…`). Optional during open beta: when absent the request
-   * still goes out with `X-AXIS-Client: ide` and no Authorization header.
+   * Chart interval (`*.axis.json` `interval` / data pick). Mapped to worker-style
+   * `1m`/`1h`/`1d` before POST. Omitted when unset/unknown.
+   */
+  timeframe?: string;
+  /** Inclusive envelope start (bar index). Omitted when unset. */
+  fromBar?: number;
+  /** Inclusive envelope end (bar index). Omitted when unset. */
+  toBar?: number;
+  /**
+   * Bearer token (`pyn_…` / `pn_…`). Optional during open beta: when absent the
+   * request still goes out with `X-AXIS-Client: ide` and no Authorization header.
+   * When present, both `Authorization: Bearer` and `X-API-Key` are sent.
    */
   apiKey?: string;
   signal?: AbortSignal;
@@ -108,6 +122,16 @@ export interface EngineRunResult {
   raw?: unknown;
   /** `profile` is set only when the engine sent a plain object — never invented. */
   meta: { ms?: number; transport: 'rest'; profile?: unknown; [key: string]: unknown };
+  plotMeta?: unknown;
+  inputs?: unknown;
+  alerts?: unknown;
+  times?: number[];
+  window?: RunWindow;
+  errorKind?: string;
+  scriptType?: string;
+  scriptName?: string;
+  overlay?: boolean;
+  strategy?: StrategyReport;
 }
 
 export const MISSING_ENDPOINT_ERROR =
@@ -127,6 +151,89 @@ export const ENGINE_REMOTE_DENIED =
   'AXIS engine endpoint must be loopback (127.0.0.1 / localhost / ::1) unless axis.engine.allowRemoteEndpoint is enabled.';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
+
+/** pyne-worker `sanitize_timeframe` set (exchange / Binance-style). */
+const WORKER_TIMEFRAMES = new Set([
+  '1m',
+  '3m',
+  '5m',
+  '15m',
+  '30m',
+  '1h',
+  '2h',
+  '4h',
+  '6h',
+  '8h',
+  '12h',
+  '1d',
+  '3d',
+  '1w',
+  '1M',
+]);
+
+/** Pine period / aliases → worker-style interval. `1M` monthly is exact-match only. */
+const TIMEFRAME_ALIASES: Record<string, string> = {
+  '1': '1m',
+  '3': '3m',
+  '5': '5m',
+  '15': '15m',
+  '30': '30m',
+  '60': '1h',
+  '120': '2h',
+  '240': '4h',
+  '360': '6h',
+  '480': '8h',
+  '720': '12h',
+  '60m': '1h',
+  '240m': '4h',
+  d: '1d',
+  w: '1w',
+};
+
+/**
+ * Map `*.axis.json` `interval` (or a Pine period) to a worker-style timeframe.
+ * Unknown / empty values are omitted (do not POST garbage).
+ */
+export function mapToWorkerTimeframe(raw: unknown): string | undefined {
+  if (typeof raw !== 'string') return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  if (WORKER_TIMEFRAMES.has(s)) return s;
+  const lower = s.toLowerCase();
+  if (lower !== '1m' && WORKER_TIMEFRAMES.has(lower)) return lower;
+  return TIMEFRAME_ALIASES[s] ?? TIMEFRAME_ALIASES[lower];
+}
+
+function finiteInt(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return undefined;
+  return Math.trunc(value);
+}
+
+function buildRunBody(req: EngineHttpRequest): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    script: req.script,
+    data: barsForPine(req.bars),
+    mode: req.mode || 'auto',
+    symbol: (req.symbol && String(req.symbol).trim()) || 'CHART',
+  };
+  if (req.inputs && Object.keys(req.inputs).length > 0) {
+    body.inputs = req.inputs;
+  }
+  const timeframe = mapToWorkerTimeframe(req.timeframe);
+  if (timeframe) body.timeframe = timeframe;
+  const fromBar = finiteInt(req.fromBar);
+  if (fromBar !== undefined) body.from_bar = fromBar;
+  const toBar = finiteInt(req.toBar);
+  if (toBar !== undefined) body.to_bar = toBar;
+  return body;
+}
+
+function isUnknownFields(mapped: EngineRunResult, parsed: unknown): boolean {
+  if (mapped.code === 'UNKNOWN_FIELDS') return true;
+  if (isPlainObject(parsed) && parsed.code === 'UNKNOWN_FIELDS') return true;
+  const msg = `${mapped.error ?? ''} ${mapped.code ?? ''}`;
+  return /UNKNOWN_FIELDS/i.test(msg);
+}
 
 /** True when the endpoint host is loopback (mirrors `checkEngineEndpoint`). */
 function isLoopbackEndpoint(endpoint: string): boolean {
@@ -303,7 +410,7 @@ export function mapEngineResponse(
       if (code) result.code = code;
     }
     if (Array.isArray(raw.drawings)) result.drawings = raw.drawings;
-    return result;
+    return attachRunEnvelope(result, raw);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
@@ -319,10 +426,33 @@ export function mapEngineResponse(
   }
 }
 
+function forceHttpError(
+  mapped: EngineRunResult,
+  parsed: unknown,
+  httpStatus: number,
+): EngineRunResult {
+  if (mapped.status !== 'success') return mapped;
+  const msg =
+    mapped.error ||
+    (isPlainObject(parsed) && typeof parsed.message === 'string'
+      ? parsed.message
+      : `HTTP ${httpStatus}`);
+  return {
+    ...mapped,
+    status: 'error',
+    error: msg,
+    diagnostics:
+      mapped.diagnostics.length > 0
+        ? mapped.diagnostics
+        : [{ message: msg, severity: 'error' }],
+  };
+}
+
 /**
  * POST `{endpoint}/run` with script + bars. Never logs the API key.
- * A key is optional during open beta: absent → no Authorization header, but
- * every request carries `X-AXIS-Client: ide`.
+ * A key is optional during open beta: absent → no Authorization / X-API-Key,
+ * but every request carries `X-AXIS-Client: ide`. Present key → both Bearer
+ * (Pro) and `X-API-Key` (worker self-host).
  */
 export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunResult> {
   const t0 = Date.now();
@@ -358,15 +488,10 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
 
     const fetchImpl = req.fetchImpl ?? globalThis.fetch.bind(globalThis);
     const url = `${endpoint}/run`;
-    const body = {
-      script: req.script,
-      data: barsForPine(req.bars),
-      mode: req.mode || 'auto',
-      symbol: (req.symbol && String(req.symbol).trim()) || 'CHART',
-    };
+    const body = buildRunBody(req);
     const headers = withAxisClientHeader({
       'Content-Type': 'application/json',
-      ...(key ? { Authorization: `Bearer ${key}` } : {}),
+      ...(key ? { Authorization: `Bearer ${key}`, 'X-API-Key': key } : {}),
     });
 
     const timeoutMs =
@@ -375,46 +500,47 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
         : ENGINE_RUN_TIMEOUT_MS;
     const signal = combineAbortSignals(req.signal, AbortSignal.timeout(timeoutMs));
 
-    const res = await fetchImpl(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal,
-    });
+    const postOnce = async (
+      payload: Record<string, unknown>,
+    ): Promise<{ ok: boolean; status: number; mapped: EngineRunResult; parsed: unknown }> => {
+      const res = await fetchImpl(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal,
+      });
+      const text = await res.text();
+      const ms = Date.now() - t0;
+      let parsed: unknown;
+      try {
+        parsed = text && text.trim() ? JSON.parse(text) : null;
+      } catch {
+        parsed = {
+          status: 'error',
+          code: 'INVALID_RESPONSE',
+          message: `HTTP ${res.status}: non-JSON body`,
+        };
+      }
+      let mapped = mapEngineResponse(parsed, { httpStatus: res.status, ms });
+      if (!res.ok) mapped = forceHttpError(mapped, parsed, res.status);
+      return { ok: res.ok, status: res.status, mapped, parsed };
+    };
 
-    const text = await res.text();
-    const ms = Date.now() - t0;
-
-    let parsed: unknown;
-    try {
-      parsed = text && text.trim() ? JSON.parse(text) : null;
-    } catch {
-      parsed = {
-        status: 'error',
-        code: 'INVALID_RESPONSE',
-        message: `HTTP ${res.status}: non-JSON body`,
-      };
+    let round = await postOnce(body);
+    // Old Flask RUN_SCHEMA rejects `timeframe` with 400 UNKNOWN_FIELDS. Retry
+    // once without it so :5002 keeps working until the schema lands.
+    if (
+      body.timeframe !== undefined &&
+      !round.ok &&
+      round.status === 400 &&
+      isUnknownFields(round.mapped, round.parsed) &&
+      !signal?.aborted
+    ) {
+      const retryBody = { ...body };
+      delete retryBody.timeframe;
+      round = await postOnce(retryBody);
     }
-
-    const mapped = mapEngineResponse(parsed, { httpStatus: res.status, ms });
-    if (!res.ok && mapped.status === 'success') {
-      // HTTP error with a success-shaped body — treat as error.
-      const msg =
-        mapped.error ||
-        (isPlainObject(parsed) && typeof parsed.message === 'string'
-          ? parsed.message
-          : `HTTP ${res.status}`);
-      return {
-        ...mapped,
-        status: 'error',
-        error: msg,
-        diagnostics:
-          mapped.diagnostics.length > 0
-            ? mapped.diagnostics
-            : [{ message: msg, severity: 'error' }],
-      };
-    }
-    return mapped;
+    return round.mapped;
   } catch (e) {
     const ms = Date.now() - t0;
     const msg = e instanceof Error ? e.message : String(e);

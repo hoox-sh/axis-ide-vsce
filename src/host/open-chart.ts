@@ -42,6 +42,11 @@ export const PINE_FILE_SUFFIXES = [
 export const OPEN_CHART_NO_PINE_MESSAGE =
   'AXIS: Open Chart needs an active Pine Script™ file (.pyne / .pine). Open a script, then run the command again.';
 
+/** Webview `drawing.setTool` value — host opens the sibling Pine source. */
+export const OPEN_CHART_SOURCE_TOOL = 'open-source';
+
+const AXIS_JSON_SUFFIX = '.axis.json';
+
 /** `vscode.ViewColumn.Beside` — keep the Pine editor visible in the current group. */
 export const OPEN_CHART_VIEW_COLUMN_BESIDE = -2;
 
@@ -82,7 +87,79 @@ export function siblingAxisJsonPath(pinePath: string): string | null {
   if (!suffix) return null;
   const stem = path.slice(0, path.length - suffix.length);
   if (!stem) return null;
-  return `${stem}.axis.json`;
+  return `${stem}${AXIS_JSON_SUFFIX}`;
+}
+
+function parentDir(filePath: string): string {
+  const i = Math.max(filePath.lastIndexOf('/'), filePath.lastIndexOf('\\'));
+  return i >= 0 ? filePath.slice(0, i) : '';
+}
+
+function joinDir(dir: string, name: string): string {
+  if (!dir) return name;
+  const sep = dir.includes('\\') && !dir.includes('/') ? '\\' : '/';
+  return `${dir}${sep}${name}`;
+}
+
+function isUnsafeRelativeName(name: string): boolean {
+  return (
+    !name ||
+    name.includes('..') ||
+    name.includes('/') ||
+    name.includes('\\') ||
+    name.includes(':')
+  );
+}
+
+/**
+ * Candidate sibling Pine paths for `rsi.axis.json` (suffix order from PYNE).
+ */
+export function siblingPineCandidates(chartPath: string): string[] {
+  const path = String(chartPath ?? '');
+  const lower = path.toLowerCase();
+  if (!lower.endsWith(AXIS_JSON_SUFFIX)) return [];
+  const stem = path.slice(0, path.length - AXIS_JSON_SUFFIX.length);
+  if (!stem) return [];
+  return PINE_FILE_SUFFIXES.map((suffix) => `${stem}${suffix}`);
+}
+
+/**
+ * Resolve `scripts[].uri` (`./rsi.pyne`) beside the chart file.
+ * Rejects absolute URLs and path traversal.
+ */
+export function chartSourceFromScripts(
+  scripts: unknown,
+  chartPath: string,
+): string | null {
+  if (!Array.isArray(scripts)) return null;
+  const dir = parentDir(String(chartPath ?? ''));
+  for (const entry of scripts) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
+      continue;
+    }
+    const uri = (entry as { uri?: unknown }).uri;
+    if (typeof uri !== 'string') continue;
+    let name = uri.trim();
+    if (!name) continue;
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(name)) continue;
+    if (name.startsWith('./')) name = name.slice(2);
+    if (isUnsafeRelativeName(name)) continue;
+    if (!isPineFilePath(name)) continue;
+    return joinDir(dir, name);
+  }
+  return null;
+}
+
+/**
+ * Preferred Pine source for a chart: linked script URI, else first suffix candidate.
+ */
+export function resolveChartSourcePath(
+  chartPath: string,
+  scripts?: unknown,
+): string | null {
+  const linked = chartSourceFromScripts(scripts, chartPath);
+  if (linked) return linked;
+  return siblingPineCandidates(chartPath)[0] ?? null;
 }
 
 /** Default chart doc for a new sibling, optionally linking the Pine basename. */

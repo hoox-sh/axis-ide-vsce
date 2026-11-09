@@ -342,6 +342,22 @@ function validatePayload(
       if (empty) return { error: empty };
       return { error: null, payload };
     }
+    case VIEW_TO_HOST.ChartApplyInputs: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'chart.applyInputs payload must be an object'),
+        };
+      }
+      if (!isPlainObject(payload.inputs)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'chart.applyInputs.inputs must be an object',
+          ),
+        };
+      }
+      return { error: null, payload };
+    }
     case VIEW_TO_HOST.ResultsFocus: {
       if (!isPlainObject(payload)) {
         return {
@@ -404,6 +420,60 @@ function validatePayload(
           error: err(
             PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
             'studio.action.args must be an object when present',
+          ),
+        };
+      }
+      return { error: null, payload };
+    }
+    case HOST_TO_VIEW.ChartDebugCursor: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(PROTOCOL_ERROR_CODES.BAD_PAYLOAD, 'chart.debugCursor payload must be an object'),
+        };
+      }
+      if (!isFiniteNumber(payload.barIndex)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'chart.debugCursor.barIndex must be a finite number',
+          ),
+        };
+      }
+      return { error: null, payload };
+    }
+    case VIEW_TO_HOST.ChartBarBreakpoint: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'chart.barBreakpoint payload must be an object',
+          ),
+        };
+      }
+      if (!isFiniteNumber(payload.barIndex)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'chart.barBreakpoint.barIndex must be a finite number',
+          ),
+        };
+      }
+      return { error: null, payload };
+    }
+    case VIEW_TO_HOST.ChartSelectTrade: {
+      if (!isPlainObject(payload)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'chart.selectTrade payload must be an object',
+          ),
+        };
+      }
+      if (!isFiniteNumber(payload.barIndex)) {
+        return {
+          error: err(
+            PROTOCOL_ERROR_CODES.BAD_PAYLOAD,
+            'chart.selectTrade.barIndex must be a finite number',
           ),
         };
       }

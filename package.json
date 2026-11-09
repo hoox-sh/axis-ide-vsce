@@ -2,7 +2,7 @@
   "name": "axis-ide",
   "displayName": "AXIS IDE",
   "description": "Lightweight AXIS chart in VS Code (custom editor *.axis.json) + Pyodide engine option. Core: chart editor + run orchestration for painting + secrets for Pro/CF worker. Depends on PYNE. Unofficial — not affiliated with TradingView, Inc.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "packageManager": "bun@1.4.4",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
@@ -30,6 +30,16 @@
   "extensionKind": [
     "workspace"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "AXIS Run posts Pine/PYNE source to a local or remote engine and is disabled in Restricted Mode."
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "AXIS Run and Open Chart need a local filesystem for sibling *.axis.json and the loopback datafeed."
+    }
+  },
   "extensionDependencies": [
     "hoox-sh.pyne"
   ],
@@ -55,6 +65,14 @@
     "onCommand:axis.secrets.setProKey",
     "onCommand:axis.secrets.setWorkerKey",
     "onCommand:axis.secrets.clear",
+    "onCommand:axis.stopRun",
+    "onCommand:axis.showRunOutput",
+    "onCommand:axis.pickData",
+    "onCommand:axis.debug.start",
+    "onCommand:axis.debug.stepBar",
+    "onCommand:axis.debug.toggleBarBreakpoint",
+    "onCommand:axis.openWalkthroughFixture",
+    "onDebug:axis-bar",
     "workspaceContains:**/*.axis.json"
   ],
   "main": "./out/extension.js",
@@ -103,6 +121,83 @@
         "command": "axis.secrets.clear",
         "title": "Clear Stored Secrets",
         "category": "AXIS"
+      },
+      {
+        "command": "axis.stopRun",
+        "title": "Stop Run",
+        "category": "AXIS",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "axis.showRunOutput",
+        "title": "Show Run Output",
+        "category": "AXIS",
+        "icon": "$(output)"
+      },
+      {
+        "command": "axis.pickData",
+        "title": "Pick Data",
+        "category": "AXIS",
+        "icon": "$(database)"
+      },
+      {
+        "command": "axis.debug.start",
+        "title": "Start Bar Debug",
+        "category": "AXIS",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "axis.debug.stepBar",
+        "title": "Step Bar",
+        "category": "AXIS",
+        "icon": "$(debug-step-over)"
+      },
+      {
+        "command": "axis.debug.toggleBarBreakpoint",
+        "title": "Toggle Bar Breakpoint",
+        "category": "AXIS",
+        "icon": "$(debug-breakpoint)"
+      },
+      {
+        "command": "axis.openWalkthroughFixture",
+        "title": "Open First-Plot Fixture",
+        "category": "AXIS"
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "pinescript"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "axis-bar",
+        "label": "AXIS Bar Debugger",
+        "languages": ["pinescript"],
+        "configurationAttributes": {
+          "launch": {
+            "required": [],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Pine / PYNE script path (optional; last AXIS run supplies bars/series)."
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "default": true,
+                "description": "Stop on bar 0."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "axis-bar",
+            "request": "launch",
+            "name": "AXIS: Bar debug",
+            "stopOnEntry": true
+          }
+        ]
       }
     ],
     "keybindings": [
@@ -110,53 +205,108 @@
         "command": "axis.runScript",
         "key": "ctrl+enter",
         "mac": "cmd+enter",
-        "when": "editorTextFocus && editorLangId == pinescript"
+        "when": "editorTextFocus && (editorLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript) && !axis.run.running"
+      },
+      {
+        "command": "axis.stopRun",
+        "key": "ctrl+enter",
+        "mac": "cmd+enter",
+        "when": "editorTextFocus && (editorLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript) && axis.run.running"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "axis.openChart",
-          "when": "resourceLangId == pinescript",
+          "when": "resourceLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript",
           "group": "navigation@1"
         },
         {
           "command": "axis.runScript",
-          "when": "resourceLangId == pinescript",
+          "when": "(resourceLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript) && !axis.run.running",
+          "group": "navigation@2"
+        },
+        {
+          "command": "axis.stopRun",
+          "when": "(resourceLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript) && axis.run.running",
           "group": "navigation@2"
         }
       ],
       "editor/context": [
         {
           "command": "axis.runScript",
-          "when": "editorLangId == pinescript",
+          "when": "editorLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript",
           "group": "axis@1"
         },
         {
           "command": "axis.openChart",
-          "when": "editorLangId == pinescript",
+          "when": "editorLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript",
           "group": "axis@2"
         }
       ],
       "explorer/context": [
         {
           "command": "axis.openChart",
-          "when": "resourceLangId == pinescript",
+          "when": "resourceLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript",
           "group": "axis@1"
         },
         {
           "command": "axis.runScript",
-          "when": "resourceLangId == pinescript",
+          "when": "resourceLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript",
           "group": "axis@2"
         }
       ],
       "commandPalette": [
         {
           "command": "axis.runScriptSilent",
-          "when": "editorLangId == pinescript"
+          "when": "editorLangId == pinescript || resourceExtname == .pyne || resourceExtname == .pine || resourceExtname == .pinev5 || resourceExtname == .pinev6 || resourceExtname == .pinescript"
+        },
+        {
+          "command": "axis.stopRun",
+          "when": "axis.run.running"
+        },
+        {
+          "command": "axis.showRunOutput"
+        },
+        {
+          "command": "axis.pickData"
+        },
+        {
+          "command": "axis.debug.start"
+        },
+        {
+          "command": "axis.debug.stepBar"
+        },
+        {
+          "command": "axis.debug.toggleBarBreakpoint"
         }
       ]
     },
+    "walkthroughs": [
+      {
+        "id": "axis.firstPlot",
+        "title": "AXIS: first plot",
+        "description": "Open the fixture strategy and Run locally. Source is not uploaded (Pyodide, uploaded=0).",
+        "steps": [
+          {
+            "id": "axis.firstPlot.open",
+            "title": "Open the fixture",
+            "description": "Opens `orb.pine` and the sibling chart.\n[Open fixture](command:axis.openWalkthroughFixture)",
+            "media": {
+              "markdown": "media/walkthrough-first-plot.md"
+            }
+          },
+          {
+            "id": "axis.firstPlot.run",
+            "title": "Run Script",
+            "description": "Press Ctrl+Enter (Cmd+Enter on macOS) or **AXIS: Run Script**. The AXIS Run channel should log `engine=pyodide … uploaded=0`.\n[Run Script](command:axis.runScript)",
+            "media": {
+              "markdown": "media/walkthrough-first-plot.md"
+            }
+          }
+        ]
+      }
+    ],
     "configuration": [
       {
         "title": "AXIS IDE",
@@ -179,8 +329,13 @@
           },
           "axis.engine.allowPyodide": {
             "type": "boolean",
-            "default": false,
-            "description": "Allow the optional Pyodide calculator engine (webview assets; default off)."
+            "default": true,
+            "markdownDescription": "Local Pyodide 0.29.5 bars-in calculator (Wave 1 default **on**). Host loads Wasm from jsDelivr into `globalStorage` (not the VSIX). `ready` after a 1+1 smoke plus pynescript Runtime smoke (trusted hoox-pyne wheel). Source is **not** uploaded (`uploaded=0`). Numba/R2/cron are not available in Wasm. Set false to force remote `/run` only."
+          },
+          "axis.engine.pyodideWheelUrl": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "Optional `https://` or `file://` URL (or filesystem path) of a trusted `hoox-pyne` / pynescript `py3-none-any` wheel for Pyodide micropip. Empty uses `media/pyodide/` then sibling `pynescript/dist`. Wasm is never this setting."
           },
           "axis.chart.historyBars": {
             "type": "number",
@@ -213,7 +368,7 @@
     "watch": "node esbuild.host.mjs --watch",
     "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
     "compile-tests": "tsc -p tsconfig.tests.json",
-    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
+    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --no-rewrite-relative-links --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
     "test:unit": "bun test --isolate",
     "test:coverage": "bun test --isolate --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",

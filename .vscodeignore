@@ -25,8 +25,14 @@ bunfig.toml
 !NOTICE
 !LICENSE
 **/.DS_Store
+.pytest_cache/**
 test-fixtures/**
-fixtures/**
+# Ship walkthrough fixtures (not test-fixtures).
+!fixtures/
+!fixtures/**
+!media/walkthrough-first-plot.md
+!media/pyodide/
+!media/pyodide/**
 coverage/**
 scripts/**
 

@@ -48,6 +48,8 @@ export interface AxisChartDocV1 {
   drawings: unknown[];
   engine: string;
   source: string;
+  /** Workspace-relative or absolute `.csv` OHLCV file (Pick Data). Empty = unused. */
+  barsPath: string;
 }
 
 export type ParseChartOk = { ok: true; doc: AxisChartDocV1 };
@@ -74,6 +76,7 @@ export function defaultChartDocument(): AxisChartDocV1 {
     drawings: [],
     engine: 'server',
     source: '',
+    barsPath: '',
   };
 }
 
@@ -132,6 +135,7 @@ export function normalizeChartDocument(raw: Record<string, unknown>): AxisChartD
     drawings: asArray(raw.drawings, base.drawings),
     engine: asString(raw.engine, base.engine),
     source: asString(raw.source, base.source),
+    barsPath: asString(raw.barsPath, base.barsPath).trim(),
   };
 }
 
@@ -173,6 +177,36 @@ export function parseChartDocument(raw: unknown): ParseChartResult {
   }
 }
 
+/** First `scripts[].inputs` map with keys, if any. */
+export function scriptInputsFromDoc(doc: AxisChartDocV1): Record<string, unknown> | undefined {
+  try {
+    const scripts = Array.isArray(doc.scripts) ? doc.scripts : [];
+    for (const entry of scripts) {
+      if (!isPlainObject(entry) || !isPlainObject(entry.inputs)) continue;
+      if (Object.keys(entry.inputs).length === 0) continue;
+      return { ...entry.inputs };
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Merge title→value overrides into the first script (creates one if missing). */
+export function mergeScriptInputs(
+  doc: AxisChartDocV1,
+  inputs: Record<string, unknown>,
+): AxisChartDocV1 {
+  const prev = Array.isArray(doc.scripts) ? doc.scripts : [];
+  const scripts = [...prev];
+  const first = isPlainObject(scripts[0]) ? { ...scripts[0] } : { id: 'script', uri: '', inputs: {} };
+  const prior = isPlainObject(first.inputs) ? first.inputs : {};
+  first.inputs = { ...prior, ...inputs };
+  if (scripts.length === 0) scripts.push(first);
+  else scripts[0] = first;
+  return { ...doc, scripts };
+}
+
 /** Serialize a chart document (stable key order, trailing newline). */
 export function serializeChartDocument(doc: AxisChartDocV1): string {
   const payload: AxisChartDocV1 = {
@@ -189,6 +223,7 @@ export function serializeChartDocument(doc: AxisChartDocV1): string {
     drawings: doc.drawings,
     engine: doc.engine,
     source: doc.source,
+    barsPath: doc.barsPath,
   };
   return `${JSON.stringify(payload, null, 2)}\n`;
 }

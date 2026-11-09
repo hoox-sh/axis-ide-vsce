@@ -1,0 +1,7 @@
+//@version=6
+// AXIS walkthrough fixture — first-party. Not a TradingView® template.
+indicator("AXIS first plot", overlay=true)
+len = input.int(14, "Length")
+src = input.source(close, "Source")
+ma = ta.sma(src, len)
+plot(ma, "SMA", color=#939FFF)

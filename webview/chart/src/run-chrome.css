@@ -1,0 +1,175 @@
+/* Copyright (C) 2026 jango_blockchained
+ * SPDX-License-Identifier: AGPL-3.0-only
+ *
+ * Run chip, inputs form, and bar-step cursor. Not strategy or plot paint.
+ */
+
+.chart-run-status {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding: 0 8px;
+  border: var(--axis-border-w, 1px) solid transparent;
+  border-radius: var(--axis-radius-chip, 2px);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.chart-run-status[hidden] {
+  display: none;
+}
+
+.chart-run-status[data-state='running'] {
+  background: var(--axis-btn-bg, var(--vscode-button-background, #0e639c));
+  color: var(--axis-btn-fg, var(--vscode-button-foreground, #fff));
+}
+
+.chart-run-status[data-state='stopped'] {
+  border-color: var(--axis-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
+}
+
+.chart-run-status[data-state='error'] {
+  color: var(--axis-down, var(--vscode-errorForeground, #f14c4c));
+}
+
+.chart-shell[data-run-status='running'] {
+  --axis-run-pulse-color: var(--axis-accent, var(--vscode-focusBorder, #007acc));
+  animation: axis-run-pulse 300ms ease-out;
+}
+
+.chart-shell[data-run-status='stopped'] {
+  --axis-run-pulse-color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
+  animation: axis-run-pulse 300ms ease-out;
+}
+
+.chart-debug {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--axis-gap-xs, 4px);
+  flex: 0 0 auto;
+}
+
+.chart-debug__readout {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--axis-text, var(--vscode-editor-foreground, #e0e0e0));
+  white-space: nowrap;
+}
+
+.chart-debug__readout[hidden] {
+  display: none;
+}
+
+.chart-debug-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid var(--axis-accent, var(--vscode-focusBorder, #007acc));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--vscode-focusBorder, #007acc) 40%, transparent);
+  z-index: 5;
+  pointer-events: none;
+}
+
+.chart-debug-cursor[hidden] {
+  display: none;
+}
+
+.chart-debug-cursor.is-fallback {
+  border-left-style: dashed;
+}
+
+.chart-debug-cursor__label {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 1px 6px;
+  border: var(--axis-border-w, 1px) solid var(--axis-accent, var(--vscode-focusBorder, #007acc));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: var(--axis-bg-elev, var(--vscode-editorWidget-background, #10131b));
+  color: var(--axis-text, var(--vscode-editor-foreground, #e0e0e0));
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chart-inputs__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.chart-inputs__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  max-width: 100%;
+}
+
+.chart-inputs__label {
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.chart-inputs__value {
+  box-sizing: border-box;
+  min-width: 4.5em;
+  max-width: 14em;
+  min-height: 22px;
+  margin: 0;
+  padding: 2px 6px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border, var(--vscode-input-border, rgba(128, 128, 128, 0.35)));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: var(--vscode-input-background, transparent);
+  color: var(--axis-text, var(--vscode-input-foreground, inherit));
+  font: inherit;
+  font-size: 11px;
+}
+
+.chart-inputs__value:focus-visible {
+  outline: none;
+  box-shadow: var(
+    --axis-focus-ring,
+    0 0 0 3px color-mix(in oklch, var(--vscode-focusBorder, #007acc) 18%, transparent)
+  );
+}
+
+.chart-inputs__check {
+  width: 14px;
+  min-width: 14px;
+  max-width: none;
+  min-height: 14px;
+  padding: 0;
+  accent-color: var(--axis-accent, var(--vscode-focusBorder, #007acc));
+}
+
+.chart-inputs__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+#chart-inputs-apply:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+#chart-inputs[hidden] {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-shell[data-run-status='running'],
+  .chart-shell[data-run-status='stopped'] {
+    animation: none;
+  }
+}

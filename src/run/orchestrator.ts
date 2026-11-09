@@ -21,7 +21,6 @@
  */
 
 import type { OhlcvBar } from '../host/mock-bars';
-import type { ChartFullPayload } from '../protocol';
 import { PRO_KEY_ERROR, WORKER_KEY_ERROR } from '../secrets/slots';
 import { type ValidateResult, validateProKey, validateWorkerKey } from '../secrets/validate';
 import type { ChartNotifyMessage } from './chart-bus';
@@ -33,6 +32,9 @@ import {
   type RunMode,
   postEngineRun,
 } from './engine-http';
+import { scanPineLookahead } from '../host/lookahead';
+import { formatPyodideRunBanner } from '../host/pyodide-profile';
+import { chartFullFromRunResult, withLookahead } from './run-envelope';
 import { scrubSecrets } from './scrub';
 
 export type { RunMode };
@@ -50,10 +52,21 @@ export interface RunRequest {
   baseSeq?: number;
   /** Optional symbol label for the Pro body (defaults from seriesKey). */
   symbol?: string;
+  /** Optional `input.*` overrides (title → value). */
+  inputs?: Record<string, unknown>;
+  /** Worker-style timeframe (`1m`/`1h`/`1d`). Omitted when unset. */
+  timeframe?: string;
+  /** Inclusive envelope start. Omitted when unset. */
+  fromBar?: number;
+  /** Inclusive envelope end. Omitted when unset. */
+  toBar?: number;
 }
 
 export const UNSUPPORTED_ENGINE_ERROR =
-  'AXIS Run supports engine id "server" only in this release (pyne-worker lands later).';
+  'AXIS Run supports engine id "server" or "pyodide" (when axis.engine.allowPyodide) in this release (pyne-worker lands later).';
+
+export const PYODIDE_DISABLED_ERROR =
+  'AXIS Pyodide calculator is off. Set axis.engine.allowPyodide to true (Wasm loads from jsDelivr, not the VSIX).';
 
 export interface RunSecrets {
   /** Resolve Pro (`pyn_…`) key. Never-throw. */
@@ -87,6 +100,14 @@ export interface RunDeps {
   allowRemote?: boolean;
   /** Optional injectable fetch (tests). */
   fetchImpl?: FetchLike;
+  /** When `engineId === 'pyodide'`, bars-in calculator (CDN Wasm). */
+  pyodideAllowed?: boolean;
+  runPyodide?: (req: {
+    script: string;
+    bars: OhlcvBar[];
+    mode: RunMode;
+    signal?: AbortSignal;
+  }) => Promise<EngineRunResult>;
   bus: {
     notifyChart(message: ChartNotifyMessage): void;
   };
@@ -143,6 +164,33 @@ function safeLog(output: RunOutput, line: string): void {
   }
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Format one capped engine log item for the AXIS Run output channel. */
+function formatEngineLogLine(item: unknown): string | undefined {
+  if (typeof item === 'string') {
+    const s = item.trim();
+    return s || undefined;
+  }
+  if (!isPlainObject(item)) return undefined;
+  const message = String(item.message ?? item.msg ?? item.text ?? '').trim();
+  const rawLevel = String(item.level ?? item.severity ?? '').trim().toLowerCase();
+  const level = rawLevel || 'info';
+  if (message) return `log.${level} ${message}`;
+  if (rawLevel) return `log.${level}`;
+  return undefined;
+}
+
+function dumpEngineLogs(output: RunOutput, logs: unknown): void {
+  if (!Array.isArray(logs)) return;
+  for (const item of logs) {
+    const line = formatEngineLogLine(item);
+    if (line) safeLog(output, line);
+  }
+}
+
 export class RunOrchestrator {
   private epoch = 0;
   private seq = 0;
@@ -184,6 +232,27 @@ export class RunOrchestrator {
         deps.output,
         `run start epoch=${my} engine=${req.engineId} series=${req.seriesKey} bars=${req.bars.length} focus=${req.focus}`,
       );
+
+      if (req.engineId === 'pyodide') {
+        if (deps.pyodideAllowed !== true || typeof deps.runPyodide !== 'function') {
+          const error = PYODIDE_DISABLED_ERROR;
+          this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
+          safeLog(deps.output, `run error epoch=${my}: ${error}`);
+          return { ok: false, epoch: my, reason: 'error', error };
+        }
+        if (signal?.aborted) {
+          safeLog(deps.output, `run aborted epoch=${my}`);
+          return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted' };
+        }
+        const result = await deps.runPyodide({
+          script: req.script,
+          bars: req.bars,
+          mode: req.mode || 'auto',
+          signal,
+        });
+        dumpEngineLogs(deps.output, result.logs);
+        return this.finishRun(req, deps, my, started, result, signal);
+      }
 
       if (req.engineId && req.engineId !== 'server') {
         const error = UNSUPPORTED_ENGINE_ERROR;
@@ -239,58 +308,13 @@ export class RunOrchestrator {
         allowRemote: deps.allowRemote,
         signal,
         fetchImpl: deps.fetchImpl,
+        inputs: req.inputs,
+        timeframe: req.timeframe,
+        fromBar: req.fromBar,
+        toBar: req.toBar,
       });
-
-      if (my !== this.epoch) {
-        safeLog(deps.output, `drop stale epoch ${my}`);
-        return { ok: false, epoch: my, reason: 'stale', result };
-      }
-
-      if (signal?.aborted) {
-        safeLog(deps.output, `run aborted epoch=${my}`);
-        return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted', result };
-      }
-
-      const ms = result.meta.ms ?? Date.now() - started;
-      const scrubbedError = result.error ? scrubSecrets(result.error) : undefined;
-
-      if (result.status === 'error') {
-        const diags = toRunDiagnostics(result.diagnostics);
-        this.setDiags(
-          deps,
-          req.uri,
-          diags.length > 0
-            ? diags
-            : [{ message: scrubbedError || 'Engine error', severity: 'error' }],
-        );
-        safeLog(
-          deps.output,
-          `run error epoch=${my} ms=${Math.round(ms)} ${result.code ? `code=${result.code} ` : ''}${scrubbedError ?? ''}`.trim(),
-        );
-        return { ok: false, epoch: my, reason: 'error', error: scrubbedError, result };
-      }
-
-      // Success — clear prior compile diagnostics for this URI only; paint chart.full.
-      this.setDiags(deps, req.uri, []);
-      const base = typeof req.baseSeq === 'number' && Number.isFinite(req.baseSeq) ? req.baseSeq : 0;
-      const nextSeq = Math.max(this.seq, base) + 1;
-      this.seq = nextSeq;
-      const full: ChartFullPayload = {
-        bars: req.bars,
-        plots: result.plots,
-        series: result.series,
-        drawings: result.drawings,
-        seq: nextSeq,
-      };
-      deps.bus.notifyChart({
-        type: 'chart.full',
-        payload: full,
-        seriesKey: req.seriesKey,
-      });
-
-      const runId = `run-${my}`;
-      safeLog(deps.output, `run ok epoch=${my} ms=${Math.round(ms)} runId=${runId} seq=${nextSeq}`);
-      return { ok: true, epoch: my, runId, result, seq: nextSeq };
+      dumpEngineLogs(deps.output, result.logs);
+      return this.finishRun(req, deps, my, started, result, signal);
     } catch (e) {
       if (my !== this.epoch) {
         safeLog(deps.output, `drop stale epoch ${my}`);
@@ -307,6 +331,69 @@ export class RunOrchestrator {
       // `AbortController.abort()` is specified to never throw.
       localAbort.abort();
     }
+  }
+
+  private finishRun(
+    req: RunRequest,
+    deps: RunDeps,
+    my: number,
+    started: number,
+    result: EngineRunResult,
+    signal?: AbortSignal,
+  ): RunOutcome {
+    if (my !== this.epoch) {
+      safeLog(deps.output, `drop stale epoch ${my}`);
+      return { ok: false, epoch: my, reason: 'stale', result };
+    }
+
+    if (signal?.aborted) {
+      safeLog(deps.output, `run aborted epoch=${my}`);
+      return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted', result };
+    }
+
+    const ms = result.meta.ms ?? Date.now() - started;
+    const scrubbedError = result.error ? scrubSecrets(result.error) : undefined;
+
+    if (result.status === 'error') {
+      const diags = toRunDiagnostics(result.diagnostics);
+      this.setDiags(
+        deps,
+        req.uri,
+        diags.length > 0
+          ? diags
+          : [{ message: scrubbedError || 'Engine error', severity: 'error' }],
+      );
+      safeLog(
+        deps.output,
+        `run error epoch=${my} ms=${Math.round(ms)} ${result.code ? `code=${result.code} ` : ''}${result.errorKind ? `kind=${result.errorKind} ` : ''}${scrubbedError ?? ''}`.trim(),
+      );
+      return { ok: false, epoch: my, reason: 'error', error: scrubbedError, result };
+    }
+
+    this.setDiags(deps, req.uri, []);
+    const base = typeof req.baseSeq === 'number' && Number.isFinite(req.baseSeq) ? req.baseSeq : 0;
+    const nextSeq = Math.max(this.seq, base) + 1;
+    this.seq = nextSeq;
+    const full = withLookahead(
+      chartFullFromRunResult(result, req.bars, nextSeq),
+      scanPineLookahead(req.script),
+    );
+    deps.bus.notifyChart({
+      type: 'chart.full',
+      payload: full,
+      seriesKey: req.seriesKey,
+    });
+
+    const runId = `run-${my}`;
+    if (req.engineId === 'pyodide') {
+      const wheel =
+        typeof result.meta?.wheel === 'string' && result.meta.wheel.trim()
+          ? result.meta.wheel.trim()
+          : 'hoox_pyne';
+      safeLog(deps.output, formatPyodideRunBanner(wheel));
+    }
+    safeLog(deps.output, `run ok epoch=${my} ms=${Math.round(ms)} runId=${runId} seq=${nextSeq}`);
+    return { ok: true, epoch: my, runId, result, seq: nextSeq };
   }
 
   private setDiags(
