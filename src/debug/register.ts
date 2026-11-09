@@ -27,6 +27,7 @@ import {
   type ExtensionContext,
   debug,
   EventEmitter,
+  window,
 } from 'vscode';
 import { notifyChart } from '../run/chart-bus';
 import { AxisBarDebugSession, AXIS_BAR_DAP_TYPE, type DapRequest } from './bar-adapter';
@@ -66,6 +67,16 @@ class InlineAxisBarAdapter implements DebugAdapter {
   }
 }
 
+const BAR_DEBUG_NAME = 'AXIS: Step bars';
+
+function noteIfNoBars(): void {
+  const count = lastBarDebugLaunch()?.bars.length ?? 0;
+  if (count > 0) return;
+  void window.showInformationMessage(
+    'AXIS: No bars to step. Run the script, then Start. Step moves one bar. This is not a source-line debugger.',
+  );
+}
+
 /** Register inline DAP factory + keep one live session for commands. */
 export function registerAxisBarDebugger(context: ExtensionContext): AxisBarDebugHandle {
   let live: AxisBarDebugSession | undefined;
@@ -80,22 +91,31 @@ export function registerAxisBarDebugger(context: ExtensionContext): AxisBarDebug
   context.subscriptions.push(factory);
   return {
     session: () => live,
-    start: () =>
-      debug.startDebugging(undefined, {
+    start: () => {
+      noteIfNoBars();
+      return debug.startDebugging(undefined, {
         type: AXIS_BAR_DAP_TYPE,
-        name: 'AXIS: Bar debug',
+        name: BAR_DEBUG_NAME,
         request: 'launch',
         stopOnEntry: true,
-      }),
+      });
+    },
     stepBar: () => {
-      live?.handle({ seq: Date.now(), type: 'request', command: 'next' });
+      if (!live) {
+        void window.showInformationMessage(
+          'AXIS: Start parks on the first bar. Step moves one bar after that.',
+        );
+        return;
+      }
+      live.handle({ seq: Date.now(), type: 'request', command: 'next' });
     },
     toggleBarBreakpoint: (index: number) => live?.toggleBarBreakpoint(index) ?? false,
     seekToBar: async (index: number) => {
       if (!live) {
+        noteIfNoBars();
         await debug.startDebugging(undefined, {
           type: AXIS_BAR_DAP_TYPE,
-          name: 'AXIS: Bar debug',
+          name: BAR_DEBUG_NAME,
           request: 'launch',
           stopOnEntry: false,
         });

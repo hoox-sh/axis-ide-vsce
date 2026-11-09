@@ -125,6 +125,12 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
         <span id="chart-alerts-chip" class="chart-plugins__chip" hidden></span>
         <div id="chart-plugins" class="chart-plugins" hidden aria-label="Active plugins"></div>
       </div>
+      <span id="chart-run-status" class="chart-run-status" role="status" hidden></span>
+      <div id="chart-debug" class="chart-debug" role="group" aria-label="Bar step">
+        <button type="button" id="chart-debug-start" class="chart-toolbar__btn" data-chrome="debug-start" title="Start on the first bar" aria-label="Start on the first bar">Start</button>
+        <button type="button" id="chart-debug-step" class="chart-toolbar__btn" data-chrome="debug-step" title="Step one bar" aria-label="Step one bar">Step</button>
+        <span id="chart-debug-readout" class="chart-debug__readout" hidden></span>
+      </div>
       <button type="button" id="chart-toggle-inputs" class="chart-toolbar__btn" data-chrome="inputs" aria-pressed="false" hidden>Inputs</button>
       <button type="button" id="chart-toggle-strategy" class="chart-toolbar__btn" data-chrome="strategy" aria-pressed="false" hidden>Strategy</button>
     </div>
@@ -145,16 +151,32 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
         <p class="chart-host__placeholder">AXIS chart host</p>
       </div>
       <svg id="drawing-overlay" class="drawing-overlay" aria-hidden="true"></svg>
+      <div id="chart-debug-cursor" class="chart-debug-cursor" hidden aria-hidden="true">
+        <span id="chart-debug-cursor-label" class="chart-debug-cursor__label"></span>
+      </div>
       <div id="chart-engine-tables" class="chart-engine-tables" hidden></div>
     </div>
-    <div id="chart-inputs" class="chart-panel" hidden>
-      <div id="chart-inputs-fields" class="chart-panel__fields"></div>
-      <button type="button" id="chart-inputs-apply" class="chart-toolbar__btn">Apply &amp; Run</button>
+    <div id="chart-inputs" class="chart-panel chart-inputs" hidden>
+      <div id="chart-inputs-fields" class="chart-inputs__fields"></div>
+      <div class="chart-inputs__actions">
+        <button type="button" id="chart-inputs-apply" class="chart-toolbar__btn" title="Apply these values and run">Apply</button>
+      </div>
     </div>
     <div id="chart-strategy" class="chart-panel" hidden>
-      <div id="chart-strategy-stats" class="chart-panel__stats"></div>
-      <button type="button" id="chart-strategy-csv" class="chart-toolbar__btn">CSV</button>
-      <div id="chart-strategy-table" class="chart-panel__table"></div>
+      <header class="chart-strategy__head">
+        <p class="chart-strategy__name">Strategy</p>
+        <p id="chart-strategy-stats" class="chart-panel__stats chart-strategy__net" aria-live="polite">—</p>
+        <button type="button" id="chart-strategy-csv" class="chart-toolbar__btn">CSV</button>
+      </header>
+      <div id="chart-strategy-equity" class="chart-strategy__equity" hidden></div>
+      <div id="chart-strategy-metrics" class="chart-strategy__metrics"></div>
+      <div id="chart-strategy-trips" class="chart-strategy__trips" hidden></div>
+      <div class="chart-strategy__filters" role="group" aria-label="Trade filter">
+        <button type="button" class="chart-strategy__chip is-active" data-strategy-filter="all" aria-pressed="true">All</button>
+        <button type="button" class="chart-strategy__chip" data-strategy-filter="entries" aria-pressed="false">Entries</button>
+        <button type="button" class="chart-strategy__chip" data-strategy-filter="exits" aria-pressed="false">Exits</button>
+      </div>
+      <div id="chart-strategy-table" class="chart-panel__table chart-strategy__table"></div>
     </div>
   </div>
   <script src="${safeScript}"></script>

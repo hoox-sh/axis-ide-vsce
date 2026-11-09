@@ -17,7 +17,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
-import { abortInflightRun, beginCommandAbortController } from './run-control';
+import {
+  abortInflightRun,
+  beginCommandAbortController,
+  isRunChromeBusy,
+  runChromeLabel,
+} from './run-control';
 
 describe('run control', () => {
   test('abortInflightRun is idle when missing or already aborted', () => {
@@ -41,6 +46,18 @@ describe('run control', () => {
     expect(next.signal.aborted).toBe(false);
     const afterUndefined = beginCommandAbortController(undefined);
     expect(afterUndefined).toBeInstanceOf(AbortController);
+  });
+
+  test('run chrome labels name running, stopped, and failed', () => {
+    expect(runChromeLabel('running')).toBe('Running…');
+    expect(runChromeLabel('stopped')).toBe('Stopped');
+    expect(runChromeLabel('error')).toBe('Run failed');
+    expect(runChromeLabel('ok')).toBe('');
+    expect(runChromeLabel('idle')).toBe('');
+    expect(runChromeLabel('plugins')).toBe('');
+    expect(isRunChromeBusy('running')).toBe(true);
+    expect(isRunChromeBusy('stopped')).toBe(false);
+    expect(isRunChromeBusy('ok')).toBe(false);
   });
 
   test('abort helpers swallow abort() throws', () => {

@@ -127,7 +127,22 @@ describe('AXIS bar DAP (type axis-bar, not pyne)', () => {
     expect(s.handle({ nope: true })).toEqual([]);
     s.handle(req('launch', 1, { bars: BARS }));
     expect(firstResponse(s.handle(req('threads', 2))).success).toBe(true);
-    expect(firstResponse(s.handle(req('stackTrace', 3))).success).toBe(true);
+    const stack = firstResponse(s.handle(req('stackTrace', 3)));
+    expect(stack.success).toBe(true);
+    const frame = (
+      stack.body as {
+        stackFrames: Array<{ name: string; source?: { path?: string; name?: string } }>;
+      }
+    ).stackFrames[0];
+    expect(frame?.name).toBe('Bar 1 of 3');
+    expect(frame?.source?.name).toBe('bars');
+    expect(frame?.source?.path).toBeUndefined();
+    const launchNote = s.handle(req('launch', 9, { bars: BARS, stopOnEntry: false }));
+    expect(
+      events(launchNote).some(
+        (e) => e.event === 'output' && String((e.body as { output?: string }).output).includes('Step moves one bar'),
+      ),
+    ).toBe(true);
     expect(firstResponse(s.handle(req('scopes', 4))).success).toBe(true);
     expect(firstResponse(s.handle(req('variables', 5, { variablesReference: 9 }))).success).toBe(true);
     expect(events(s.handle(req('pause', 6))).some((e) => e.event === 'stopped')).toBe(true);

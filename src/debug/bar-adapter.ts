@@ -152,7 +152,7 @@ export class AxisBarDebugSession {
     if (cmd === 'setBreakpoints') return this.setBreakpoints(req);
     if (cmd === 'configurationDone') return this.ok(req, {});
     if (cmd === 'threads') {
-      return this.ok(req, { threads: [{ id: AXIS_BAR_THREAD_ID, name: 'AXIS bar' }] });
+      return this.ok(req, { threads: [{ id: AXIS_BAR_THREAD_ID, name: 'Bars' }] });
     }
     if (cmd === 'stackTrace') return this.stackTrace(req);
     if (cmd === 'scopes') return this.scopes(req);
@@ -197,13 +197,35 @@ export class AxisBarDebugSession {
     ];
   }
 
+  /** "Bar 3 of 120" — a candle, not a source line. */
+  private barCaption(): string {
+    const count = this.bars.length;
+    if (count <= 0) return 'No bars';
+    return `Bar ${this.barIndex + 1} of ${count}`;
+  }
+
+  private hint(text: string): DapEvent {
+    return {
+      seq: this.nextSeq(),
+      type: 'event',
+      event: 'output',
+      body: { category: 'console', output: `${text}\n` },
+    };
+  }
+
   private stopped(reason: string): DapEvent {
     this.emitCursor(reason);
     return {
       seq: this.nextSeq(),
       type: 'event',
       event: 'stopped',
-      body: { reason, threadId: AXIS_BAR_THREAD_ID, allThreadsStopped: true },
+      body: {
+        reason,
+        description: this.barCaption(),
+        text: 'Step moves one bar.',
+        threadId: AXIS_BAR_THREAD_ID,
+        allThreadsStopped: true,
+      },
     };
   }
 
@@ -238,7 +260,11 @@ export class AxisBarDebugSession {
     this.series = isPlainObject(args.series) ? (args.series as Record<string, (number | null)[]>) : {};
     this.barIndex = 0;
     const stopOnEntry = args.stopOnEntry !== false;
-    const out: DapMessage[] = [...this.ok(req, {})];
+    const hint =
+      this.bars.length > 0
+        ? `${this.barCaption()}. Step moves one bar. Not a source-line debugger.`
+        : 'No bars yet. Run the script, then Start. Step moves one bar.';
+    const out: DapMessage[] = [...this.ok(req, {}), this.hint(hint)];
     if (stopOnEntry) out.push(this.stopped('entry'));
     return out;
   }
@@ -263,10 +289,10 @@ export class AxisBarDebugSession {
       stackFrames: [
         {
           id: 1,
-          name: `bar ${this.barIndex}`,
-          line: this.barIndex + 1,
+          name: this.barCaption(),
+          line: 1,
           column: 1,
-          source: { name: 'chart', path: 'axis-bar' },
+          source: { name: 'bars', presentationHint: 'deemphasize' },
         },
       ],
       totalFrames: 1,

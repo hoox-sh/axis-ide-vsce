@@ -85,6 +85,69 @@ function clearSvg(svg: SVGSVGElement): void {
   while (svg.firstChild) svg.removeChild(svg.firstChild);
 }
 
+function channelHex(color: string): [number, number, number] | null {
+  const hex = color.trim();
+  if (/^#[0-9a-f]{6}$/i.test(hex)) {
+    return [
+      Number.parseInt(hex.slice(1, 3), 16),
+      Number.parseInt(hex.slice(3, 5), 16),
+      Number.parseInt(hex.slice(5, 7), 16),
+    ];
+  }
+  if (/^#[0-9a-f]{3}$/i.test(hex)) {
+    return [
+      Number.parseInt(hex[1] + hex[1], 16),
+      Number.parseInt(hex[2] + hex[2], 16),
+      Number.parseInt(hex[3] + hex[3], 16),
+    ];
+  }
+  return null;
+}
+
+function luma(color: string): number | null {
+  const rgb = channelHex(color);
+  if (!rgb) return null;
+  return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+}
+
+/** Opaque hex becomes rgba so boxes and fills don't paint out the candles. */
+function translucent(color: string | undefined, alpha: number): string | null {
+  if (!color) return null;
+  const trimmed = color.trim();
+  if (/^(rgba?|hsla?)\(/i.test(trimmed)) return trimmed;
+  const rgb = channelHex(trimmed);
+  if (!rgb) return trimmed;
+  return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+}
+
+/** Near-black strokes disappear on the void chart. */
+function readableStroke(color: string | undefined, fallback: string): string | undefined {
+  if (!color) return undefined;
+  const y = luma(color);
+  if (y === null) return color;
+  return y < 0.22 ? fallback : color;
+}
+
+function labelInk(text: string | undefined, bg: string | undefined): string {
+  const bgLuma = bg ? luma(bg) : 0.07;
+  const lightBg = (bgLuma ?? 0.07) >= 0.55;
+  const fallback = lightBg ? '#12141a' : '#e8eaee';
+  if (!text) return fallback;
+  const y = luma(text);
+  if (y === null) return text;
+  if (!lightBg && y < 0.45) return fallback;
+  if (lightBg && y > 0.62) return fallback;
+  return text;
+}
+
+function dashArray(style?: string): string | undefined {
+  const raw = String(style ?? '').toLowerCase();
+  if (!raw) return undefined;
+  if (raw.includes('dot')) return '1 3';
+  if (raw.includes('dash')) return '5 4';
+  return undefined;
+}
+
 function appendLine(
   svg: SVGSVGElement,
   x1: number,
@@ -94,16 +157,37 @@ function appendLine(
   className: string,
   color?: string,
   width?: number,
+  dash?: string,
 ): void {
+  const hit = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+  hit.setAttribute('x1', String(x1));
+  hit.setAttribute('y1', String(y1));
+  hit.setAttribute('x2', String(x2));
+  hit.setAttribute('y2', String(y2));
+  hit.setAttribute('class', 'drawing-overlay__hit');
+  svg.appendChild(hit);
   const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   line.setAttribute('x1', String(x1));
   line.setAttribute('y1', String(y1));
   line.setAttribute('x2', String(x2));
   line.setAttribute('y2', String(y2));
   line.setAttribute('class', className);
-  if (color) line.setAttribute('stroke', color);
-  if (width) line.setAttribute('stroke-width', String(width));
+  const stroke = readableStroke(color, '#e8eaee');
+  if (stroke) line.setAttribute('stroke', stroke);
+  if (width && width > 0) {
+    line.setAttribute('stroke-width', String(Math.min(4, Math.max(1, width))));
+  }
+  if (dash) line.setAttribute('stroke-dasharray', dash);
   svg.appendChild(line);
+}
+
+function appendHandle(svg: SVGSVGElement, x: number, y: number): void {
+  const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  handle.setAttribute('cx', String(x));
+  handle.setAttribute('cy', String(y));
+  handle.setAttribute('r', '3.5');
+  handle.setAttribute('class', 'drawing-overlay__handle');
+  svg.appendChild(handle);
 }
 
 function chartTime(raw: number | undefined): number | null {
@@ -135,7 +219,21 @@ function paintEngineDrawing(
         price: pts[i + 1].price,
       });
       if (!a || !b) continue;
-      appendLine(svg, a.x, a.y, b.x, b.y, 'drawing-overlay__engine', d.color, d.width);
+      appendLine(
+        svg,
+        a.x,
+        a.y,
+        b.x,
+        b.y,
+        'drawing-overlay__engine',
+        d.color,
+        d.width,
+        dashArray(d.style),
+      );
+      if (type === 'line') {
+        appendHandle(svg, a.x, a.y);
+        appendHandle(svg, b.x, b.y);
+      }
     }
     return;
   }
@@ -146,23 +244,42 @@ function paintEngineDrawing(
     const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
     rect.setAttribute('x', String(Math.min(a.x, b.x)));
     rect.setAttribute('y', String(Math.min(a.y, b.y)));
-    rect.setAttribute('width', String(Math.abs(b.x - a.x)));
-    rect.setAttribute('height', String(Math.abs(b.y - a.y)));
+    rect.setAttribute('width', String(Math.max(1, Math.abs(b.x - a.x))));
+    rect.setAttribute('height', String(Math.max(1, Math.abs(b.y - a.y))));
     rect.setAttribute('class', 'drawing-overlay__box');
-    if (d.bgcolor) rect.setAttribute('fill', d.bgcolor);
-    if (d.color) rect.setAttribute('stroke', d.color);
+    const fill = translucent(d.bgcolor, 0.18);
+    if (fill) rect.setAttribute('fill', fill);
+    const stroke = readableStroke(d.color, '#6ee7f5');
+    if (stroke) rect.setAttribute('stroke', stroke);
+    rect.setAttribute('stroke-width', '1.25');
     svg.appendChild(rect);
     return;
   }
   if (type === 'label' && d.t1 !== undefined && d.p1 !== undefined) {
     const p = coords.toPixel({ time: chartTime(d.t1) ?? d.t1, price: d.p1 });
     if (!p) return;
+    const textValue = (d.text ?? '').trim();
+    if (!textValue) return;
+    const width = Math.max(16, textValue.length * 7 + 10);
+    const height = 18;
+    const x = p.x + 6;
+    const y = p.y - height - 4;
+    const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    bg.setAttribute('x', String(x));
+    bg.setAttribute('y', String(y));
+    bg.setAttribute('width', String(width));
+    bg.setAttribute('height', String(height));
+    bg.setAttribute('rx', '2');
+    bg.setAttribute('class', 'drawing-overlay__label-bg');
+    const bgFill = translucent(d.bgcolor, 0.92);
+    if (bgFill) bg.setAttribute('fill', bgFill);
+    svg.appendChild(bg);
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-    text.setAttribute('x', String(p.x));
-    text.setAttribute('y', String(p.y));
+    text.setAttribute('x', String(x + 5));
+    text.setAttribute('y', String(y + 13));
     text.setAttribute('class', 'drawing-overlay__label');
-    if (d.textcolor) text.setAttribute('fill', d.textcolor);
-    text.textContent = d.text ?? '';
+    text.setAttribute('fill', labelInk(d.textcolor, d.bgcolor));
+    text.textContent = textValue;
     svg.appendChild(text);
     return;
   }
@@ -193,7 +310,10 @@ function paintEngineDrawing(
         .join(' '),
     );
     poly.setAttribute('class', 'drawing-overlay__fill');
-    if (d.bgcolor || d.color) poly.setAttribute('fill', d.bgcolor || d.color || '');
+    poly.setAttribute('fill', translucent(d.bgcolor || d.color, 0.2) ?? 'rgba(110,231,245,0.18)');
+    const stroke = readableStroke(d.color || d.bgcolor, '#6ee7f5');
+    if (stroke) poly.setAttribute('stroke', stroke);
+    poly.setAttribute('stroke-width', '1');
     svg.appendChild(poly);
   }
 }
@@ -210,19 +330,21 @@ export function createDrawingOverlay(
       if (disposed) return;
       clearSvg(svg);
       const coords = getCoords();
-      for (const d of drawings) {
-        if (d.tool !== TOOL_TRENDLINE || d.points.length < 2) continue;
-        const a = coords.toPixel(d.points[0]);
-        const b = coords.toPixel(d.points[1]);
-        if (!a || !b) continue;
-        appendLine(svg, a.x, a.y, b.x, b.y, 'drawing-overlay__line');
-      }
       for (const ed of engine ?? []) {
         try {
           paintEngineDrawing(svg, ed, coords);
         } catch {
           // skip hostile
         }
+      }
+      for (const d of drawings) {
+        if (d.tool !== TOOL_TRENDLINE || d.points.length < 2) continue;
+        const a = coords.toPixel(d.points[0]);
+        const b = coords.toPixel(d.points[1]);
+        if (!a || !b) continue;
+        appendLine(svg, a.x, a.y, b.x, b.y, 'drawing-overlay__line');
+        appendHandle(svg, a.x, a.y);
+        appendHandle(svg, b.x, b.y);
       }
       if (draft) {
         const p = coords.toPixel(draft);

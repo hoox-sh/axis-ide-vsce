@@ -368,7 +368,7 @@
     "watch": "node esbuild.host.mjs --watch",
     "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
     "compile-tests": "tsc -p tsconfig.tests.json",
-    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
+    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --no-rewrite-relative-links --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
     "test:unit": "bun test --isolate",
     "test:coverage": "bun test --isolate --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",

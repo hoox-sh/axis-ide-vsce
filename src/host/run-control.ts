@@ -19,6 +19,28 @@
 /** Result of Stop Run — hung `/run` vs already idle. */
 export type StopRunResult = 'stopped' | 'idle';
 
+/** Chart toolbar run chrome. `idle` and `ok` clear the label; the shell still pulses `ok`. */
+export type RunChromeState = 'running' | 'stopped' | 'idle' | 'ok' | 'error';
+
+/** Short label for the chart run chip. Empty means hide it. */
+export function runChromeLabel(state: string): string {
+  switch (state) {
+    case 'running':
+      return 'Running…';
+    case 'stopped':
+      return 'Stopped';
+    case 'error':
+      return 'Run failed';
+    default:
+      return '';
+  }
+}
+
+/** True only while a run owns the chart. Stopped and finished are not busy. */
+export function isRunChromeBusy(state: string): boolean {
+  return state === 'running';
+}
+
 /**
  * Abort an in-flight command AbortController without starting a new run.
  * Never throws.

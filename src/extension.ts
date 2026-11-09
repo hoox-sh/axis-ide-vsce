@@ -45,7 +45,15 @@ import {
   serializeChartDocument,
 } from './editors/chart-document';
 import { isCsvBarsPath, toStoredBarsPath } from './host/csv-bars';
-import { DATA_TIMEFRAMES, applyDataPickToDoc } from './host/data-pick';
+import {
+  DATA_PICK_COPY,
+  DATA_TIMEFRAME_CHOICES,
+  applyDataPickToDoc,
+  dataSourceChoices,
+  dataSourceLabel,
+  formatDataPickSummary,
+  isDataTimeframe,
+} from './host/data-pick';
 import {
   OPEN_CHART_NO_PINE_MESSAGE,
   PINE_LANGUAGE_ID,
@@ -58,6 +66,8 @@ import { RUN_RUNNING_CONTEXT } from './host/pine-lang';
 import {
   abortInflightRun,
   beginCommandAbortController,
+  runChromeLabel,
+  type RunChromeState,
 } from './host/run-control';
 import {
   AxisSecretStorage,
@@ -133,6 +143,20 @@ function setRunRunning(running: boolean): void {
   }
 }
 
+/** Chart toolbar chip via host.run.status. No status bar. Stale epochs are dropped. */
+function publishRunChrome(state: RunChromeState, epoch: number): void {
+  if (deactivated || epoch !== runGeneration) return;
+  const message = runChromeLabel(state);
+  try {
+    notifyChart({
+      type: 'host.run.status',
+      payload: message ? { epoch, state, message } : { epoch, state },
+    });
+  } catch {
+    // chart may be closed
+  }
+}
+
 function readEngineSettings(): {
   endpoint: string;
   allowRemote: boolean;
@@ -204,6 +228,7 @@ function stopRunCommand(): string {
   setRunRunning(false);
   if (stopped === 'stopped') {
     runOutput?.appendLine('AXIS: Run stopped.');
+    publishRunChrome('stopped', runGeneration);
   }
   return stopped;
 }
@@ -305,10 +330,12 @@ async function runScriptCore(opts: {
     myGen = ++runGeneration;
     markedRunning = true;
     setRunRunning(true);
+    publishRunChrome('running', myGen);
     const token = opts.token;
     if (token) {
       if (token.isCancellationRequested) {
         try { commandAbort?.abort(); } catch {}
+        publishRunChrome('stopped', myGen);
         return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
       }
       token.onCancellationRequested(() => { try { commandAbort?.abort(); } catch {} });
@@ -331,11 +358,13 @@ async function runScriptCore(opts: {
     }
     if (!resolved.ok) {
       if (resolved.reason === 'aborted') {
+        publishRunChrome('stopped', myGen);
         return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
       }
       const err = scrubSecrets(resolved.error);
       output.appendLine(err);
       if (showErrors) void window.showErrorMessage(err);
+      publishRunChrome('error', myGen);
       return { ok: false, mode, focus, error: err };
     }
     const ctx = resolved.ctx;
@@ -399,6 +428,7 @@ async function runScriptCore(opts: {
       } catch {
         // debug snapshot is best-effort
       }
+      publishRunChrome('ok', myGen);
       return {
         ok: true,
         mode: runMode,
@@ -408,9 +438,11 @@ async function runScriptCore(opts: {
       };
     }
     if (outcome.reason === 'stale') {
+      publishRunChrome('idle', myGen);
       return { ok: false, mode: runMode, focus, reason: 'stale', epoch: outcome.epoch };
     }
     if (outcome.reason === 'aborted') {
+      publishRunChrome('stopped', myGen);
       return {
         ok: false,
         mode: runMode,
@@ -422,6 +454,7 @@ async function runScriptCore(opts: {
     }
     const err = scrubSecrets(outcome.error || 'AXIS run failed');
     if (showErrors) void window.showErrorMessage(err);
+    publishRunChrome('error', myGen);
     return {
       ok: false,
       mode: runMode,
@@ -435,6 +468,7 @@ async function runScriptCore(opts: {
     const err = scrubSecrets(`AXIS: Run Script failed: ${message}`);
     runOutput?.appendLine(err);
     if (showErrors) void window.showErrorMessage(err);
+    if (markedRunning) publishRunChrome('error', myGen);
     return { ok: false, mode, focus, error: err };
   } finally {
     if (markedRunning && (deactivated || runGeneration === myGen)) {
@@ -679,41 +713,40 @@ async function pickDataCommand(): Promise<string | undefined> {
     const chartDoc = parsed.ok ? parsed.doc : defaultChartDocument();
 
     const symbol = await window.showInputBox({
-      title: 'AXIS Data — symbol',
-      prompt: 'Pair-form symbol (e.g. BTC/USDT)',
+      title: DATA_PICK_COPY.symbolTitle,
+      prompt: DATA_PICK_COPY.symbolPrompt,
+      placeHolder: 'BTC/USDT',
       value: chartDoc.symbol || 'BTC/USDT',
       ignoreFocusOut: true,
     });
     if (deactivated || symbol === undefined) return 'cancelled';
 
-    const tf = await window.showQuickPick([...DATA_TIMEFRAMES], {
-      title: 'AXIS Data — timeframe',
-      placeHolder: chartDoc.interval || '1m',
-      ignoreFocusOut: true,
-    });
-    if (deactivated || !tf) return 'cancelled';
+    const tfPick = await window.showQuickPick(
+      DATA_TIMEFRAME_CHOICES.map((item) => ({
+        label: item.label,
+        description: item.description,
+      })),
+      {
+        title: DATA_PICK_COPY.timeframeTitle,
+        placeHolder: chartDoc.interval || DATA_PICK_COPY.timeframePlaceholder,
+        ignoreFocusOut: true,
+      },
+    );
+    if (deactivated || !tfPick || !isDataTimeframe(tfPick.label)) return 'cancelled';
+    const tf = tfPick.label;
 
     const settings = readEngineSettings();
     const workspaceRoot = workspace.workspaceFolders?.[0]?.uri.fsPath;
     const barsMode = await window.showQuickPick(
-      [
-        {
-          label: 'Datafeed (local sidecar)',
-          description: settings.datafeedUrl,
-          id: 'feed' as const,
-        },
-        {
-          label: 'Mock bars',
-          description: 'Deterministic fixture candles',
-          id: 'mock' as const,
-        },
-        {
-          label: 'Workspace CSV',
-          description: chartDoc.barsPath || 'OHLCV file (time,open,high,low,close[,volume])',
-          id: 'csv' as const,
-        },
-      ],
-      { title: 'AXIS Data — bars', ignoreFocusOut: true },
+      dataSourceChoices({
+        datafeedUrl: settings.datafeedUrl,
+        barsPath: chartDoc.barsPath,
+      }),
+      {
+        title: DATA_PICK_COPY.sourceTitle,
+        placeHolder: DATA_PICK_COPY.sourcePlaceholder,
+        ignoreFocusOut: true,
+      },
     );
     if (deactivated || !barsMode) return 'cancelled';
 
@@ -731,13 +764,14 @@ async function pickDataCommand(): Promise<string | undefined> {
           path: uri.fsPath,
         })),
         {
-          label: 'Browse…',
-          description: 'Pick a .csv file',
+          label: DATA_PICK_COPY.csvBrowseLabel,
+          description: DATA_PICK_COPY.csvBrowseDescription,
           path: '__browse__',
         },
       ];
       const filePick = await window.showQuickPick(picks, {
-        title: 'AXIS Data — CSV bars',
+        title: DATA_PICK_COPY.csvTitle,
+        placeHolder: 'Choose a CSV of candles',
         ignoreFocusOut: true,
       });
       if (deactivated || !filePick) return 'cancelled';
@@ -746,13 +780,13 @@ async function pickDataCommand(): Promise<string | undefined> {
         const opened = await window.showOpenDialog({
           canSelectMany: false,
           filters: { CSV: ['csv'] },
-          title: 'AXIS Data — OHLCV CSV',
+          title: DATA_PICK_COPY.csvTitle,
         });
         if (deactivated || !opened?.[0]) return 'cancelled';
         abs = opened[0].fsPath;
       }
       if (!isCsvBarsPath(abs)) {
-        const err = 'AXIS: bars file must be a .csv path without .. segments.';
+        const err = 'AXIS: Pick a .csv file. The path cannot contain "..".';
         void window.showErrorMessage(err);
         return err;
       }
@@ -780,9 +814,9 @@ async function pickDataCommand(): Promise<string | undefined> {
       await workspace.getConfiguration('axis.chart').update('useMockBars', useMock, target);
     }
 
-    const sourceLabel = barsMode.id === 'csv' ? `csv:${nextDoc.barsPath}` : useMock ? 'mock' : 'datafeed';
-    const summary = `${nextDoc.symbol} ${nextDoc.interval} ${sourceLabel}`;
-    void window.showInformationMessage(`AXIS data: ${summary}`);
+    const sourceLabel = dataSourceLabel(barsMode.id, nextDoc.barsPath);
+    const summary = formatDataPickSummary(nextDoc.symbol, nextDoc.interval, sourceLabel);
+    void window.showInformationMessage(`AXIS: ${summary}`);
     return summary;
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

@@ -6,20 +6,20 @@ You write Pine Script™. AXIS opens a chart beside the file. You run it. The pl
 
 AXIS IDE is the chart and the run (`hoox-sh.axis-ide`). PYNE (`hoox-sh.pyne`) is the language extension: color, hover, warnings, and completion.
 
-![The script and the chart after a run](docs/readme/media/hero.gif)
+![The script and the chart after a run](./media/hero.gif)
 
 Independent, unofficial extension. Not affiliated with, endorsed by, or sponsored by TradingView®, Inc.
 Pine Script™ and TradingView® are trademarks of TradingView®, Inc.
 
 ## Chart beside the script
 
-![Chart beside the script](docs/readme/media/chart-beside-script.png)
+![Chart beside the script](./media/chart-beside-script.png)
 
 Open a `.pine` or `.pyne` file and choose **AXIS: Open Chart**. The chart sits next to the script. A sibling `*.axis.json` file remembers the symbol and the timeframe.
 
 ## Run and stop
 
-![Run Script and Stop Run](docs/readme/media/run-and-stop.png)
+![Run Script and Stop Run](./media/run-and-stop.png)
 
 **AXIS: Run Script** and **AXIS: Stop Run** use the same key, Ctrl+Enter (Cmd+Enter on a Mac). Stop is the one that shows while a run is going.
 
@@ -27,13 +27,13 @@ An offline runner is on by default. It is meant to keep your script on your mach
 
 ## Plots
 
-![Close and a moving average on the candles](docs/readme/media/plots.png)
+![Close and a moving average on the candles](./media/plots.png)
 
 Run a Pine Script™ study and the line shows up on the candles. This one plots close and a short average. The chart can also paint a histogram, an area, a fill, bars, candles, a horizontal line, and shapes when the run returns them.
 
 ## Strategy results
 
-![Strategy table under the chart](docs/readme/media/strategy-results.png)
+![Strategy table under the chart](./media/strategy-results.png)
 
 A strategy gets a short stats line, a trade table, and a CSV button. Trade markers and an equity line are drawn when the run includes them. This run had one entry. Click a trade to jump to that bar.
 
@@ -41,19 +41,19 @@ An Inputs button sits on the same toolbar. On this run it opened with no fields,
 
 ## Drawings
 
-![A trendline on the chart](docs/readme/media/drawings.png)
+![A trendline on the chart](./media/drawings.png)
 
 **Trendline** draws a line on the candles and can save it with the chart. Lines, labels, boxes, tables, and fills from the script are drawn when a run returns them.
 
 ## Pick a symbol
 
-![Pick a symbol](docs/readme/media/pick-a-symbol.png)
+![Pick a symbol](./media/pick-a-symbol.png)
 
 **AXIS: Pick Data** asks for a symbol, then a timeframe (`1m`, `5m`, `15m`, `1h`, `4h`, or `1d`). Bars can come from a CSV in the workspace, from sample candles, or from a local data feed on your machine. The feed is a separate program. It is not inside this extension.
 
 ## Step a bar
 
-![Bar debug on the chart](docs/readme/media/step-a-bar.png)
+![Bar debug on the chart](./media/step-a-bar.png)
 
 **AXIS: Start Bar Debug** opens the debug toolbar and can park on a bar. **AXIS: Step Bar** moves one bar. In this picture the session could not open a source file. It is not a line-by-line script debugger.
 

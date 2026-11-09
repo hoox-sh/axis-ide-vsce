@@ -6,6 +6,11 @@ extracted from the AXIS monorepo with its commit history preserved.
 
 ## [Unreleased]
 
+- Strategy report: metric cards, round trips, equity sparkline, and trade filters under the chart.
+- Chart plots and drawings: equity on its own scale, clearer fills, toolbar, legend, and data window.
+- Run chrome: Running / Stopped, inputs Apply, plain-language Pick Data, and bar Start / Step.
+- README images live in `./media/` and stay relative in the packaged extension.
+
 ## [0.4.0] — 2026-11-09
 
 Lightweight gallery listing matches this working tree: **no studios**, Pyodide default **on**, PYNE SecretStorage, walkthrough, CSV bars, `axis-bar` debug, static lookahead hatch.

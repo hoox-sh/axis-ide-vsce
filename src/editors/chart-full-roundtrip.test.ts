@@ -27,11 +27,13 @@ import {
   chartLayoutOptions,
   createChartPainter,
   mapPlotLineStyle,
+  overlayPriceScaleId,
   shapeMarkersFromPlots,
   strategyMarkersFromTrades,
   toFillBandPoints,
   toOhlcOverlayPoints,
 } from '../../webview/chart/src/paint';
+import { createDrawingOverlay } from '../../webview/chart/src/drawings';
 import {
   applyChartHostMessage,
   applyPlotWindow,
@@ -400,6 +402,8 @@ describe('chart.delta merge + seq gap → requestReload', () => {
       { id: 'rsi', values: [30, 40], kind: 'line' },
     ]);
     expect(chartLayoutOptions().attributionLogo).toBe(false);
+    expect(chartLayoutOptions().textColor).toBe('#e8eaee');
+    expect(chartLayoutOptions().textColor.includes('var(')).toBe(false);
   });
 
   test('chart.delta encode → decode → reducer apply', () => {
@@ -605,6 +609,11 @@ describe('chart.delta merge + seq gap → requestReload', () => {
     );
     expect(shapes).toHaveLength(1);
     expect(shapes[0]?.shape).toBe('arrowDown');
+    expect(shapes[0]?.text).toBe('↓');
+    const bare = shapeMarkersFromPlots([b(1)], [{ id: 'sig', values: [1], kind: 'shape' }]);
+    expect(bare).toHaveLength(1);
+    expect(bare[0]?.text).toBe('');
+    expect(bare[0]?.color).toBe('#a78bfa');
   });
 
   test('stub painter records plot kinds and strategy trade count', () => {
@@ -743,5 +752,157 @@ describe('chart.delta merge + seq gap → requestReload', () => {
     });
     const cloud = added.find((a) => a.opts.title === 'cloud');
     expect(cloud?.data[0]).toEqual({ time: 1, value: 2, color: '#22d3ee' });
+    const cloudBand = added.find((a) => a.opts.title === 'cloud:band');
+    expect(cloudBand?.data[0]).toMatchObject({ time: 1, open: 2, high: 2, low: 0, close: 0 });
+    const bandColor = (cloudBand?.data[0] as { color?: string } | undefined)?.color ?? '';
+    expect(bandColor.startsWith('rgba(')).toBe(true);
+    const order = added.map((a) => String(a.opts.title));
+    expect(order.indexOf('cloud')).toBeLessThan(order.indexOf('sma'));
+    expect(order.indexOf('cloud')).toBeLessThan(order.indexOf('px'));
+    const pxSeries = added.find((a) => a.opts.title === 'px');
+    expect(pxSeries?.opts.upColor).toBe('#26a69a');
+    expect(pxSeries?.opts.downColor).not.toBe(pxSeries?.opts.upColor);
+    const brsSeries = added.find((a) => a.opts.title === 'brs');
+    expect(brsSeries?.opts.upColor).not.toBe(brsSeries?.opts.downColor);
+  });
+
+  test('equity and off-price histograms do not use the candle scale', () => {
+    const bars = [b(1), b(2), b(3), b(4)];
+    const added: Array<{ opts: Record<string, unknown> }> = [];
+    const scales: string[] = [];
+    const chart = {
+      addSeries(_type: unknown, opts: Record<string, unknown>) {
+        const rec = { opts, data: [] as unknown[] };
+        added.push(rec);
+        return {
+          setData(data: unknown[]) {
+            rec.data = data;
+          },
+          applyOptions(next: Record<string, unknown>) {
+            Object.assign(rec.opts, next);
+          },
+        };
+      },
+      removeSeries() {},
+      priceScale(id: string) {
+        scales.push(id);
+        return { applyOptions() {} };
+      },
+    };
+    const candle = {
+      createPriceLine() {
+        return {};
+      },
+      removePriceLine() {},
+    };
+    const near = { id: 'cols', values: [1, 1.2, 1.1, 1.4], kind: 'histogram' as const, color: '#60a5fa' };
+    const volume = { id: 'vol', values: [1000, 2000, 1500, 1800], kind: 'histogram' as const, color: '#60a5fa' };
+    const equity = { id: '__equity', values: [10000, 10050, 10020, 10100], kind: 'line' as const, color: '#e7e5e4' };
+    const sma = { id: 'sma', values: [1, 1.2, 1.1, 1.3], kind: 'line' as const, color: '#22d3ee' };
+    expect(overlayPriceScaleId(near, bars)).toBeUndefined();
+    expect(overlayPriceScaleId(volume, bars)).toBe('osc');
+    expect(overlayPriceScaleId(equity, bars)).toBe('equity');
+    expect(overlayPriceScaleId(sma, bars)).toBeUndefined();
+    applyPlotOverlays(chart as never, candle as never, new Map(), [], bars, [volume, near, equity, sma]);
+    const equitySeries = added.find((a) => a.opts.priceScaleId === 'equity');
+    expect(equitySeries?.opts.lastValueVisible).toBe(false);
+    expect(equitySeries?.opts.priceLineVisible).toBe(false);
+    expect(equitySeries?.opts.lineStyle).toBe(LineStyle.LargeDashed);
+    expect(added.find((a) => a.opts.title === 'sma')?.opts.priceScaleId).toBeUndefined();
+    expect(added.find((a) => a.opts.title === 'cols')?.opts.priceScaleId).toBeUndefined();
+    expect(added.find((a) => a.opts.title === 'vol')?.opts.priceScaleId).toBe('osc');
+    expect(scales).toContain('equity');
+    expect(scales).toContain('osc');
+    const areaChart = {
+      addSeries(_type: unknown, opts: Record<string, unknown>) {
+        const rec = { opts, data: [] as unknown[] };
+        added.push(rec);
+        return {
+          setData(data: unknown[]) {
+            rec.data = data;
+          },
+          applyOptions() {},
+        };
+      },
+      removeSeries() {},
+      priceScale() {
+        return { applyOptions() {} };
+      },
+    };
+    applyPlotOverlays(areaChart as never, candle as never, new Map(), [], bars, [
+      { id: 'band', values: [1, 1.2, 1.4, 1.1], kind: 'area', color: '#34d399' },
+      sma,
+    ]);
+    const area = added.find((a) => a.opts.title === 'band');
+    expect(String(area?.opts.topColor)).toMatch(/^rgba\(/);
+    expect(area?.opts.topColor).not.toBe('#34d399');
+    expect(area?.opts.relativeGradient).toBe(true);
+  });
+
+  test('drawing overlay keeps stroke, label contrast, and box fill', () => {
+    if (typeof document === 'undefined') return;
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    const overlay = createDrawingOverlay(svg, () => ({
+      toChartPoint: () => null,
+      toPixel: (point) => ({ x: point.time, y: point.price }),
+    }));
+    overlay.redraw(
+      [
+        {
+          id: 'tl',
+          tool: 'trendline',
+          points: [
+            { time: 10, price: 20 },
+            { time: 30, price: 40 },
+          ],
+        },
+      ],
+      null,
+      [
+        { type: 'line', t1: 1, p1: 2, t2: 3, p2: 4, color: '#000000', style: 'dashed' },
+        { type: 'box', t1: 5, p1: 6, t2: 15, p2: 16, bgcolor: '#22d3ee', color: '#22d3ee' },
+        { type: 'label', t1: 8, p1: 9, text: 'Hi', textcolor: '#111111' },
+        {
+          type: 'polyline',
+          points: [
+            { time: 1, price: 1 },
+            { time: 2, price: 2 },
+            { time: 3, price: 1 },
+          ],
+        },
+        {
+          type: 'linefill',
+          t1: 0,
+          p1: 0,
+          t2: 10,
+          p2: 0,
+          t3: 0,
+          p3: 10,
+          t4: 10,
+          p4: 10,
+          color: '#60a5fa',
+        },
+      ],
+    );
+    expect(svg.querySelector('.drawing-overlay__line')).not.toBeNull();
+    expect(svg.querySelector('.drawing-overlay__hit')).not.toBeNull();
+    expect(svg.querySelectorAll('.drawing-overlay__handle').length).toBeGreaterThanOrEqual(2);
+    const box = svg.querySelector('.drawing-overlay__box');
+    expect(box?.getAttribute('fill')).toBe('rgba(34,211,238,0.18)');
+    expect(box?.getAttribute('stroke')?.toLowerCase()).toBe('#22d3ee');
+    const label = svg.querySelector('.drawing-overlay__label');
+    expect(label?.textContent).toBe('Hi');
+    expect(label?.getAttribute('fill')?.toLowerCase()).toBe('#e8eaee');
+    expect(svg.querySelector('.drawing-overlay__label-bg')).not.toBeNull();
+    expect(svg.querySelector('.drawing-overlay__fill')?.getAttribute('fill')).toBe('rgba(96,165,250,0.2)');
+    const dashed = [...svg.querySelectorAll('.drawing-overlay__engine')].find((el) =>
+      el.getAttribute('stroke-dasharray'),
+    );
+    expect(dashed?.getAttribute('stroke')?.toLowerCase()).toBe('#e8eaee');
+    expect(dashed?.getAttribute('stroke-dasharray')).toBe('5 4');
+    const classes = [...svg.children].map((node) => node.getAttribute('class'));
+    expect(classes.indexOf('drawing-overlay__box')).toBeLessThan(classes.lastIndexOf('drawing-overlay__line'));
+    overlay.dispose();
+    expect(svg.childNodes.length).toBe(0);
   });
 });

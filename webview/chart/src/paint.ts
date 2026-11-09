@@ -51,16 +51,32 @@ const PLOT_COLORS = [
 ];
 
 /** Layout options — TradingView attribution logo off (VSIX NOTICE already ships). */
-export function chartLayoutOptions(): {
+/**
+ * Canvas scale text. A `var(...)` string is not a canvas color — LWC would
+ * keep the dark default and the axis would disappear on the void chart.
+ */
+export function chartLayoutOptions(textColor = '#e8eaee'): {
   background: { type: ColorType; color: string };
   textColor: string;
   attributionLogo: false;
 } {
   return {
     background: { type: ColorType.Solid, color: 'transparent' },
-    textColor: 'var(--vscode-editor-foreground, #e0e0e0)',
+    textColor,
     attributionLogo: false,
   };
+}
+
+function resolvedTextColor(host: HTMLElement): string {
+  try {
+    const color = getComputedStyle(host).color.trim();
+    if (color && !color.includes('var(') && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') {
+      return color;
+    }
+  } catch {
+    // detached host
+  }
+  return '#e8eaee';
 }
 
 export interface ChartCrosshairSample {
@@ -125,21 +141,118 @@ export function mapPlotLineStyle(
   return fallback;
 }
 
-function colorWithAlpha(color: string, alpha: number): string {
+const EQUITY_PLOT_ID = '__equity';
+const EQUITY_SCALE = 'equity';
+/** Oscillators / volume that must not autoscale the candle price scale. */
+const OSC_SCALE = 'osc';
+
+function channelHex(color: string): [number, number, number] | null {
   const hex = color.trim();
   if (/^#[0-9a-f]{6}$/i.test(hex)) {
-    const r = Number.parseInt(hex.slice(1, 3), 16);
-    const g = Number.parseInt(hex.slice(3, 5), 16);
-    const b = Number.parseInt(hex.slice(5, 7), 16);
-    return `rgba(${r},${g},${b},${alpha})`;
+    return [
+      Number.parseInt(hex.slice(1, 3), 16),
+      Number.parseInt(hex.slice(3, 5), 16),
+      Number.parseInt(hex.slice(5, 7), 16),
+    ];
   }
   if (/^#[0-9a-f]{3}$/i.test(hex)) {
-    const r = Number.parseInt(hex[1] + hex[1], 16);
-    const g = Number.parseInt(hex[2] + hex[2], 16);
-    const b = Number.parseInt(hex[3] + hex[3], 16);
-    return `rgba(${r},${g},${b},${alpha})`;
+    return [
+      Number.parseInt(hex[1] + hex[1], 16),
+      Number.parseInt(hex[2] + hex[2], 16),
+      Number.parseInt(hex[3] + hex[3], 16),
+    ];
   }
-  return color;
+  return null;
+}
+
+function colorWithAlpha(color: string, alpha: number): string {
+  const rgb = channelHex(color);
+  if (!rgb) return color;
+  return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
+}
+
+function luma(color: string): number | null {
+  const rgb = channelHex(color);
+  if (!rgb) return null;
+  return (0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]) / 255;
+}
+
+/** Near-black strokes vanish on the void chart. Non-hex colors pass through. */
+function readableOnDark(color: string, fallback: string): string {
+  const y = luma(color);
+  if (y === null) return color;
+  return y < 0.18 ? fallback : color;
+}
+
+function mapChannels(color: string, fn: (channel: number) => number): string | null {
+  const rgb = channelHex(color);
+  if (!rgb) return null;
+  const next = rgb.map((ch) => Math.max(0, Math.min(255, Math.round(fn(ch)))));
+  return `rgb(${next[0]},${next[1]},${next[2]})`;
+}
+
+function downBodyColor(color: string): string {
+  return mapChannels(color, (ch) => ch * 0.62) ?? color;
+}
+
+function liftColor(color: string): string {
+  return mapChannels(color, (ch) => ch + (255 - ch) * 0.42) ?? color;
+}
+
+const PAINT_RANK: Record<string, number> = {
+  bgcolor: 0,
+  fill: 1,
+  histogram: 2,
+  area: 3,
+  plotbar: 4,
+  plotcandle: 5,
+  step: 6,
+  line: 7,
+  hline: 8,
+  barcolor: 9,
+  shape: 10,
+};
+
+function paintRank(plot: ChartPlotLine): number {
+  if (plot.id === EQUITY_PLOT_ID) return 30;
+  return PAINT_RANK[plot.kind] ?? 6;
+}
+
+function plotLineStyle(plot: ChartPlotLine): LineStyle {
+  if (plot.id === EQUITY_PLOT_ID) return mapPlotLineStyle(plot.linestyle, LineStyle.LargeDashed);
+  if (plot.kind === 'hline') return mapPlotLineStyle(plot.linestyle, LineStyle.Dashed);
+  return mapPlotLineStyle(plot.linestyle);
+}
+
+/**
+ * Scale id when this series would squash candles.
+ * Equity is always its own overlay. Histograms stay on the price scale only
+ * when their values actually sit on the candle range (price columns).
+ */
+export function overlayPriceScaleId(plot: ChartPlotLine, bars: ChartBar[]): string | undefined {
+  if (plot.id === EQUITY_PLOT_ID) return EQUITY_SCALE;
+  if (plot.kind !== 'histogram') return undefined;
+  let priceMin = Number.POSITIVE_INFINITY;
+  let priceMax = Number.NEGATIVE_INFINITY;
+  for (const bar of bars) {
+    if (Number.isFinite(bar.low)) priceMin = Math.min(priceMin, bar.low);
+    if (Number.isFinite(bar.high)) priceMax = Math.max(priceMax, bar.high);
+  }
+  if (!Number.isFinite(priceMin) || !Number.isFinite(priceMax)) return undefined;
+  const nums = plot.values.filter((v): v is number => v !== null && Number.isFinite(v));
+  if (nums.length === 0) return undefined;
+  const base = plot.histbase ?? 0;
+  let hMin = base;
+  let hMax = base;
+  for (const value of nums) {
+    hMin = Math.min(hMin, value);
+    hMax = Math.max(hMax, value);
+  }
+  const priceSpan = Math.max(priceMax - priceMin, Math.abs(priceMax) * 0.02, 1e-9);
+  const overlaps = hMax >= priceMin - priceSpan && hMin <= priceMax + priceSpan;
+  const wide = hMax - hMin > priceSpan * 3;
+  if (!overlaps || wide) return OSC_SCALE;
+  return undefined;
 }
 
 function windowedColumn(
@@ -298,9 +411,9 @@ export function shapeMarkersFromPlots(
       out.push({
         time: v.time as UTCTimestamp,
         position,
-        color: plot.colors?.[i] ?? plot.color ?? '#a78bfa',
+        color: readableOnDark(plot.colors?.[i] ?? plot.color ?? '#a78bfa', '#a78bfa'),
         shape,
-        text: plot.text ?? plot.char ?? plot.id,
+        text: plot.text ?? plot.char ?? '',
       });
     }
   }
@@ -341,7 +454,10 @@ export function applyPlotOverlays(
   for (const plot of plots) {
     if (overlaySkipKind(plot.kind)) continue;
     keep.add(seriesKindKey(plot));
-    if (plot.kind === 'fill') keep.add(seriesKindKey(plot, 'low'));
+    if (plot.kind === 'fill') {
+      keep.add(seriesKindKey(plot, 'low'));
+      keep.add(seriesKindKey(plot, 'band'));
+    }
   }
   for (const [id, series] of [...bag]) {
     if (keep.has(id)) continue;
@@ -352,11 +468,16 @@ export function applyPlotOverlays(
     }
     bag.delete(id);
   }
-  plots.forEach((plot, index) => {
-    const color = plot.color ?? PLOT_COLORS[index % PLOT_COLORS.length];
-    const width = (plot.linewidth && plot.linewidth > 0 ? Math.min(4, plot.linewidth) : 2) as 1 | 2 | 3 | 4;
-    const lineStyle =
-      plot.kind === 'hline' ? mapPlotLineStyle(plot.linestyle, LineStyle.Dashed) : mapPlotLineStyle(plot.linestyle);
+  const paintOrder = plots
+    .map((plot, index) => ({ plot, index }))
+    .sort((a, b) => paintRank(a.plot) - paintRank(b.plot) || a.index - b.index);
+  for (const { plot, index } of paintOrder) {
+    const fallback = PLOT_COLORS[index % PLOT_COLORS.length] ?? '#22d3ee';
+    const color = readableOnDark(plot.color ?? fallback, fallback);
+    const width = (
+      plot.linewidth && plot.linewidth > 0 ? Math.min(4, plot.linewidth) : plot.id === EQUITY_PLOT_ID ? 1 : 2
+    ) as 1 | 2 | 3 | 4;
+    const lineStyle = plotLineStyle(plot);
     if (plot.kind === 'hline') {
       const windowed = windowedColumn(plot.values, plot);
       const price =
@@ -385,13 +506,15 @@ export function applyPlotOverlays(
     if (!series) {
       try {
         if (plot.kind === 'histogram' || plot.kind === 'bgcolor') {
+          const histScale = plot.kind === 'bgcolor' ? 'bg' : overlayPriceScaleId(plot, bars);
+          const tint = plot.kind === 'bgcolor' ? 0.2 : 0.82;
           series = chart.addSeries(HistogramSeries, {
-            color,
+            color: colorWithAlpha(color, tint),
             priceLineVisible: false,
-            lastValueVisible: plot.kind !== 'bgcolor',
+            lastValueVisible: plot.kind !== 'bgcolor' && !histScale,
             title: plot.id,
             base: plot.histbase ?? 0,
-            priceScaleId: plot.kind === 'bgcolor' ? 'bg' : undefined,
+            ...(histScale ? { priceScaleId: histScale } : {}),
           });
           if (plot.kind === 'bgcolor') {
             try {
@@ -403,8 +526,9 @@ export function applyPlotOverlays(
         } else if (plot.kind === 'area') {
           series = chart.addSeries(AreaSeries, {
             lineColor: color,
-            topColor: color,
-            bottomColor: 'transparent',
+            topColor: colorWithAlpha(color, 0.32),
+            bottomColor: colorWithAlpha(color, 0.04),
+            relativeGradient: true,
             lineWidth: width,
             lineStyle,
             priceLineVisible: false,
@@ -412,10 +536,12 @@ export function applyPlotOverlays(
             title: plot.id,
           });
         } else if (plot.kind === 'fill') {
+          // Anchor series keeps the upper edge. The visible band is a bar body
+          // between the two plots — an area series would flood to the pane bottom.
           series = chart.addSeries(AreaSeries, {
-            lineColor: color,
-            topColor: colorWithAlpha(color, 0.28),
-            bottomColor: colorWithAlpha(color, 0.08),
+            lineColor: 'transparent',
+            topColor: 'transparent',
+            bottomColor: 'transparent',
             lineVisible: false,
             lineWidth: 1,
             lineStyle,
@@ -426,22 +552,22 @@ export function applyPlotOverlays(
         } else if (plot.kind === 'plotbar') {
           series = chart.addSeries(BarSeries, {
             upColor: color,
-            downColor: color,
-            thinBars: true,
+            downColor: downBodyColor(color),
+            thinBars: false,
             openVisible: true,
             priceLineVisible: false,
             lastValueVisible: true,
             title: plot.id,
           });
         } else if (plot.kind === 'plotcandle') {
-          const wick = plot.wickcolor ?? color;
-          const border = plot.bordercolor ?? color;
+          const wick = plot.wickcolor ? readableOnDark(plot.wickcolor, liftColor(color)) : liftColor(color);
+          const border = plot.bordercolor ? readableOnDark(plot.bordercolor, color) : color;
           series = chart.addSeries(CandlestickSeries, {
             upColor: color,
-            downColor: color,
+            downColor: downBodyColor(color),
             borderVisible: true,
             borderUpColor: border,
-            borderDownColor: border,
+            borderDownColor: downBodyColor(border),
             wickUpColor: wick,
             wickDownColor: wick,
             priceLineVisible: false,
@@ -449,13 +575,15 @@ export function applyPlotOverlays(
             title: plot.id,
           });
         } else {
+          const scaleId = overlayPriceScaleId(plot, bars);
           series = chart.addSeries(LineSeries, {
             color,
             lineWidth: width,
             lineStyle,
             priceLineVisible: false,
-            lastValueVisible: true,
-            title: plot.id,
+            lastValueVisible: plot.id !== EQUITY_PLOT_ID,
+            title: plot.id === EQUITY_PLOT_ID ? '' : plot.id,
+            ...(scaleId ? { priceScaleId: scaleId } : {}),
             lineType: plot.kind === 'step' ? LineType.WithSteps : LineType.Simple,
           });
         }
@@ -498,8 +626,51 @@ export function applyPlotOverlays(
             // hostile
           }
         }
+        const bandKey = seriesKindKey(plot, 'band');
+        let bandSeries = bag.get(bandKey);
+        if (!bandSeries) {
+          try {
+            const tint = colorWithAlpha(color, 0.34);
+            bandSeries = chart.addSeries(BarSeries, {
+              upColor: tint,
+              downColor: tint,
+              thinBars: false,
+              openVisible: false,
+              priceLineVisible: false,
+              lastValueVisible: false,
+              title: `${plot.id}:band`,
+            });
+            bag.set(bandKey, bandSeries);
+          } catch {
+            bandSeries = undefined;
+          }
+        }
+        if (bandSeries) {
+          try {
+            bandSeries.setData(
+              band.map((p) => ({
+                time: p.time,
+                open: p.open,
+                high: p.high,
+                low: p.low,
+                close: p.close,
+                color: p.color ? colorWithAlpha(p.color, 0.34) : undefined,
+              })),
+            );
+          } catch {
+            // hostile
+          }
+        }
       } else {
-        series.setData(toUtcPoints(bars, plot, times));
+        const points = toUtcPoints(bars, plot, times);
+        if (plot.kind === 'bgcolor' || plot.kind === 'histogram') {
+          const alpha = plot.kind === 'bgcolor' ? 0.2 : 0.82;
+          series.setData(
+            points.map((p) => (p.color ? { ...p, color: colorWithAlpha(p.color, alpha) } : p)),
+          );
+        } else {
+          series.setData(points);
+        }
       }
     } catch {
       // hostile
@@ -511,7 +682,29 @@ export function applyPlotOverlays(
     } catch {
       // options not supported on this series type
     }
-  });
+  }
+  const scales = new Set<string>();
+  for (const plot of plots) {
+    if (plot.id === EQUITY_PLOT_ID) scales.add(EQUITY_SCALE);
+    if (plot.kind === 'histogram') {
+      const id = overlayPriceScaleId(plot, bars);
+      if (id) scales.add(id);
+    }
+  }
+  if (scales.has(EQUITY_SCALE)) {
+    try {
+      chart.priceScale(EQUITY_SCALE).applyOptions({ scaleMargins: { top: 0.1, bottom: 0.1 } });
+    } catch {
+      // stub
+    }
+  }
+  if (scales.has(OSC_SCALE)) {
+    try {
+      chart.priceScale(OSC_SCALE).applyOptions({ scaleMargins: { top: 0.74, bottom: 0 } });
+    } catch {
+      // stub
+    }
+  }
 }
 
 /**
@@ -536,7 +729,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
   try {
     chart = createChart(host, {
       autoSize: true,
-      layout: chartLayoutOptions(),
+      layout: chartLayoutOptions(resolvedTextColor(host)),
       grid: {
         vertLines: { color: 'rgba(128,128,128,0.15)' },
         horzLines: { color: 'rgba(128,128,128,0.15)' },
@@ -666,12 +859,13 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
         }
         const overlayPlots = [...state.plots];
         const equity = state.strategy?.equity;
-        if (equity && equity.some((v) => v !== null)) {
+        if (equity?.some((v) => v !== null)) {
           overlayPlots.push({
-            id: '__equity',
+            id: EQUITY_PLOT_ID,
             values: equity,
             kind: 'line',
-            color: '#fbbf24',
+            color: '#e7e5e4',
+            linewidth: 1,
           });
         }
         applyPlotOverlays(chart, series, plotSeries, priceLines, state.bars, overlayPlots, state.times);

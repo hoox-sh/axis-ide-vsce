@@ -24,8 +24,79 @@
 
 import type { AxisChartDocV1 } from '../editors/chart-document';
 
-export const DATA_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const;
-export type DataTimeframe = (typeof DATA_TIMEFRAMES)[number];
+/** Timeframe quick-pick rows. `label` is the stored interval. */
+export const DATA_TIMEFRAME_CHOICES = [
+  { label: '1m', description: '1 minute' },
+  { label: '5m', description: '5 minutes' },
+  { label: '15m', description: '15 minutes' },
+  { label: '1h', description: '1 hour' },
+  { label: '4h', description: '4 hours' },
+  { label: '1d', description: '1 day' },
+] as const;
+
+export const DATA_TIMEFRAMES = DATA_TIMEFRAME_CHOICES.map((item) => item.label);
+export type DataTimeframe = (typeof DATA_TIMEFRAME_CHOICES)[number]['label'];
+
+/** Quick-pick copy. Labels are the words a person sees — not setting names. */
+export const DATA_PICK_COPY = {
+  symbolTitle: 'Symbol',
+  symbolPrompt: 'Symbol, such as BTC/USDT',
+  timeframeTitle: 'Timeframe',
+  timeframePlaceholder: 'Choose a timeframe',
+  sourceTitle: 'Bars',
+  sourcePlaceholder: 'CSV, sample candles, or a local feed',
+  csvTitle: 'CSV',
+  csvBrowseLabel: 'Browse for a CSV…',
+  csvBrowseDescription: 'Pick a .csv file of candles',
+} as const;
+
+export type DataSourceId = 'csv' | 'mock' | 'feed';
+
+export interface DataSourceChoice {
+  id: DataSourceId;
+  label: string;
+  description: string;
+  detail?: string;
+}
+
+/** Bars source rows: CSV, sample candles, local feed. No symbol browser. */
+export function dataSourceChoices(opts?: {
+  datafeedUrl?: string;
+  barsPath?: string;
+}): DataSourceChoice[] {
+  const barsPath = opts?.barsPath?.trim() ?? '';
+  const url = opts?.datafeedUrl?.trim() ?? '';
+  const csv: DataSourceChoice = {
+    id: 'csv',
+    label: 'CSV',
+    description: barsPath ? barsPath : 'OHLCV file (time, open, high, low, close)',
+  };
+  const feed: DataSourceChoice = {
+    id: 'feed',
+    label: 'Local feed',
+    description: 'Candles from a data feed on this machine',
+  };
+  if (url) feed.detail = url;
+  return [
+    csv,
+    { id: 'mock', label: 'Sample candles', description: 'Built-in sample bars' },
+    feed,
+  ];
+}
+
+/** One source phrase for the confirmation line. */
+export function dataSourceLabel(id: DataSourceId, barsPath?: string): string {
+  if (id === 'csv') {
+    const path = barsPath?.trim();
+    return path ? `CSV ${path}` : 'CSV';
+  }
+  if (id === 'mock') return 'sample candles';
+  return 'local feed';
+}
+
+export function formatDataPickSummary(symbol: string, interval: string, source: string): string {
+  return `${symbol} · ${interval} · ${source}`;
+}
 
 export interface DataPickFields {
   symbol?: string;
