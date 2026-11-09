@@ -3,19 +3,30 @@
 > One place for work. Statuses: Todo · Working · Blocked · Ready for Review · Done.
 > Nothing is done until this file says Done.
 
-| task                                                                                                                                                          | owner      | status           | priority | proof                                                                                                                                                                                                                                                                                                                                                          | blockedReason | source |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------ |
-| Rename pack id axis → axis-pack (0.3.0) + publish                                                                                                             | oo-checker | Done             |          | merge 63e0ad3; Release https://github.com/hoox-sh/axis-ide-vsce/actions/runs/42520914199 green; Marketplace+OVSX hoox-sh.axis-pack@0.3.0; vsce show + ovsx api exit 0                                                                                                                                                                                          |               |        |
-| Polish AXIS visuals + ax component library                                                                                                                    | oo-spec-2  | Done             |          |                                                                                                                                                                                                                                                                                                                                                                |               |        |
-| Finish ax-* on host shells + commit-ready                                                                                                                     | oo-checker | Done             |          | commit 40a00f0; docs/polish-ax-inventory.md; checker re-run lint+check+coverage:gate+compile exit 0; ax-shell + host FOUC shells + workers btn() + library Apply verified                                                                                                                                                                                      |               |        |
-| Reinstall AXIS IDE VSIX into VSCodium                                                                                                                         | oo-checker | Done             |          | axis-ide-0.3.1.vsix + pack/axis-pack-0.3.0.vsix; codium install exit 0; list-extensions hoox-sh.axis-ide@0.3.1 + pyne@0.5.7 + axis-pack@0.3.0 (checker re-list OK)                                                                                                                                                                                             |               |        |
-| Simplify AXIS IDE: core chart + Pyodide + PYNE worker example only; remove Workers, Plugins, Alerts, Watchlist, Scripts, Layers and all related views/studios | oo-checker | Done             |          | PASS oo-checker 2026-11-09: live GONE bloat dirs; package 6 cmds no views/MCP; extension chart+run+secrets only; checker re-run lint/check/compile/package/coverage:gate all exit 0 (pure-host 2028/2028 protocol 444/444); vsix 12 files junk0; docs/simplify-inventory-proof.txt matches. oo_proofs owner+checker verified.                                  |               |        |
-| AXIS IDE: finish in-flight pyodide/engine-rework — track HQ card, do not duplicate product dirt                                                               | oo-spec-2  | Ready for Review |          | `bun run check` exit 0; `bun run test:unit` 270 pass / 0 fail (orchestrator keyless X-AXIS-Client + unsupported engine + worker-alone); pyodide allow flag kept opt-in default off. Lightweight-core landed on 03eff58. |                                                                                                                                                                                                                                                                                                                                                                |               |        |
-| Reinstall simplified AXIS IDE to VSCodium and rewrite README + docs for new lightweight core (chart + Pyodide + minimal PYNE options)                         | oo-spec-2  | Done             |          | axis-ide-0.3.1.vsix (12 files 159KB); .vscodeignore has .openorchestrate/** .githooks/** .ooignore llms.txt .grok/** .opencode/** .tmp/**; unzip -l vsix grep wc -l ==0 (cwd root); codium install --force exit 0; list shows hoox-sh.axis-ide@0.3.1 + pyne@0.5.7; post ls + junk wc==0 clean; 13+ oo_proofs verified ok; docs tightened; board to Done. PASS. |               |        |
-| PyneIDE vs AXIS: competitive feature list + parity-and-beyond comparison                                                                                      | oo-spec-1  | Working          |          | FAIL oo-checker 2026-11-09: file exists; sections+P0 named+no studio restore+three surfaces OK; AXIS-today status-bar/diagnostics contradict R-AXIS; comparison table mostly unsourced in-row. See gate section.                                                                                                                                               |               |        |
-| PyneIDE VSIX/manifest inspect (contributes, commands, changelog)                                                                                              | oo-misc    | Ready for Review |          | docs/competitive/_research-pyneide-vsix.md; OVSX pynesys.pyneide@0.14.1; /tmp/pyneide-inspect/pynesys.pyneide-0.14.1.vsix; test -f exit 0; oo_proof artifact+command verified ok                                                                                                                                                                               |               |        |
-| PyneIDE public-surface inventory (OVSX, site, README, pricing)                                                                                                | oo-misc    | Ready for Review |          | artifact docs/competitive/_research-pyneide-public.md; test -f docs/competitive/_research-pyneide-public.md cwd root (MCP run)                                                                                                                                                                                                                                 |               |        |
-| AXIS current-capability inventory for PyneIDE comparison                                                                                                      | oo-spec-1  | Ready for Review |          | docs/competitive/_research-axis-current.md exists (334 lines); test -f exit 0 cwd root; WT 6 cmds 0 views vs HEAD 20 cmds + axis/axis-panel views vs OVSX 0.3.1 studios; local vsix 12 files. Do not treat as simplify-card Done.                                                                                                                              |               |        |
+| task                                                                                                                                                          | owner      | status           | priority | proof                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | blockedReason | source |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------ |
+| Rename pack id axis → axis-pack (0.3.0) + publish                                                                                                             | oo-checker | Done             |          | merge 63e0ad3; Release https://github.com/hoox-sh/axis-ide-vsce/actions/runs/42520914199 green; Marketplace+OVSX hoox-sh.axis-pack@0.3.0; vsce show + ovsx api exit 0                                                                                                                                                                                                                                                                                                                       |               |        |
+| Polish AXIS visuals + ax component library                                                                                                                    | oo-spec-2  | Done             |          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |               |        |
+| Finish ax-* on host shells + commit-ready                                                                                                                     | oo-checker | Done             |          | commit 40a00f0; docs/polish-ax-inventory.md; checker re-run lint+check+coverage:gate+compile exit 0; ax-shell + host FOUC shells + workers btn() + library Apply verified                                                                                                                                                                                                                                                                                                                   |               |        |
+| Reinstall AXIS IDE VSIX into VSCodium                                                                                                                         | oo-checker | Done             |          | axis-ide-0.3.1.vsix + pack/axis-pack-0.3.0.vsix; codium install exit 0; list-extensions hoox-sh.axis-ide@0.3.1 + pyne@0.5.7 + axis-pack@0.3.0 (checker re-list OK)                                                                                                                                                                                                                                                                                                                          |               |        |
+| Simplify AXIS IDE: core chart + Pyodide + PYNE worker example only; remove Workers, Plugins, Alerts, Watchlist, Scripts, Layers and all related views/studios | oo-checker | Done             |          | PASS oo-checker 2026-11-09: live GONE bloat dirs; package 6 cmds no views/MCP; extension chart+run+secrets only; checker re-run lint/check/compile/package/coverage:gate all exit 0 (pure-host 2028/2028 protocol 444/444); vsix 12 files junk0; docs/simplify-inventory-proof.txt matches. oo_proofs owner+checker verified.                                                                                                                                                               |               |        |
+| AXIS IDE: finish in-flight pyodide/engine-rework — track HQ card, do not duplicate product dirt                                                               | oo-checker | Done             |          | `bun run check` exit 0; `bun run test:unit` 270 pass / 0 fail (orchestrator keyless X-AXIS-Client + unsupported engine + worker-alone); pyodide allow flag kept opt-in default off. Lightweight-core landed on 03eff58.                                                                                                                                                                                                                                                                     |               |        |
+| Reinstall simplified AXIS IDE to VSCodium and rewrite README + docs for new lightweight core (chart + Pyodide + minimal PYNE options)                         | oo-spec-2  | Done             |          | axis-ide-0.3.1.vsix (12 files 159KB); .vscodeignore has .openorchestrate/** .githooks/** .ooignore llms.txt .grok/** .opencode/** .tmp/**; unzip -l vsix grep wc -l ==0 (cwd root); codium install --force exit 0; list shows hoox-sh.axis-ide@0.3.1 + pyne@0.5.7; post ls + junk wc==0 clean; 13+ oo_proofs verified ok; docs tightened; board to Done. PASS.                                                                                                                              |               |        |
+| PyneIDE vs AXIS: competitive feature list + parity-and-beyond comparison                                                                                      | oo-spec-1  | Ready for Review |          | oo-spec-1 2026-11-09 gate-fail fix: AXIS today from R-AXIS+WT src (status bar No; diagnostics no-op/output-only); comparison Source col 33/33; klinecharts from R-VSIX/changelog not Marketplace README; GH-API 5 stars, 206 commits. test -f docs/competitive/pyneide-vs-axis.md EXIT 0 cwd root. Proofs 1ee04fa9 artifact; af1c0897 command; checklist. See handoff.                                                                                                                      |               |        |
+| PyneIDE VSIX/manifest inspect (contributes, commands, changelog)                                                                                              | oo-misc    | Ready for Review |          | docs/competitive/_research-pyneide-vsix.md; OVSX pynesys.pyneide@0.14.1; /tmp/pyneide-inspect/pynesys.pyneide-0.14.1.vsix; test -f exit 0; oo_proof artifact+command verified ok                                                                                                                                                                                                                                                                                                            |               |        |
+| PyneIDE public-surface inventory (OVSX, site, README, pricing)                                                                                                | oo-misc    | Ready for Review |          | artifact docs/competitive/_research-pyneide-public.md; test -f docs/competitive/_research-pyneide-public.md cwd root (MCP run)                                                                                                                                                                                                                                                                                                                                                              |               |        |
+| AXIS current-capability inventory for PyneIDE comparison                                                                                                      | oo-spec-1  | Working          |          | docs/competitive/_research-axis-current.md exists (334 lines); test -f exit 0 cwd root; WT 6 cmds 0 views vs HEAD 20 cmds + axis/axis-panel views vs OVSX 0.3.1 studios; local vsix 12 files. Do not treat as simplify-card Done.                                                                                                                                                                                                                                                           |               |        |
+| Review pyne-lsp-vsce: fine-tune language surface for AXIS pack                                                                                                | oo-misc    | Working          |          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |               |        |
+| Pro backend vs AXIS: capability gap (pyne-worker /run envelope unused in IDE)                                                                                 | oo-spec-1  | Done             |          | oo-spec-1 2026-11-09 recit from final disk after envelope Done: drawings in redraw; inputs form+persist+applyInputs; strategy table+CSV+markers+equity; times; window chip; error_kind; alerts count. Paint Partial only fill/plotbar/plotcandle/linestyle/offset/show_last. POST timeframe/from_bar Unused. logs not dumped. Skip alerts/cron/live/scripts/ingest/feed. test -f EXIT 0 cwd root. Proofs 816986d6 artifact, c4004433 command, 872d0aa6 rg, 719112a2 checklist. See handoff. |               |        |
+| AXIS consume Pro /run envelope: plots, drawings, inputs, strategy, window                                                                                     | oo-spec-2  | Done             |          | PASS oo-checker 2026-11-09: re-ran `bun run check` EXIT 0; `bun run test:unit` 307 pass / 0 fail cwd root. No contributes.views. Envelope map+paint+chart chrome verified. Proofs 25f35352 check, 494630ce test:unit, c51abcf2 run-envelope, 0a100e06 paint, f000820e main.                                                                                                                                                                                                                 |               |        |
+| AXIS lightweight polish: Stop, language when, Show Run Output, chart chrome                                                                                   | oo-spec-2  | Ready for Review |          | oo-spec-2 2026-11-09: `bun run check` exit 0; `bun run test:unit` 291 pass / 0 fail. package.json cmds axis.stopRun axis.showRunOutput axis.pickData; when pinescript+.pyne+.pine; capabilities untrusted+virtual false; no views. Chart toolbar layers/data/legend/fullscreen/source. See handoff.                                                                                                                                                                                         |               |        |
+| Raise OpenOrchestrate maturity to L7 (daily clock)                                                                                                            | oo-ops     | Ready for Review |          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |               |        |
+| Flask RUN_SCHEMA: add timeframe so AXIS POST /run is not 400                                                                                                  | oo-misc    | Done             |          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |               |        |
+| AXIS paint leftover plot_meta: fill, plotbar, plotcandle, linestyle, offset, show_last                                                                        | oo-spec-2  | Done             |          | PASS oo-checker 2026-11-09: re-ran `bun run check` EXIT 0; `bun run test:unit` 339 pass / 0 fail cwd root. resolvePlotPaintKind+applyPlotOverlays fill AreaSeries, plotbar BarSeries, plotcandle extra candles, linestyle, offset/show_last. No contributes.views. Proofs e140905c check, fdf69f78 test:unit, e2e47d1a state.ts, bf539c5e paint.ts. Owner 29be2fdf, cfa8c7a6, eadf5e42, df83defa. See handoff.                                                                              |               |        |
+| AXIS POST timeframe+from_bar/to_bar, dump engine logs, dual X-API-Key                                                                                         | oo-spec-2  | Done             |          | PASS oo-checker 2026-11-09: re-ran `bun run check` EXIT 0; `bun run test:unit` 339 pass / 0 fail cwd root. POST timeframe+from_bar+to_bar; UNKNOWN_FIELDS retry; dual Bearer+X-API-Key; logs dump. No views. Proofs 39e14ec0 check, 73cc3009 test:unit, c2a15e39 engine-http, a245dd87 orchestrator, 61733b11 checklist. Owner proofs 7ac00e63, bd45b999, 74cb4449, 25840418, 8edd6041. See handoff.                                                                                        |               |        |
+| Pyodide leftover: real calculator when axis.engine.allowPyodide (CDN 0.29.5)                                                                                  | oo-spec-2  | Done             |          | PASS oo-checker 2026-11-09: re-ran bun run check EXIT 0; bun run test:unit 347 pass / 0 fail cwd root. Flag default false; ready false until mocked 1+1 smoke; no Wasm in VSIX; no contributes.views; unsupported Pine PYODIDE_PINE_WHEEL_NEXT. Proofs 0a78b57c check, c5ed1c75 test:unit, a3f50138 calculator, 676a8974 profile. Owner 8cff53ad, d75894d4, a8c17d78, 49764931. See handoff.                                                                                                |               |        |
+| Useful studios + 100% Pyodide + bar debugger; publish capability list                                                                                         | oo-spec-2  | Done             |          | oo-spec-2 2026-11-09: bun run check EXIT 0; bun run test:unit 371 pass / 0 fail; bun run lint EXIT 0 (0 errors); bun run test:coverage:gate EXIT 0 (2970/2970 100%). docs/competitive/axis-capability-list.md exists. package.json contributes.views absent. DAP type axis-bar (not pyne). Table B ADD none so zero views. Wheels media/pyodide/hoox_pyne-0.6.29 + antlr4. Flag default false. See handoff.                                                                                 |               |        |
+| Visual polish PYNE LSP hover cards (theme chrome + markdown layout)                                                                                           | oo-spec-2  | Ready for Review |          |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |               |        |
 
 ## Rules
 
@@ -553,5 +564,674 @@ artifacts: docs/competitive/pyneide-vs-axis.md; docs/competitive/_research-axis-
 decisions: FAIL criterion 3; sections/P0 naming/studio-conflict/three-surfaces hold; Engineering must not card from the wrong AXIS-today rows
 open questions: none for this gate
 next gate: oo-spec-1 corrects AXIS-today + comparison-table citations; checker re-review
+```
+
+## oo-spec-1 handoff: PyneIDE vs AXIS comparison (gate-fail fix, 2026-11-09)
+
+Card: `PyneIDE vs AXIS: competitive feature list + parity-and-beyond comparison` → Ready for Review.
+
+Checker FAIL (criterion 3) is addressed in `docs/competitive/pyneide-vs-axis.md` only. No studios restored as P0. No product code edited.
+
+Proof:
+
+```
+$ test -f docs/competitive/pyneide-vs-axis.md; echo EXIT:$?
+EXIT:0
+cwd: /mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce
+```
+
+AXIS today vs `src/extension.ts` (re-read this run): activate comment “no statusBar in lightweight core”; `diagnostics.set` empty (“diagnostics stripped… errors still logged to output”). Matches R-AXIS §4/§6.
+
+```text
+from: oo-spec-1
+to: oo-checker
+objective: re-Ready the comparison after fixing AXIS-today rows and in-row sources
+artifacts: docs/competitive/pyneide-vs-axis.md; test -f EXIT 0 cwd repo root; oo_proof 1ee04fa9 (artifact), af1c0897 (command exit 0), checklist
+decisions: AXIS today recited from R-AXIS + working-tree package.json/src only (status bar = No; diagnostics = no-op/output-only). WT README is not AXIS today when it contradicts src/. Every feature-by-feature row has a Source cell (URL or repo path); 33/33. klinecharts 10.1.0 cited from R-VSIX + shipped changelog 0.1.0, not Marketplace README. GitHub 189 commits dropped; live GitHub API sourced as 5 stars and 206 commits on main. Studios stay Skip/out of scope, not P0.
+open questions: Is HOOX Pro actually free for compile+run (README says free; not a src fact)? Should P2 debugger live in PYNE or AXIS?
+next gate: Checker re-review of criterion 3 (AXIS-today vs R-AXIS/src; in-row sources; klinecharts citation; commit count)
+```
+
+## Gate review proofs (oo-checker 2026-11-09)
+
+Card: AXIS IDE: finish in-flight pyodide/engine-rework — track HQ card, do not duplicate product dirt
+Status: Done (was Ready for Review). Owner oo-checker.
+
+HQ done-when (HQ board): finish in-flight pyodide and engine-rework so `bun run check` and `test:unit` go green. Not the later HQ Todo (venue-stream Engine IDs). Wasm shipping is not this card.
+
+```text
+from: oo-checker
+to:
+objective: gate re-run verify; attach proofs; Done
+artifacts: oo_proof d3891be6 bun run check exit 0; 9e4bde50 bun run test:unit exit 0; 48093616 src/host/pyodide-profile.ts; ef8712c1 checklist. MCP run:true denied (no OO_SEAT); checker re-ran in shell.
+decisions: PASS. check exit 0; test:unit 270 pass / 0 fail. allowPyodide default false; isPyodideAllowed only true. pyodideRuntimeStatus.ready false even when allowed; Wasm not in VSIX (still stub). 03eff58 ancestor of HEAD 375c103. Did not duplicate simplify (Done; 6 cmds; no views/MCP). Did not update HQ card.
+open questions: none for this agency card
+next gate: n/a
+```
+
+## oo-spec-1 handoff: Pro backend vs AXIS gap (2026-11-09)
+
+Card: `Pro backend vs AXIS: capability gap (pyne-worker /run envelope unused in IDE)` → Ready for Review.
+
+Proof:
+
+```
+$ test -f docs/competitive/pro-backend-vs-axis.md; echo EXIT:$?
+EXIT:0
+cwd: /mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce
+```
+
+```text
+from: oo-spec-1
+to: oo-checker
+objective: sourced inventory of HOOX Pro / pyne-worker /run envelope and other routes vs what AXIS IDE sends and consumes
+artifacts: docs/competitive/pro-backend-vs-axis.md; test -f EXIT 0 cwd repo root
+decisions: AXIS today is WT REST POST /run with {script,data,mode,symbol} only. plots/series Partial (line paint). drawings Partial (host forwards, webview drops non-tool batches). plot_meta/inputs/times/window/error_kind Unused. events Partial (mapped, not painted). alerts/cron/live/scripts/ingest/feed Skip. No studios restored. Flask RUN_SCHEMA is strict — do not post worker-only keys to :5002. timeframe is worker-accepted but not in Flask schema (coordinate with PYNE). P0 list matches pyneide-vs-axis.md (plot_meta P0-4, events P0-5, inputs P0-6, times/window P0-9, logs P0-11; drawings stay P1-1).
+open questions: Should PYNE add timeframe to Flask RUN_SCHEMA before the IDE posts it? Worker self-host: send X-API-Key in addition to Bearer?
+next gate: Checker review of the gap doc (tables vs handler.py + engine-http.ts + no-studio P0)
+```
+
+## oo-spec-1 handoff: Pro backend vs AXIS gap (gate-fail fix, 2026-11-09)
+
+Card: `Pro backend vs AXIS: capability gap (pyne-worker /run envelope unused in IDE)` → Ready for Review.
+
+Checker FAIL (stale request/response tables vs AXIS send/consume) is addressed in `docs/competitive/pro-backend-vs-axis.md` only. Recited from disk at write time. No product code edited.
+
+Proof:
+
+```
+$ test -f docs/competitive/pro-backend-vs-axis.md; echo EXIT:$?
+EXIT:0
+cwd: /mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce
+
+$ rg -n 'if (req.inputs && Object.keys(req.inputs).length > 0)|return attachRunEnvelope|chartFullFromRunResult(result|errorKind|applyPlotOverlays(chart, series, plotSeries' src/run/engine-http.ts src/run/run-envelope.ts src/run/orchestrator.ts webview/chart/src/paint.ts
+engine-http.ts:319 return attachRunEnvelope
+engine-http.ts:380 if (req.inputs && Object.keys(req.inputs).length > 0)
+run-envelope.ts:218 attachRunEnvelope
+run-envelope.ts:248 chartFullFromRunResult
+orchestrator.ts:244 inputs: req.inputs
+orchestrator.ts:271 errorKind
+orchestrator.ts:281 chartFullFromRunResult(result, req.bars, nextSeq)
+paint.ts:449 applyPlotOverlays(..., state.times)
+```
+
+oo_proof: artifact 79afb88a; command f5294b60 test -f exit 0; command e6e59216 rg host/paint; checklist 458ac0d2.
+
+```text
+from: oo-spec-1
+to: oo-checker
+objective: re-Ready the Pro /run gap doc after reciting AXIS host vs paint from live src
+artifacts: docs/competitive/pro-backend-vs-axis.md; test -f EXIT 0 cwd repo root; oo_proof 79afb88a (artifact), f5294b60 (command), e6e59216 (rg), 458ac0d2 (checklist)
+decisions: Request is four keys plus optional inputs (posted when non-empty). Host mapEngineResponse → attachRunEnvelope copies plot_meta, inputs, alerts, times, window, error_kind, script_type, overlay, strategy onto EngineRunResult; chartFullFromRunResult publishes those extras on chart.full (not overlay/scriptName/errorKind/events). errorKind is logged. Host tags for those fields are Used or Partial, not Unused. Paint remaining Partial: kinds line/step/histogram/area/hline/bgcolor/barcolor/shape + times zip + strategy markers; engine drawings helper not called from main.ts; no inputs form; logs not dumped. timeframe and from_bar still Unused on the request. No studios restored. Docs only.
+open questions: Should PYNE add timeframe to Flask RUN_SCHEMA before the IDE posts it? Worker self-host: send X-API-Key in addition to Bearer?
+next gate: Checker re-review of request/response tables vs engine-http.ts + run-envelope.ts + orchestrator.ts + paint.ts (host Used/Partial, paint Partial)
+```
+
+## oo-spec-2 handoff: AXIS lightweight polish (2026-11-09)
+
+Card: `AXIS lightweight polish: Stop, language when, Show Run Output, chart chrome` → Ready for Review.
+
+Proof (cwd repo root):
+
+```
+$ bun run check
+EXIT:0
+$ bun run test:unit
+291 pass / 0 fail
+```
+
+package.json contributes.commands includes `axis.stopRun`, `axis.showRunOutput`, `axis.pickData`. `contributes.views` absent. `capabilities.untrustedWorkspaces.supported` and `virtualWorkspaces.supported` are false.
+
+```text
+from: oo-spec-2
+to: oo-checker
+objective: P0 host chrome polish (Stop, language when, Show Run Output, chart toolbar, Data Quick Pick, capabilities) without studios
+artifacts:
+  - package.json (commands, menus, keybindings, capabilities)
+  - src/extension.ts (stop/show output/pick data wiring)
+  - src/host/pine-lang.ts, data-pick.ts, run-control.ts, open-chart.ts
+  - webview/chart toolbar chrome (layers, data window, legend, fullscreen, open source)
+  - bun run check exit 0; bun run test:unit 291 pass / 0 fail
+decisions:
+  - Stop uses context axis.run.running to swap title-bar Run; abortInflightRun + orchestrator.abortAll
+  - when clauses: pinescript plus PYNE extnames (.pyne/.pine/.pinev5/.pinev6/.pinescript); pyne-lsp id today is pinescript
+  - Open source reuses drawing.setTool tool=open-source (no new protocol types)
+  - No views/studios; chart chrome is webview toolbar only
+  - Did not revert sibling /run envelope work (inputs/strategy HTML and paint kinds kept)
+open questions: none blocking
+next gate: oo-checker review; draft autonomy — no publish
+```
+
+## oo-spec-2 handoff: consume Pro /run envelope (2026-11-09)
+
+Card: `AXIS consume Pro /run envelope: plots, drawings, inputs, strategy, window` → Ready for Review.
+
+Proof (cwd `/mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce`):
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+307 pass
+0 fail
+EXIT_CODE:0
+```
+
+Envelope fields now consumed:
+
+- Used: `plots`, `series`, `plot_meta` (histogram/step/area/hline/bgcolor/barcolor/plotshape), `drawings` (line/label/box/table/polyline/linefill + user trendline kept), `inputs` (chart chrome editor, persist `scripts[].inputs`, POST /run, `chart.applyInputs`), `events` (strategy trades + markers), `__equity` (equity overlay), `times`, `window`, `alerts` (count chip), `error_kind` (run log), `script_type`/`script_name`/`overlay`
+- Partial: logs (already on host), profile (already on host)
+- Skip: cron/live/scripts/ingest/feed (not this card)
+
+No `contributes.views` / activity-bar studios. No package.json Stop/`when`/Show Run Output edits on this card. No pyne-lsp-vsce. No marketplace publish.
+
+Checklist:
+
+```
+[1] PASS artifact exists (src/run/run-envelope.ts, webview/chart paint/state/main, protocol chart.applyInputs)
+[2] PASS bun run check EXIT 0; bun run test:unit 307 pass / 0 fail
+[3] PASS claims from pyne-worker README + src reads + command output
+[4] PASS engineering only (this repo; board + CHANGELOG)
+```
+
+```text
+from: oo-spec-2
+to: oo-checker
+objective: Consume unused HOOX Pro / pyne-worker POST /run envelope on the AXIS chart without restoring studios
+artifacts:
+  - src/run/run-envelope.ts + run-envelope.test.ts
+  - src/run/engine-http.ts, orchestrator.ts, run-context.ts
+  - src/protocol (chart.applyInputs, chart.full extras)
+  - src/editors/chart-html.ts, chart-messages.ts, chart-document.ts, chart-editor.ts
+  - webview/chart/src/{state,paint,drawings,main,style}.ts
+  - bun run check EXIT 0; bun run test:unit 307 pass / 0 fail
+  - oo_proof b0c7743d (check), a42a53b4 (test:unit), 30307f2a (run-envelope.ts)
+decisions:
+  - Map extras onto chart.full (codec already allows extra keys) plus one view→host type chart.applyInputs
+  - Paint kinds via LWC Line/Histogram/Area, LineType.WithSteps, createPriceLine, createSeriesMarkers, per-bar candle colors
+  - Strategy table/CSV/stats and inputs editor live in chart webview chrome, not Results/Inputs studios
+  - Engine drawings on SVG overlay; table drawings as HTML overlay; user trendline preserved
+  - Persist first scripts[].inputs and silent re-run
+open questions: none blocking
+next gate: oo-checker review; draft autonomy — no publish
+```
+
+## Gate review proofs (oo-checker 2026-11-09)
+
+Card: AXIS consume Pro /run envelope: plots, drawings, inputs, strategy, window
+Status: Done (was Ready for Review). Owner oo-spec-2.
+
+MCP `oo_proof_attach` `run:true` denied (no OO_SEAT). Checker re-ran commands in shell at repo root, then attached proofs with recorded exit codes.
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+307 pass
+0 fail
+2491 expect() calls
+Ran 307 tests across 31 files.
+EXIT_CODE:0
+```
+
+### Verified
+1. `bun run check` EXIT 0 (cwd repo root). Proof 25f35352 verification.ok.
+2. `bun run test:unit` 307 pass / 0 fail EXIT 0. Proof 494630ce verification.ok. Includes run-envelope, orchestrator chart.full extras, chart.full plot_meta/drawings/inputs/strategy/window, user trendline kept, applyInputs, POST inputs.
+3. `package.json` contributes has customEditors, commands, keybindings, menus, configuration. No `contributes.views`, no activitybar, no studios. No `src/views/`.
+4. `mapEngineResponse` copies plots/series/events/drawings then `attachRunEnvelope` copies plot_meta, inputs, alerts, times, window, error_kind, script_type, script_name, overlay, strategy. `chartFullFromRunResult` publishes extras on chart.full. `errorKind` logged on run error.
+5. paint.ts: histogram/bgcolor HistogramSeries, area AreaSeries, step LineType.WithSteps, hline createPriceLine, barcolor per-bar colors, shape+strategy createSeriesMarkers, __equity line overlay, times zip.
+6. main.ts: engine drawings on SVG overlay with user trendlines; table drawings HTML; inputs editor + `chart.applyInputs`; host mergeScriptInputs + silent `runScriptCore`; POST /run body.inputs when non-empty; strategy table/CSV/stats; window + alerts chips.
+7. Owner proofs b0c7743d, a42a53b4, 30307f2a also verification.ok.
+
+### Decision
+**PASS** every gate criterion. Card Done. No product edits this review.
+
+```text
+from: oo-checker
+to:
+objective: gate review consume Pro /run envelope card
+artifacts: checker re-run check+test:unit; oo_proof 25f35352, 494630ce, c51abcf2, 0a100e06, f000820e, 30d452ed, 2056b93e
+decisions: PASS; no contributes.views restored; envelope consumed on host+chart chrome without studios
+open questions: none
+next gate: n/a
+```
+
+## oo-spec-1 handoff: Pro backend vs AXIS gap (final-disk recit, 2026-11-09)
+
+Card: `Pro backend vs AXIS: capability gap (pyne-worker /run envelope unused in IDE)` → Ready for Review.
+
+Checker last FAIL (paint behind disk) is addressed in `docs/competitive/pro-backend-vs-axis.md` only. Recited from live src after envelope card Done. No product code edited.
+
+Proof (cwd `/mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce`):
+
+```
+$ test -f docs/competitive/pro-backend-vs-axis.md; echo EXIT:$?
+EXIT:0
+
+$ rg -n 'overlay.redraw\(state.drawings, placer.getDraft\(\), state.engineDrawings\)' webview/chart/src/main.ts
+134:  overlay.redraw(state.drawings, placer.getDraft(), state.engineDrawings);
+
+$ rg -n 'function renderInputs|function postApplyInputs|function renderStrategy|function copyCsv|function renderEngineTables|function renderWindowChip|function renderAlertsChip' webview/chart/src/main.ts
+326:function renderWindowChip
+342:function renderAlertsChip
+354:function renderInputs
+408:function postApplyInputs
+438:function renderStrategy
+480:function renderEngineTables
+519:function copyCsv
+
+$ rg -n 'result.logs' src/run/orchestrator.ts || echo 'no result.logs in orchestrator'
+no result.logs in orchestrator
+```
+
+POST body remains four keys plus optional `inputs` (`engine-http.ts` 374–382). No `timeframe` / `from_bar` / `to_bar` on POST.
+
+```text
+from: oo-spec-1
+to: oo-checker
+objective: re-Ready the Pro /run gap doc after reciting paint/consume from final disk (envelope card Done)
+artifacts: docs/competitive/pro-backend-vs-axis.md; test -f EXIT 0 cwd repo root; oo_proof 816986d6 (artifact), c4004433 (test -f), 872d0aa6 (rg redraw), 719112a2 (checklist); this handoff
+decisions: Paint Used for shipped kinds (histogram/step/area/hline/bgcolor/barcolor/shape), engine drawings in redraw (line/label/box/table/polyline/linefill), inputs form+persist+chart.applyInputs, strategy table+CSV+markers+equity, times zip, window chip, error_kind, alerts count. Partial only remaining plot_meta holes (fill/plotbar/plotcandle/linestyle/offset/show_last) plus logs not dumped. Unused on POST: timeframe, from_bar/to_bar. Skip: alerts/cron/live/scripts/ingest/feed. No studios restored. Docs only.
+open questions: Should PYNE add timeframe to Flask RUN_SCHEMA before the IDE posts it? Worker self-host: send X-API-Key in addition to Bearer?
+next gate: Checker re-review of paint/request/response tables vs engine-http.ts + run-envelope.ts + orchestrator.ts + paint.ts + drawings.ts + main.ts + state.ts
+```
+
+## oo-spec-2 handoff: leftover plot_meta paint (2026-11-09)
+
+Card: `AXIS paint leftover plot_meta: fill, plotbar, plotcandle, linestyle, offset, show_last` → Ready for Review.
+
+Proof (cwd `/mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce`):
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+324 pass
+0 fail
+EXIT_CODE:0
+```
+
+Paint leftovers now consumed:
+
+- `fill` — `plot1`/`plot2` (or `*.upper`/`*.lower` series edges) → AreaSeries band (upper+lower)
+- `plotbar` — BarSeries overlay from `title.open/high/low` + close
+- `plotcandle` — extra CandlestickSeries overlay (wick/border from meta)
+- `linestyle` — Line/Area/hline `LineStyle` (hline default remains Dashed when omitted)
+- `offset` / `show_last` — `applyPlotWindow` before zip (positive offset = future)
+
+Did not edit `src/run/engine-http.ts`, `src/host/pyodide-profile.ts`, or views/studios.
+
+Checklist:
+
+```
+[1] PASS artifact exists (webview/chart/src/state.ts, paint.ts, chart-full-roundtrip.test.ts)
+[2] PASS bun run check EXIT 0; bun run test:unit 324 pass / 0 fail
+[3] PASS claims from pro-backend-vs-axis.md P0-4 remainder + host.py packing + LWC Bar/Area/Candlestick APIs + test output
+[4] PASS engineering only (this repo; board + CHANGELOG)
+```
+
+```text
+from: oo-spec-2
+to: oo-checker
+objective: Paint remaining plot_meta kinds on the Lightweight Charts webview (fill, plotbar, plotcandle, linestyle, offset, show_last)
+artifacts:
+  - webview/chart/src/state.ts (resolvePlotPaintKind, finishPlot, applyPlotWindow, fill/ohlc normalize)
+  - webview/chart/src/paint.ts (applyPlotOverlays + mapPlotLineStyle + toOhlcOverlayPoints + toFillBandPoints)
+  - src/editors/chart-full-roundtrip.test.ts
+  - bun run check EXIT 0; bun run test:unit 324 pass / 0 fail
+  - oo_proof 29be2fdf (check), cfa8c7a6 (test:unit), eadf5e42 (paint.ts), df83defa (state.ts), 06cb4c3a (tests)
+decisions:
+  - Host already forwards plotMeta/series; paint-only card
+  - fill uses AreaSeries upper+lower (LWC has no native two-series band); plotbar BarSeries; plotcandle extra Candlestick overlay
+  - hline linestyle honoured; unspecified hline stays Dashed
+  - offset/show_last applied in applyPlotWindow before time zip
+  - Draft autonomy — no publish
+open questions: none blocking
+next gate: oo-checker review; re-run check + test:unit
+```
+
+## oo-spec-2 handoff: POST timeframe+from_bar/to_bar, logs dump, dual X-API-Key (2026-11-09)
+
+Card: `AXIS POST timeframe+from_bar/to_bar, dump engine logs, dual X-API-Key` → Ready for Review.
+
+Proof (cwd `/mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce`):
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+339 pass
+0 fail
+EXIT_CODE:0
+```
+
+Body keys now posted (omitted when unset):
+
+- `timeframe` from `*.axis.json` `interval` (worker-style `1m`/`1h`/`1d`; aliases mapped)
+- Flask 400 `UNKNOWN_FIELDS` retries once without `timeframe`
+- `from_bar`/`to_bar` from `chart.viewport` when reported, else full bar window `0..n-1`
+- Dual auth: `Authorization: Bearer` and `X-API-Key` when a key is present
+- Capped `result.logs` appended as `log.info …` on the AXIS Run output channel
+
+Did not paint fill/plotcandle (sibling card). Did not restore studios. Did not vendor Pyodide.
+
+Checklist:
+
+```
+[1] PASS artifact exists (src/run/engine-http.ts, orchestrator.ts, run-context.ts)
+[2] PASS bun run check EXIT 0; bun run test:unit 339 pass / 0 fail
+[3] PASS claims from Flask RUN_SCHEMA (from_bar/to_bar in schema; timeframe retry), pyne-worker X-API-Key, engine logs {level,message}, command output
+[4] PASS engineering only (this repo; board + CHANGELOG)
+```
+
+```text
+from: oo-spec-2
+to: oo-checker
+objective: Finish leftover host POST /run fields (timeframe, from_bar/to_bar), dump engine logs, dual X-API-Key
+artifacts:
+  - src/run/engine-http.ts (mapToWorkerTimeframe, body keys, UNKNOWN_FIELDS retry, dual auth)
+  - src/run/orchestrator.ts (forward fields; dump log.info lines)
+  - src/run/run-context.ts (interval → timeframe; viewport or full window)
+  - src/editors/chart-messages.ts + chart-editor.ts + webview/chart/src/main.ts (chart.viewport)
+  - bun run check EXIT 0; bun run test:unit 339 pass / 0 fail
+  - oo_proof 7ac00e63 (check), bd45b999 (test:unit), 74cb4449 (engine-http.ts), 25840418 (orchestrator.ts), 8edd6041 (checklist)
+decisions:
+  - timeframe posted in worker-style; one soft retry without it on old Flask UNKNOWN_FIELDS
+  - from_bar/to_bar omitted when no bars; visible logical range clamped to [0, n-1]
+  - key present → Bearer AND X-API-Key; keyless still X-AXIS-Client only
+  - engine {level,message} logs formatted as log.<level> <message>
+  - Draft autonomy — no publish
+open questions: none blocking
+next gate: oo-checker review; re-run check + test:unit
+```
+
+## Gate review proofs (oo-checker 2026-11-09)
+
+Card: AXIS POST timeframe+from_bar/to_bar, dump engine logs, dual X-API-Key
+Status: Done (was Ready for Review). Owner oo-spec-2.
+
+MCP `oo_proof_attach` `run:true` not used. Checker re-ran commands in shell at repo root, then attached proofs with recorded exit codes.
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+339 pass
+0 fail
+2681 expect() calls
+Ran 339 tests across 34 files.
+EXIT_CODE:0
+```
+
+### Verified
+1. `bun run check` EXIT 0 (cwd repo root). Proof 39e14ec0.
+2. `bun run test:unit` 339 pass / 0 fail EXIT 0. Proof 73cc3009. Includes POST timeframe+from_bar/to_bar, UNKNOWN_FIELDS retry, dual Bearer+X-API-Key, orchestrator log dump, viewport vs full window.
+3. `package.json` contributes has customEditors, commands, keybindings, menus, configuration. No `contributes.views`.
+4. `buildRunBody` posts mapped `timeframe` plus `from_bar`/`to_bar` when set. `postEngineRun` retries once without `timeframe` on HTTP 400 UNKNOWN_FIELDS; keeps from_bar/to_bar. Dual headers when key present: Authorization Bearer and X-API-Key; keyless X-AXIS-Client only.
+5. `runWindowFields` / `barWindowFromVisibleRange`: interval → worker-style timeframe; viewport when recorded else full `0..n-1`. `chart.viewport` recorded in chart-editor.
+6. `dumpEngineLogs` formats `{level,message}` as `log.<level> <message>` onto the run output channel (server and pyodide paths).
+
+### Decision
+**PASS** every gate criterion. Card Done. No product edits this review.
+
+```text
+from: oo-checker
+to:
+objective: gate review POST timeframe+from_bar/to_bar, logs dump, dual X-API-Key
+artifacts: checker re-run check+test:unit; oo_proof 39e14ec0, 73cc3009, c2a15e39, a245dd87, 61733b11
+decisions: PASS; no contributes.views restored; retry-without-timeframe kept for old :5002
+open questions: none
+next gate: n/a
+```
+
+## Gate review proofs (oo-checker 2026-11-09)
+
+Card: AXIS paint leftover plot_meta: fill, plotbar, plotcandle, linestyle, offset, show_last
+Status: Done (was Ready for Review). Owner oo-spec-2.
+
+MCP `oo_proof_attach` `run:true` not used. Checker re-ran commands in shell at repo root, then attached proofs with recorded exit codes.
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+339 pass
+0 fail
+2681 expect() calls
+Ran 339 tests across 34 files.
+EXIT_CODE:0
+```
+
+### Verified
+1. `bun run check` EXIT 0 (cwd repo root). Proof e140905c.
+2. `bun run test:unit` 339 pass / 0 fail EXIT 0. Proof fdf69f78. Includes resolvePlotPaintKind fill/plotbar/plotcandle, normalizePlotLines fill/ohlc/linestyle/offset/show_last, applyPlotWindow, mapPlotLineStyle, applyPlotOverlays paints fill/plotbar/plotcandle.
+3. `webview/chart/src/state.ts` `resolvePlotPaintKind` maps kind fill/plotbar/plotcandle and style bars/candles. `finishPlot` copies linestyle/offset/show_last. `applyPlotWindow` shifts then keep-last. Proof e2e47d1a.
+4. `webview/chart/src/paint.ts` fill → AreaSeries (upper+lower), plotbar → BarSeries, plotcandle → extra CandlestickSeries, linestyle via mapPlotLineStyle (hline default Dashed), offset/show_last via applyPlotWindow before zip. Proof bf539c5e.
+5. `package.json` contributes has customEditors, commands, keybindings, menus, configuration. No `contributes.views`. No `src/views/`.
+6. Owner proofs 29be2fdf, cfa8c7a6, eadf5e42, df83defa, 06cb4c3a also present.
+
+### Decision
+**PASS** every gate criterion. Card Done. No product edits this review.
+
+```text
+from: oo-checker
+to:
+objective: gate review leftover plot_meta paint card
+artifacts: checker re-run check+test:unit; oo_proof e140905c, fdf69f78, e2e47d1a, bf539c5e, 7d977cdd
+decisions: PASS; no contributes.views restored; fill/plotbar/plotcandle/linestyle/offset/show_last painted
+open questions: none
+next gate: n/a
+```
+
+## oo-spec-2 handoff: Pyodide leftover real calculator (2026-11-09)
+
+Card: `Pyodide leftover: real calculator when axis.engine.allowPyodide (CDN 0.29.5)` → Ready for Review.
+
+Proof (cwd `/mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce`):
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+CHECK_EXIT:0
+
+$ bun run test:unit
+347 pass
+0 fail
+2721 expect() calls
+Ran 347 tests across 34 files.
+UNIT_EXIT:0
+
+$ bun run test:coverage:gate
+check-coverage: 2770/2770 pure-host lines hit = 100.00%
+check-coverage protocol: 459/459 = 100.00%
+GATE_EXIT:0
+```
+
+MCP `oo_proof_attach` `run:true` denied (no OO_SEAT). Commands re-run in shell; proofs attached with recorded exit codes.
+
+What landed:
+
+- Host calculator loads Pyodide **0.29.5** from `https://cdn.jsdelivr.net/pyodide/v0.29.5/full/` into globalStorage; Wasm is not in the VSIX
+- `axis.engine.allowPyodide` default **false**; flag off never fetches
+- `pyodideRuntimeStatus.ready` is true only after smoke `1+1 === 2`
+- Bars-in calculator: `plot(close|open|high|low|volume)` and `plot(ta.sma(src, N))` mapped through `mapEngineResponse` onto `chart.full`
+- Unsupported Pine is an honest error (`PYODIDE_PINE_WHEEL_NEXT`); full pynescript is not claimed
+- Chart CSP widens `wasm-unsafe-eval`, `worker-src blob:`, jsDelivr `script-src`/`connect-src` only when the flag is on
+- Chart blob worker preloads the same CDN; paint unchanged
+- Did not restore studios; did not fight POST/paint leftover on `engine-http.ts` / `paint.ts`
+
+Checklist:
+
+```
+[1] PASS artifact exists (src/run/pyodide-calculator.ts, pyodide-cdn-loader.ts, pyodide-subset.ts, src/host/pyodide-profile.ts, webview/chart/src/pyodide-boot.ts)
+[2] PASS bun run check EXIT 0; bun run test:unit 347 pass / 0 fail; coverage:gate 2770/2770
+[3] PASS claims from pyodide-profile.ts, calculator tests (flag off stub; mock load), command output, CHANGELOG Unreleased
+[4] PASS engineering only (this repo; board + CHANGELOG + README + AGENTS + csp-matrix)
+```
+
+```text
+from: oo-spec-2
+to: oo-checker
+objective: Make the leftover Pyodide path a real bars-in calculator when axis.engine.allowPyodide is true (CDN 0.29.5; no Wasm in VSIX)
+artifacts:
+  - src/run/pyodide-calculator.ts + test (flag off stub; ready only after mocked smoke)
+  - src/run/pyodide-cdn-loader.ts + test
+  - src/run/pyodide-subset.ts + test
+  - src/host/pyodide-profile.ts (PYODIDE_PINE_WHEEL_NEXT)
+  - src/run/orchestrator.ts (engineId pyodide before HTTP)
+  - webview/chart/src/pyodide-boot.ts; src/editors/chart-html.ts CSP widen
+  - bun run check EXIT 0; bun run test:unit 347 pass / 0 fail; bun run test:coverage:gate 2770/2770
+  - oo_proof 8cff53ad (check), d75894d4 (test:unit), a8c17d78 (coverage:gate), 49764931 (calculator.ts)
+decisions:
+  - Default flag stays false; ready is never the flag, only Wasm smoke
+  - Host CDN load is the run engine; chart worker only preloads
+  - Minimal subset this pass; pynescript wheel is documented next, not a fake Pine eval
+  - Draft autonomy — no publish
+open questions:
+  Next step for full Pine: micropip-install a trusted pynescript wheel + reuse AXIS PWA pynescript_runtime.py (PYODIDE_PINE_WHEEL_NEXT)
+next gate: oo-checker review; re-run check + test:unit
+```
+
+## Gate review proofs (oo-checker 2026-11-09)
+
+Card: Pyodide leftover: real calculator when axis.engine.allowPyodide (CDN 0.29.5)
+Status: Done (was Ready for Review). Owner oo-spec-2.
+
+MCP `oo_proof_attach` `run:true` not used. Checker re-ran commands in shell at repo root, then attached proofs with recorded exit codes.
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+CHECK_EXIT:0
+
+$ bun run test:unit
+347 pass
+0 fail
+2721 expect() calls
+Ran 347 tests across 34 files.
+UNIT_EXIT:0
+```
+
+### Verified
+1. `bun run check` EXIT 0 (cwd repo root). Proof 0a78b57c.
+2. `bun run test:unit` 347 pass / 0 fail EXIT 0. Proof c5ed1c75. Includes flag-off never loads; ready only after mocked 1+1 smoke; failed smoke stays not ready; unsupported Pine error with PYODIDE_PINE_WHEEL_NEXT; orchestrator pyodide path no fetch.
+3. `package.json` `axis.engine.allowPyodide` default **false**. No `contributes.views`. No `src/views/`.
+4. `pyodideRuntimeStatus(false).ready === false`. Flag-on pending is not ready until `wasmLoaded`. Calculator `status(false).ready` false; `ensureLoaded(true)` true only after smoke 2.
+5. Host loads CDN 0.29.5 into `globalStorageUri/pyodide/0.29.5` (`loadPyodideFromCdn` writes `pyodide.mjs` only; Wasm via `indexURL`). `.vscodeignore` allowlists out/extension.js + chart main.js/css + media; media has no `.wasm`.
+6. CSP default omits wasm-unsafe-eval and worker-src; widen only when `allowPyodide: true`.
+7. Pine does not fully evaluate: JS subset `plot(close|open|high|low|volume)` and `ta.sma`; unsupported scripts error with `error_kind: unsupported` and `PYODIDE_PINE_WHEEL_NEXT`. Ready-reason also includes wheel-next. Honest, not full Pine.
+
+### Decision
+**PASS** every gate criterion. Card Done. No product edits this review.
+
+```text
+from: oo-checker
+to:
+objective: gate review Pyodide leftover real calculator
+artifacts: checker re-run check+test:unit; oo_proof 0a78b57c, c5ed1c75, a3f50138, 676a8974, abcb3aa0, b4c315e7
+decisions: PASS; flag default false; ready after smoke only; no Wasm in VSIX; no studios; unsupported Pine is wheel-next not fake eval
+open questions: none
+next gate: n/a
+```
+
+## oo-spec-1 handoff: AXIS capability list (2026-11-09)
+
+Card: `Useful studios + 100% Pyodide + bar debugger; publish capability list` stays **Working**, owner **oo-spec-2**. Docs did **not** add a second card.
+
+Proof (cwd repo root):
+
+```
+$ test -f docs/competitive/axis-capability-list.md; echo EXIT:$?
+EXIT:0
+```
+
+```text
+from: oo-spec-1
+to: oo-spec-2
+objective: user-facing capability list so the human can read it while Engineering builds useful studios + 100% Pyodide + bar debugger
+artifacts: docs/competitive/axis-capability-list.md
+decisions: Recited AXIS today from src (9 commands, envelope+paint leftovers shipped, Pyodide CDN 0.29.5 SMA subset). Sibling comparison/gap docs are stale vs those Done cards. ADD only Replay panel (DAP companion) and OHLCV custom editor; Skip Workers/Plugins/Alerts/Watchlist/Scripts/Layers-as-studio. Debugger is DAP type axis-pyne or hoox-pyne, never pyne. 100% Pyodide = micropip pynescript wheel + PWA runtime, not a bigger JS subset. P0 order: wheel, DAP Next Bar, replay panel, chart.delta, listing README.
+open questions: Trusted pynescript wheel URL/hash for micropip (Engineering). Chief must approve any Marketplace/OVSX publish (P0-12).
+next gate: Engineering implements against the list; append implement notes in the same file; do not restore skipped studios
+```
+
+## oo-spec-2 handoff: useful studios + 100% Pyodide + bar debugger (2026-11-09)
+
+Card: `Useful studios + 100% Pyodide + bar debugger; publish capability list` → Ready for Review.
+
+Proof (cwd `/mnt/data/home/jango/Git/hoox-open-trading-stack/axis-ide-vsce`):
+
+```
+$ bun run check
+$ tsc -p ./ --noEmit && tsc -p webview/chart/tsconfig.json --noEmit
+EXIT_CODE:0
+
+$ bun run test:unit
+371 pass
+0 fail
+EXIT_CODE:0
+
+$ bun run lint
+EXIT_CODE:0
+(warnings only; 0 errors)
+
+$ bun run test:coverage:gate
+2970/2970 pure-host lines hit = 100.00%
+protocol 492/492 = 100.00%
+EXIT_CODE:0
+
+$ test -f docs/competitive/axis-capability-list.md; echo EXIT:$?
+EXIT:0
+
+$ python3 -c "import json; p=json.load(open('package.json')); print(p['contributes'].get('views')); print([d['type'] for d in p['contributes']['debuggers']])"
+None
+['axis-bar']
+```
+
+Wheels on disk: `media/pyodide/hoox_pyne-0.6.29-py3-none-any.whl` (1.6M, contains `pynescript/`), `antlr4_python3_runtime-4.13.2-py3-none-any.whl` (144k), `pynescript_runtime.py`.
+
+Checklist:
+
+```
+[1] PASS artifact exists (docs/competitive/axis-capability-list.md; src/debug/bar-adapter.ts; src/run/pyodide-calculator.ts; media/pyodide wheels)
+[2] PASS bun run check EXIT 0; bun run test:unit 371 pass / 0 fail; coverage gate 2970/2970
+[3] PASS claims from package.json, src/, sibling pynescript Runtime packing, wheel zip listing, command output
+[4] PASS engineering only (this repo; board + CHANGELOG). No Marketplace publish.
+```
+
+```text
+from: oo-spec-2
+to: oo-checker
+objective: Useful studios only if needed; 100% possible Pyodide Runtime envelope; bar debugger; publish capability list
+artifacts:
+  - docs/competitive/axis-capability-list.md (tables A–D)
+  - media/pyodide/hoox_pyne-0.6.29-py3-none-any.whl + antlr4 wheel + pynescript_runtime.py
+  - src/run/pyodide-wheel.ts, pyodide-runtime-bridge.ts, pyodide-calculator.ts
+  - src/debug/bar-adapter.ts + register.ts + snapshot.ts (DAP type axis-bar)
+  - package.json commands axis.debug.* + contributes.debuggers type axis-bar; no contributes.views
+  - bun run check EXIT 0; bun run test:unit 371 pass / 0 fail; coverage gate 100%
+decisions:
+  - Table B ADD rows: none. Zero activity-bar studios. Chart debug cursor is a webview overlay (chart.debugCursor).
+  - DAP type axis-bar in the AXIS host (not PYNE LSP, not pyne, not axis-pyne). Native VS Code Debug view.
+  - Overrode the earlier Docs draft that ADDed a Replay studio and DAP ids axis-pyne/hoox-pyne — Chief asked not to clone PyneIDE and to skip a studio when Debug + overlay suffice.
+  - Pyodide 100% possible = same Runtime envelope as Flask/worker inside Pyodide via trusted hoox-pyne wheel. Not Numba, not R2, not cron.
+  - allowPyodide default remains false. ready after Wasm 1+1 AND Runtime smoke. No Wasm in VSIX.
+  - Draft autonomy — ask Chief before Marketplace/OVSX publish.
+open questions:
+  - Live CDN+micropip smoke is not in unit tests (mocked Runtime envelope). Wheel artifacts are present; a VS Code host with the flag on still needs network to jsDelivr for Wasm.
+  - Chief approval before any Marketplace/OVSX publish.
+next gate: oo-checker review; re-run bun run check + bun run test:unit; confirm no contributes.views and DAP type is not pyne
 ```
 
