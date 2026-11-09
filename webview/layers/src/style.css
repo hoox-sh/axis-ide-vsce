@@ -41,19 +41,6 @@
 
 .layers-open {
   flex: none;
-  margin: 0;
-  padding: 3px 10px;
-  border: var(--axis-border-w) solid transparent;
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.layers-open:hover {
-  background: var(--axis-btn-hover-bg);
 }
 
 .layers-live {

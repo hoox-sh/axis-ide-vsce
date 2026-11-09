@@ -22,7 +22,7 @@
  * and search filter client-side through the shared filter machine.
  */
 
-import { search } from '@axis-shared/components';
+import { btn, search } from '@axis-shared/components';
 import { createFilter } from '@axis-shared/state';
 
 export interface SymbolsActions {
@@ -243,14 +243,15 @@ export function createSymbolsTab(actions: SymbolsActions): {
       }),
     );
 
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'toolbox-symbol__copy';
-    copyBtn.textContent = 'Copy';
-    copyBtn.dataset.action = 'copy';
-    copyBtn.dataset.text = symbol.char;
-    copyBtn.title = `Copy ${symbol.name}`;
-    copyBtn.setAttribute('aria-label', `Copy ${symbol.name}`);
+    const copyBtn = btn({
+      label: 'Copy',
+      variant: 'ghost',
+      size: 'sm',
+      className: 'toolbox-symbol__copy',
+      title: `Copy ${symbol.name}`,
+      ariaLabel: `Copy ${symbol.name}`,
+      dataset: { action: 'copy', text: symbol.char },
+    });
 
     item.append(insert, copyBtn);
     return item;

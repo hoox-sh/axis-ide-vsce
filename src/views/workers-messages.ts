@@ -30,6 +30,7 @@
  * (`probe` | `probeAll`) — the old flat payload fields move into `args`.
  */
 
+import { axBtnHtml } from './ax-shell';
 import type { StudioRegistration } from './studio-registry';
 import type { WorkersStudioSnapshot } from './workers-studio-model';
 
@@ -99,7 +100,7 @@ export function buildWorkersStudioBody(): string {
       </h1>
       <p class="workers-phase" id="workers-phase">Idle — not probed</p>
       <p class="workers-counts" id="workers-counts">0 healthy · 0 degraded · 0 down · 0 unknown</p>
-      <button type="button" class="workers-btn" id="workers-probe-all">Probe all</button>
+      ${axBtnHtml({ id: 'workers-probe-all', label: 'Probe all', className: 'workers-probe-all' })}
       <p class="workers-live" id="workers-live" aria-live="polite"></p>
     </header>
     <div id="workers-cards" class="workers-cards"></div>

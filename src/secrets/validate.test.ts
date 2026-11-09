@@ -18,6 +18,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import {
+  BETA_KEY_COPY,
   PRO_API_KEY_RE,
   PRO_KEY_ERROR,
   WORKER_API_KEY_RE,
@@ -142,7 +143,9 @@ describe('formatSecretStatus', () => {
   test('shows set/missing marks only — never secret values', () => {
     const both = formatSecretStatus('set', 'missing');
     expect(both.text).toBe('$(graph) AXIS W✓ P·');
-    expect(both.tooltip).toBe('AXIS IDE\nWorker key: set\nPro key: missing');
+    expect(both.tooltip).toBe(
+      `AXIS IDE\nWorker key: set\nPro key: not set — optional during open beta\n${BETA_KEY_COPY}`,
+    );
     expect(both.text).not.toContain('pn_');
     expect(both.text).not.toContain('pyn_');
     expect(both.tooltip).not.toContain('pn_');
@@ -152,5 +155,13 @@ describe('formatSecretStatus', () => {
     expect(none.text).toBe('$(graph) AXIS W· P·');
     const all = formatSecretStatus('set', 'set');
     expect(all.text).toBe('$(graph) AXIS W✓ P✓');
+  });
+
+  test('tooltip says keys are optional during open beta', () => {
+    const label = formatSecretStatus('missing', 'missing');
+    expect(label.tooltip).toContain(BETA_KEY_COPY);
+    expect(label.tooltip).toContain('optional during open beta');
+    // "missing" reads as broken; beta copy deliberately avoids it.
+    expect(label.tooltip).not.toContain('missing');
   });
 });

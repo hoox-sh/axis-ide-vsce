@@ -17,6 +17,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { escapeHtmlAttr, htmlHasInlineScript } from '../editors/chart-html';
+import { axBtnHtml } from './ax-shell';
 
 /** Inputs for Workers studio webview HTML (URIs already asWebviewUri). */
 export interface WorkersHtmlOptions {
@@ -91,7 +92,7 @@ export function buildWorkersWebviewHtml(opts?: WorkersHtmlOptions | null): strin
       </h1>
       <p class="workers-phase" id="workers-phase">Idle — not probed</p>
       <p class="workers-counts" id="workers-counts">0 healthy · 0 degraded · 0 down · 0 unknown</p>
-      <button type="button" class="workers-btn" id="workers-probe-all">Probe all</button>
+      ${axBtnHtml({ id: 'workers-probe-all', label: 'Probe all', className: 'workers-probe-all' })}
       <p class="workers-live" id="workers-live" aria-live="polite"></p>
     </header>
     <div id="workers-cards" class="workers-cards"></div>

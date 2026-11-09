@@ -29,9 +29,20 @@
 
 import '@axis-shared/tokens.css';
 import '@axis-shared/theme.css';
+import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
-import { chip, empty, header, kbd, kpi, panel, row } from '@axis-shared/components';
+import {
+  btn,
+  chip,
+  empty,
+  header,
+  kbd,
+  kpi,
+  panel,
+  row,
+  sectionTitle as axSectionTitle,
+} from '@axis-shared/components';
 import { createStudio } from '@axis-shared/studio';
 import {
   SCRIPTS_VIEW,
@@ -139,33 +150,32 @@ function statusChip(status: 'ok' | 'error'): HTMLElement {
 }
 
 function sectionTitle(text: string): HTMLElement {
-  const node = document.createElement('h2');
-  node.className = 'scripts-section-title';
-  node.textContent = text;
-  return node;
+  return axSectionTitle({ text, as: 'h2', className: 'scripts-section-title' });
 }
 
 function buildRunButton(): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'scripts-btn';
-  button.append(runIcon(), 'Run');
-  button.addEventListener('click', () => {
-    studio.post(encodeScriptsRun());
-    setLive('Run started');
+  return btn({
+    label: 'Run',
+    variant: 'primary',
+    icon: runIcon(),
+    className: 'scripts-btn',
+    onClick: () => {
+      studio.post(encodeScriptsRun());
+      setLive('Run started');
+    },
   });
-  return button;
 }
 
 function buildOpenChartButton(): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'scripts-btn';
-  button.append(chartIcon(), 'Open chart');
-  button.addEventListener('click', () => {
-    studio.post(encodeScriptsOpenChart());
+  return btn({
+    label: 'Open chart',
+    variant: 'primary',
+    icon: chartIcon(),
+    className: 'scripts-btn',
+    onClick: () => {
+      studio.post(encodeScriptsOpenChart());
+    },
   });
-  return button;
 }
 
 function buildKpiTile(label: string): { root: HTMLElement; refs: KpiRefs } {
@@ -208,15 +218,16 @@ function buildRowMain(item: ScriptSuggestion): HTMLElement {
 }
 
 function buildApplyButton(item: ScriptSuggestion): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'scripts-row__apply';
-  button.textContent = 'Apply';
-  button.addEventListener('click', () => {
-    studio.post(encodeScriptsApply(item.id));
-    setLive(`Applied ${item.title || item.id}`);
+  return btn({
+    label: 'Apply',
+    variant: 'secondary',
+    size: 'sm',
+    className: 'scripts-row__apply',
+    onClick: () => {
+      studio.post(encodeScriptsApply(item.id));
+      setLive(`Applied ${item.title || item.id}`);
+    },
   });
-  return button;
 }
 
 function renderSuggestions(rows: readonly ScriptSuggestion[]): void {

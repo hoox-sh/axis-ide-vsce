@@ -22,6 +22,7 @@
  */
 
 import {
+  btn,
   chip,
   empty,
   header,
@@ -231,28 +232,20 @@ function buildCategoryChips(
 }
 
 function buildApplyButton(card: LibraryCard, onApply: (id: string) => void): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'library-apply';
-  button.setAttribute('data-action', 'apply');
-  button.setAttribute('data-id', card.id);
-  button.setAttribute('aria-label', `Apply ${card.title}`);
-  button.setAttribute('title', `Apply ${card.title}`);
-
-  const label = document.createElement('span');
-  label.className = 'library-apply__label';
-  label.append(applySvg(), document.createTextNode('Apply'));
-
-  const sent = document.createElement('span');
-  sent.className = 'library-apply__sent';
-  sent.textContent = 'Sent';
-
-  button.append(label, sent);
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    onApply(card.id);
+  return btn({
+    label: 'Apply',
+    variant: 'primary',
+    size: 'sm',
+    icon: applySvg(),
+    className: 'library-apply',
+    ariaLabel: `Apply ${card.title}`,
+    title: `Apply ${card.title}`,
+    dataset: { action: 'apply', id: card.id },
+    onClick: (event) => {
+      event.stopPropagation();
+      onApply(card.id);
+    },
   });
-  return button;
 }
 
 function buildTags(tags: readonly string[]): HTMLElement | null {

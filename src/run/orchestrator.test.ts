@@ -18,8 +18,8 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { OhlcvBar } from '../host/mock-bars';
+import { PRO_KEY_ERROR } from '../secrets/slots';
 import {
-  MISSING_PRO_KEY_ERROR,
   ResultsFocusStore,
   RunOrchestrator,
   UNSUPPORTED_ENGINE_ERROR,
@@ -362,11 +362,39 @@ describe('RunOrchestrator', () => {
     expect(charts1.some((m) => m.type === 'chart.full')).toBe(false);
   });
 
-  test('missing Pro key fails clearly and sets diagnostics', async () => {
+  test('absent Pro key is not an error: run goes out keyless with X-AXIS-Client: ide', async () => {
+    const orch = new RunOrchestrator();
+    let called = false;
+    let seenAuth: string | undefined = 'unset';
+    let seenClient: string | undefined;
+    const { deps, diagnostics } = makeDeps({
+      missingProKey: true,
+      fetchImpl: async (_url, init) => {
+        called = true;
+        seenAuth = init?.headers?.Authorization;
+        seenClient = init?.headers?.['X-AXIS-Client'];
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            JSON.stringify({ status: 'success', plots: [1], series: {} }),
+        };
+      },
+    });
+    const outcome = await orch.run(baseReq(), deps);
+    expect(called).toBe(true);
+    expect(seenAuth).toBeUndefined();
+    expect(seenClient).toBe('ide');
+    expect(outcome.ok).toBe(true);
+    // No error diagnostics were produced for the absent key.
+    expect(diagnostics.flatMap((d) => d.items)).toHaveLength(0);
+  });
+
+  test('present-but-malformed Pro key still fails before fetch', async () => {
     const orch = new RunOrchestrator();
     let called = false;
     const { deps, lines, diagnostics } = makeDeps({
-      missingProKey: true,
+      proKey: 'pyn_oops',
       fetchImpl: async () => {
         called = true;
         return { ok: true, status: 200, text: async () => '{}' };
@@ -377,10 +405,10 @@ describe('RunOrchestrator', () => {
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
       expect(outcome.reason).toBe('error');
-      expect(outcome.error).toBe(MISSING_PRO_KEY_ERROR);
+      expect(outcome.error).toBe(PRO_KEY_ERROR);
     }
-    expect(diagnostics.some((d) => d.items[0]?.message === MISSING_PRO_KEY_ERROR)).toBe(true);
-    expect(lines.some((l) => l.includes('Pro API key missing'))).toBe(true);
+    expect(diagnostics.some((d) => d.items[0]?.message === PRO_KEY_ERROR)).toBe(true);
+    expect(lines.some((l) => l.includes('run error'))).toBe(true);
   });
 
   test('engine error containing Pro key is scrubbed from output/diagnostics', async () => {

@@ -350,11 +350,17 @@ describe('postEngineRun', () => {
     expect(result.error).toBe(MISSING_ENDPOINT_ERROR);
   });
 
-  test('missing apiKey fails closed without fetch', async () => {
+  test('absent apiKey still posts with X-AXIS-Client: ide and no Authorization', async () => {
     let called = false;
-    const fetchImpl: FetchLike = async () => {
+    let seenHeaders: Record<string, string> | undefined;
+    const fetchImpl: FetchLike = async (_url, init) => {
       called = true;
-      return { ok: true, status: 200, text: async () => '{}' };
+      seenHeaders = init?.headers;
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ status: 'success', plots: [], series: {} }),
+      };
     };
     const result = await postEngineRun({
       endpoint: DEFAULT_ENGINE_ENDPOINT,
@@ -363,9 +369,30 @@ describe('postEngineRun', () => {
       mode: 'auto',
       fetchImpl,
     });
-    expect(called).toBe(false);
-    expect(result.status).toBe('error');
-    expect(result.error).toMatch(/API key required/i);
+    expect(called).toBe(true);
+    expect(seenHeaders?.['X-AXIS-Client']).toBe('ide');
+    expect(seenHeaders?.Authorization).toBeUndefined();
+    expect(result.status).toBe('success');
+  });
+
+  test('stamps X-AXIS-Client: ide on the engine POST when a key is present', async () => {
+    let seenHeaders: Record<string, string> | undefined;
+    const fetchImpl = mockFetch((_url, init) => {
+      seenHeaders = init?.headers;
+      return { ok: true, status: 200, body: JSON.stringify({ status: 'success', plots: [] }) };
+    });
+    await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'x',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      apiKey: 'pyn_abcdefghijklmnopqrstuvwxyz0123456789',
+      fetchImpl,
+    });
+    expect(seenHeaders?.['X-AXIS-Client']).toBe('ide');
+    expect(seenHeaders?.Authorization).toBe(
+      'Bearer pyn_abcdefghijklmnopqrstuvwxyz0123456789',
+    );
   });
 
   test('network failure becomes error result', async () => {

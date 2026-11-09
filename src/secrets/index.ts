@@ -17,6 +17,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 export {
+  BETA_KEY_COPY,
   PRO_API_KEY_RE,
   PRO_KEY_ERROR,
   SECRET_SLOTS,
@@ -25,6 +26,11 @@ export {
   WORKER_KEY_ERROR,
   type SecretSlot,
 } from './slots';
+export {
+  proKeyPromptCopy,
+  workerKeyPromptCopy,
+  type KeyPromptCopy,
+} from './prompts';
 export {
   formatSecretStatus,
   type SecretPresence,

@@ -10,12 +10,12 @@
 
 .workers-root {
   height: 100%;
-  padding: 10px 12px;
+  padding: var(--axis-gap) var(--axis-panel-pad);
   overflow: auto;
 }
 
 .workers-root__header {
-  margin-bottom: 10px;
+  margin-bottom: var(--axis-gap);
 }
 
 .workers-root__title {
@@ -46,19 +46,9 @@
   min-height: 1.2em;
 }
 
-.workers-btn {
+/* Probe-all is ax-btn; keep vertical rhythm only. */
+.workers-probe-all {
   margin: 0 0 8px;
-  padding: 2px 8px;
-  border: var(--axis-border-w) solid var(--axis-btn-bg);
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-  font: inherit;
-  cursor: pointer;
-}
-
-.workers-btn:hover {
-  background: var(--axis-btn-hover-bg);
 }
 
 .workers-cards {
@@ -99,15 +89,5 @@
 }
 
 .workers-action-btn {
-  padding: 1px 8px;
-  border: var(--axis-border-w) solid var(--axis-btn-bg);
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-  font: inherit;
-  cursor: pointer;
-}
-
-.workers-action-btn:hover {
-  background: var(--axis-btn-hover-bg);
+  flex: none;
 }

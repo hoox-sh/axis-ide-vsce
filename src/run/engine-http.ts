@@ -22,6 +22,7 @@
  */
 
 import type { OhlcvBar } from '../host/mock-bars';
+import { withAxisClientHeader } from '../http/client';
 
 export type RunMode = 'auto' | 'interpret' | 'compile';
 
@@ -68,7 +69,10 @@ export interface EngineHttpRequest {
   mode: RunMode;
   /** Optional chart symbol label (defaults to CHART). */
   symbol?: string;
-  /** Bearer token (`pyn_…`). Required by callers that enforce Pro auth. */
+  /**
+   * Bearer token (`pyn_…`). Optional during open beta: when absent the request
+   * still goes out with `X-AXIS-Client: ide` and no Authorization header.
+   */
   apiKey?: string;
   signal?: AbortSignal;
   /** Absolute round-trip deadline (ms). Defaults to ENGINE_RUN_TIMEOUT_MS. */
@@ -109,6 +113,10 @@ export interface EngineRunResult {
 export const MISSING_ENDPOINT_ERROR =
   'AXIS engine endpoint is empty. Set axis.engine.endpoint (e.g. http://127.0.0.1:5002).';
 
+/**
+ * Retained for callers that still gate on Pro auth. `postEngineRun` itself no
+ * longer fails when the key is absent — open beta trusts `X-AXIS-Client: ide`.
+ */
 export const MISSING_API_KEY_ERROR =
   'AXIS Pro API key required for POST /run (SecretStorage pyn_…).';
 
@@ -313,7 +321,8 @@ export function mapEngineResponse(
 
 /**
  * POST `{endpoint}/run` with script + bars. Never logs the API key.
- * Requires a non-empty `apiKey` (fail-closed — no anonymous Pro calls).
+ * A key is optional during open beta: absent → no Authorization header, but
+ * every request carries `X-AXIS-Client: ide`.
  */
 export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunResult> {
   const t0 = Date.now();
@@ -332,17 +341,6 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
     }
 
     const key = typeof req.apiKey === 'string' ? req.apiKey.trim() : '';
-    if (!key) {
-      return {
-        status: 'error',
-        plots: [],
-        series: {},
-        events: [],
-        error: MISSING_API_KEY_ERROR,
-        diagnostics: [{ message: MISSING_API_KEY_ERROR, severity: 'error' }],
-        meta: { transport: 'rest' },
-      };
-    }
 
     // Transport-level loopback gate (fail-closed): never send the Bearer key
     // to a remote host unless the caller explicitly opts in.
@@ -366,10 +364,10 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
       mode: req.mode || 'auto',
       symbol: (req.symbol && String(req.symbol).trim()) || 'CHART',
     };
-    const headers: Record<string, string> = {
+    const headers = withAxisClientHeader({
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    };
+      ...(key ? { Authorization: `Bearer ${key}` } : {}),
+    });
 
     const timeoutMs =
       typeof req.timeoutMs === 'number' && Number.isFinite(req.timeoutMs)

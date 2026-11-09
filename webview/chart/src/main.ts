@@ -22,6 +22,7 @@
  * MVP trendline: toolbar → drawing.setTool; two clicks → drawing.commit.
  */
 
+import '../../shared/tokens.css';
 import './style.css';
 import {
   TOOL_TRENDLINE,

@@ -40,6 +40,7 @@ describe('workers CSP HTML builder', () => {
     expect(html).toContain('id="workers-root"');
     expect(html).toContain('id="workers-counts"');
     expect(html).toContain('id="workers-probe-all"');
+    expect(html).toContain('ax-btn ax-btn--primary ax-btn--md');
     expect(html).toContain('Probe all');
     expect(html).toContain('id="workers-live"');
     expect(html).toContain('aria-live="polite"');

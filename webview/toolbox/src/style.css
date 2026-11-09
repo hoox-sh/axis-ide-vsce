@@ -74,9 +74,9 @@
   flex: none;
   min-height: 16px;
   padding: 0 6px;
-  border-radius: 999px;
-  background: var(--vscode-badge-background, #616161);
-  color: var(--vscode-badge-foreground, #ffffff);
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-badge-bg);
+  color: var(--axis-badge-fg);
   font-family: var(--axis-font-mono);
   font-size: 10px;
   line-height: 16px;
@@ -96,15 +96,6 @@
 
 .toolbox-colors__refresh {
   flex: none;
-  margin: 0;
-  padding: 1px 8px;
-  border: var(--axis-border-w) solid var(--vscode-contrastBorder, transparent);
-  border-radius: var(--axis-radius-chip);
-  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
-  color: var(--vscode-button-secondaryForeground, var(--axis-text));
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
 }
 
 .toolbox-colors__filters {
@@ -247,9 +238,9 @@
   flex: none;
   min-height: 16px;
   padding: 0 6px;
-  border-radius: 999px;
-  background: var(--vscode-badge-background, #616161);
-  color: var(--vscode-badge-foreground, #ffffff);
+  border-radius: var(--axis-radius-pill);
+  background: var(--axis-badge-bg);
+  color: var(--axis-badge-fg);
   font-family: var(--axis-font-mono);
   font-size: 10px;
   line-height: 16px;

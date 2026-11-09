@@ -16,7 +16,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { empty, header, kpi, row, statusDot } from '@axis-shared/components';
+import { btn, empty, header, kpi, row, statusDot } from '@axis-shared/components';
 
 /** View-model row for a summary field. */
 interface SummaryRow {
@@ -138,10 +138,11 @@ export function renderSummary(data: unknown, actions: SummaryActions): HTMLEleme
 }
 
 function button(label: string, onClick: () => void): HTMLButtonElement {
-  const node = document.createElement('button');
-  node.type = 'button';
-  node.className = 'runoutput-button';
-  node.textContent = label;
-  node.addEventListener('click', onClick);
-  return node;
+  return btn({
+    label,
+    variant: 'secondary',
+    size: 'sm',
+    className: 'runoutput-button',
+    onClick,
+  });
 }

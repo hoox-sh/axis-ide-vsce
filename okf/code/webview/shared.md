@@ -7,7 +7,7 @@ tags: [code, shared, webview]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T03:02:18Z
+  at: 2026-11-08T23:16:09Z
 sources:
   - id: tree
     resource: "webview/shared"
@@ -20,7 +20,7 @@ okf_lock: generated
 
 * `announce.ts` — announce
 * `clipboard.ts` — copyText
-* `components.ts` — BarOptions, BarSegment, CapsuleOptions, Child, ChipOptions, EmptyOptions, FieldOptions, FlashDirection, FlashOptions, GlyphOptions, HeaderOptions, KpiOptions
+* `components.ts` — BadgeOptions, BadgeTone, BarOptions, BarSegment, BtnOptions, BtnSize, BtnVariant, CapsuleOptions, Child, ChipOptions, ClusterOptions, CodeOptions
 * `dom.ts` — RESTORE_FOCUS_ATTR, captureFocus, restoreFocus, setHidden, setText
 * `state.ts` — FilterController, FilterOptions, FilterState, createFilter, readPersistedSlice, writePersistedSlice
 * `studio-protocol.ts` — AxisEnvelope, DecodeResult, EncodeOptions, HOST_TO_VIEW, MessageType, PROTOCOL_ERROR_CODES, PROTOCOL_VERSION, PayloadByType, ProtocolError, ProtocolErrorCode, StudioActionPayload, StudioDataMessage
@@ -30,6 +30,7 @@ okf_lock: generated
 
 # Other files
 
+* `README.md`
 * `components.css`
 * `motion.css`
 * `theme.css`

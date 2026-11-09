@@ -87,6 +87,8 @@ describe('buildWorkersStudioBody', () => {
     expect(body).toContain('id="workers-phase"');
     expect(body).toContain('id="workers-counts"');
     expect(body).toContain('id="workers-probe-all"');
+    expect(body).toContain('ax-btn ax-btn--primary ax-btn--md');
+    expect(body).toContain('workers-probe-all');
     expect(body).toContain('id="workers-cards"');
     expect(body).toContain('id="workers-live"');
     expect(body).toContain('Probe all');

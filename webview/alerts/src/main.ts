@@ -27,11 +27,12 @@
 
 import '@axis-shared/tokens.css';
 import '@axis-shared/theme.css';
+import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
 import { createStudio } from '@axis-shared/studio';
 import { setHidden, setText } from '@axis-shared/dom';
-import { empty, field, header, row } from '@axis-shared/components';
+import { btn, empty, field, header, row } from '@axis-shared/components';
 import {
   buildAlertsSnapshot,
   type AlertsStudioEntry,
@@ -116,12 +117,13 @@ function buildShell(): DocumentFragment {
     placeholder: 'Optional condition',
   });
 
-  const addButton = document.createElement('button');
-  addButton.type = 'button';
+  const addButton = btn({
+    label: 'Add',
+    variant: 'primary',
+    dataset: { action: 'add' },
+  });
   addButton.id = 'alerts-add';
-  addButton.className = 'alerts-add';
-  addButton.dataset.action = 'add';
-  addButton.textContent = 'Add';
+  addButton.classList.add('alerts-add');
 
   const form = document.createElement('div');
   form.className = 'alerts-form';
@@ -183,23 +185,24 @@ function buildMain(entry: AlertsStudioEntry): HTMLElement {
 }
 
 function buildActions(entry: AlertsStudioEntry): HTMLElement[] {
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'alerts-row__action';
-  toggle.dataset.action = 'toggle';
-  toggle.textContent = entry.enabled ? 'Disable' : 'Enable';
-  toggle.setAttribute('aria-pressed', entry.enabled ? 'true' : 'false');
-  toggle.setAttribute(
-    'aria-label',
-    entry.enabled ? `Disable ${entry.title}` : `Enable ${entry.title}`,
-  );
+  const toggle = btn({
+    label: entry.enabled ? 'Disable' : 'Enable',
+    variant: 'secondary',
+    size: 'sm',
+    pressed: entry.enabled,
+    ariaLabel: entry.enabled ? `Disable ${entry.title}` : `Enable ${entry.title}`,
+    dataset: { action: 'toggle' },
+    className: 'alerts-row__action',
+  });
 
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'alerts-row__action';
-  remove.dataset.action = 'remove';
-  remove.textContent = 'Remove';
-  remove.setAttribute('aria-label', `Remove ${entry.title}`);
+  const remove = btn({
+    label: 'Remove',
+    variant: 'ghost',
+    size: 'sm',
+    ariaLabel: `Remove ${entry.title}`,
+    dataset: { action: 'remove' },
+    className: 'alerts-row__action',
+  });
 
   return [toggle, remove];
 }

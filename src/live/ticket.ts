@@ -25,6 +25,7 @@
  */
 
 import { WORKER_API_KEY_RE } from '../secrets/slots';
+import { withAxisClientHeader } from '../http/client';
 import { checkHttpBaseUrl, type EndpointCheck } from '../run/endpoint';
 import type { FetchLike } from '../run/engine-http';
 
@@ -39,7 +40,11 @@ const TICKET_RE = /^[a-f0-9]{32}$/;
 
 export type LiveProxy = {
   endpoint: string;
-  apiKey: string;
+  /**
+   * Optional during open beta. Absent → mint with `X-AXIS-Client: ide` and no
+   * Authorization header. Present but malformed still fails closed.
+   */
+  apiKey?: string;
 };
 
 export class LiveTicketError extends Error {
@@ -210,8 +215,9 @@ export async function mintLiveTicket(
   opts?: MintLiveTicketOpts,
 ): Promise<string> {
   const key = String(proxy.apiKey || '').trim();
-  if (!key) throw new LiveTicketError('live ticket: Worker API key missing', false);
-  if (!WORKER_API_KEY_RE.test(key)) {
+  // Absent key is valid during open beta (trusted IDE header). A present but
+  // malformed key is still a user error — never silently drop it.
+  if (key && !WORKER_API_KEY_RE.test(key)) {
     throw new LiveTicketError('live ticket: Worker API key invalid', false);
   }
   const url = `${workerLiveHttpUrl(proxy.endpoint)}?issue=ticket`;
@@ -227,10 +233,10 @@ export async function mintLiveTicket(
   try {
     res = await fetchImpl(url, {
       method: 'GET',
-      headers: {
-        Authorization: `Bearer ${key}`,
+      headers: withAxisClientHeader({
         Accept: 'application/json',
-      },
+        ...(key ? { Authorization: `Bearer ${key}` } : {}),
+      }),
       signal: ac.signal,
     });
   } catch (err) {

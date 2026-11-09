@@ -321,42 +321,9 @@
   display: inline;
 }
 
+/* Apply is ax-btn; is-sent only swaps label text in main.ts. */
 .library-apply {
-  appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--axis-gap-xs);
-  height: var(--axis-row-h);
-  padding: 0 var(--axis-gap);
-  border: var(--axis-border-w) solid transparent;
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.library-apply:hover {
-  background: var(--axis-btn-hover-bg);
-}
-
-.library-apply__label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--axis-gap-xs);
-}
-
-.library-apply__sent {
-  display: none;
-}
-
-.library-apply.is-sent .library-apply__label {
-  display: none;
-}
-
-.library-apply.is-sent .library-apply__sent {
-  display: inline;
+  flex: 0 0 auto;
 }
 
 .library-icon {

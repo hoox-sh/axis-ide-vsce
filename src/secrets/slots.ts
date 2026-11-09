@@ -45,6 +45,12 @@ export const SECRET_SLOTS = {
 
 export type SecretSlot = (typeof SECRET_SLOTS)[keyof typeof SECRET_SLOTS];
 
+/**
+ * Open-beta copy shared by both key prompts and the secrets status tooltip.
+ * Exact string — do not paraphrase per surface.
+ */
+export const BETA_KEY_COPY = 'Open beta — free while in beta. No API key needed.';
+
 export const WORKER_KEY_ERROR =
   'AXIS Worker keys must match /^pn_[a-f0-9]{48}$/';
 

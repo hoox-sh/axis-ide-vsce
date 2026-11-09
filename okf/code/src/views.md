@@ -1,13 +1,13 @@
 ---
 type: "Code Module"
 title: "src/views"
-description: "src/views contains alerts-html.test.ts, alerts-html.ts, alerts-messages.test.ts, and 72 more files."
+description: "src/views contains alerts-html.test.ts, alerts-html.ts, alerts-messages.test.ts, and 74 more files."
 resource: "src/views"
 tags: [code, views]
 status: stable
 generated:
   by: process:axis-okf/1
-  at: 2026-11-06T03:02:18Z
+  at: 2026-11-08T23:16:09Z
 sources:
   - id: tree
     resource: "src/views"
@@ -30,6 +30,8 @@ okf_lock: generated
 * `alerts-studio.ts` — buildAlertsStudioBody
 * `alerts.test.ts`
 * `alerts.ts` — ALERTS_ADD_COMMAND, ALERTS_REMOVE_COMMAND, ALERTS_STORAGE_KEY, ALERTS_VIEW_ID, AlertEntry, AlertTreeNode, AlertsTreeProvider, AlertsUi, EMPTY_ALERTS_V1, RegisterAlertsViewResult, WorkspaceStateHelpers, addAlert
+* `ax-shell.test.ts`
+* `ax-shell.ts` — AxBtnSize, AxBtnVariant, axBtnClass, axBtnHtml
 * `colors-messages.test.ts`
 * `colors-messages.ts` — COLORS_STUDIO_VIEW, ColorHit, ColorKind, ColorsStudioData, MAX_COLORS_COPY_TEXT, NAMED_COLOR_SWATCH, PINE_EDITOR_LANGUAGE_IDS, colorKind, colorsCopyTextFromArgs, colorsRevealLineFromArgs, colorsStudioData, isPineEditorLanguage
 * `indicators.ts` — INDICATORS_VIEW_ID, IndicatorsTreeNode, IndicatorsTreeProvider, indicatorsRootChildren

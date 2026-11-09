@@ -153,7 +153,12 @@ export function buildTopHeader(dom: LayersDom, state: LayersViewState): HTMLElem
   const open = dom.open ?? document.createElement('button');
   open.type = 'button';
   open.id = 'layers-open-chart';
-  open.className = 'layers-open';
+  // Prefer shared ax-btn chrome when the shell already built it; keep
+  // layers-open as the layout hook either way.
+  if (!open.classList.contains('ax-btn')) {
+    open.classList.add('ax-btn', 'ax-btn--primary', 'ax-btn--md');
+  }
+  open.classList.add('layers-open');
   if (!open.textContent) open.textContent = 'Open chart';
 
   const node = header({

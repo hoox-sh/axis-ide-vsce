@@ -25,6 +25,7 @@
 
 import '@axis-shared/tokens.css';
 import '@axis-shared/theme.css';
+import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
 import { copyText } from '@axis-shared/clipboard';
@@ -159,6 +160,15 @@ function restoreFocus(focus: FocusRestore): void {
   if (el instanceof HTMLElement) el.focus();
 }
 
+function setApplySent(button: HTMLButtonElement | null, sent: boolean): void {
+  if (!button) return;
+  button.classList.toggle('is-sent', sent);
+  const label = button.querySelector('.ax-btn__label');
+  if (label) label.textContent = sent ? 'Sent' : 'Apply';
+  const icon = button.querySelector('.ax-btn__icon');
+  if (icon instanceof HTMLElement) icon.hidden = sent;
+}
+
 function restoreFlashes(): void {
   if (!root) return;
   if (copyFlashId) {
@@ -166,8 +176,7 @@ function restoreFlashes(): void {
     card?.classList.add('is-copied');
   }
   if (applyFlashId) {
-    const button = applyButton(applyFlashId);
-    button?.classList.add('is-sent');
+    setApplySent(applyButton(applyFlashId), true);
   }
 }
 
@@ -249,15 +258,15 @@ function flashCopied(id: string): void {
 }
 
 function flashApply(id: string): void {
-  if (applyFlashId && applyFlashId !== id) applyButton(applyFlashId)?.classList.remove('is-sent');
+  if (applyFlashId && applyFlashId !== id) setApplySent(applyButton(applyFlashId), false);
   applyFlashId = id;
-  applyButton(id)?.classList.add('is-sent');
+  setApplySent(applyButton(id), true);
   if (applyFlashTimer) clearTimeout(applyFlashTimer);
   applyFlashTimer = setTimeout(() => {
     applyFlashTimer = null;
     const prev = applyFlashId;
     applyFlashId = null;
-    if (prev) applyButton(prev)?.classList.remove('is-sent');
+    if (prev) setApplySent(applyButton(prev), false);
   }, COPY_FLASH_MS);
 }
 

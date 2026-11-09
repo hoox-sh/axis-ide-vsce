@@ -48,20 +48,6 @@
 
 .runoutput-button {
   flex: none;
-  margin: 0;
-  padding: 1px 8px;
-  min-height: 18px;
-  border: 1px solid var(--vscode-panel-border, transparent);
-  border-radius: var(--axis-radius-chip);
-  background: var(--vscode-button-secondaryBackground, var(--axis-bg-hover));
-  color: var(--vscode-button-secondaryForeground, var(--axis-text));
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.runoutput-button:hover {
-  background: var(--vscode-button-hoverBackground, var(--axis-bg-hover));
 }
 
 .runoutput-focusline {
@@ -114,25 +100,4 @@
   flex-direction: column;
 }
 
-.runoutput-section-title {
-  margin: var(--axis-gap-xs) 0 0;
-  font-size: var(--axis-label);
-  font-weight: var(--axis-label-weight);
-  letter-spacing: var(--axis-label-tracking);
-  text-transform: uppercase;
-  color: var(--axis-dim);
-}
 
-.runoutput-json {
-  margin: 0;
-  padding: var(--axis-gap);
-  overflow: auto;
-  white-space: pre-wrap;
-  font-family: var(--axis-font-mono);
-  font-size: 11px;
-  line-height: 1.5;
-  background: var(--axis-bg-elev);
-  border: var(--axis-border-w) solid var(--axis-border);
-  border-radius: var(--axis-radius-panel);
-  color: var(--axis-text);
-}

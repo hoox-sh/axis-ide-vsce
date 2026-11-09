@@ -64,19 +64,6 @@
 
 .alerts-add {
   align-self: flex-start;
-  margin: 0;
-  padding: 4px 8px;
-  border: var(--axis-border-w) solid transparent;
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-bg);
-  color: var(--axis-btn-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.alerts-add:hover {
-  background: var(--axis-btn-hover-bg);
 }
 
 .alerts-live {
@@ -160,27 +147,7 @@
   word-break: break-all;
 }
 
+/* Row actions use ax-btn; keep layout hook only. */
 .alerts-row__action {
-  margin: 0;
-  padding: 2px 8px;
-  border: var(--axis-border-w) solid transparent;
-  border-radius: var(--axis-radius-chip);
-  background: var(--axis-btn-secondary-bg);
-  color: var(--axis-btn-secondary-fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.alerts-row__action:hover {
-  background: var(--axis-btn-secondary-hover-bg);
-}
-
-/* High-contrast contract: custom buttons get the same visible 1px edge the
- * shared contract applies to ax-* interactive surfaces. */
-body.vscode-high-contrast .alerts-add,
-body.vscode-high-contrast-light .alerts-add,
-body.vscode-high-contrast .alerts-row__action,
-body.vscode-high-contrast-light .alerts-row__action {
-  border-color: var(--axis-contrast-border);
+  flex: none;
 }

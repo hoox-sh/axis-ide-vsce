@@ -69,8 +69,10 @@ import {
   AxisSecretStorage,
   SECRET_STORE_ERROR,
   formatSecretStatus,
+  proKeyPromptCopy,
   validateProKey,
   validateWorkerKey,
+  workerKeyPromptCopy,
 } from './secrets';
 import { isVersionOlderThan } from './semver';
 import { DEFAULT_DATAFEED_URL } from './host/history-client';
@@ -755,11 +757,9 @@ async function refreshSecretStatus(): Promise<void> {
 async function promptAndSetWorkerKey(): Promise<string | undefined> {
   if (deactivated || !secrets) return undefined;
   const raw = await window.showInputBox({
-    title: 'AXIS Worker API Key',
-    prompt: 'Paste a Worker key (pn_ + 48 hex). Empty clears. SecretStorage only.',
+    ...workerKeyPromptCopy(),
     password: true,
     ignoreFocusOut: true,
-    placeHolder: 'pn_…',
     validateInput: (value) => {
       const t = value.trim();
       if (!t) return null; // empty → clear on accept
@@ -791,11 +791,9 @@ async function promptAndSetWorkerKey(): Promise<string | undefined> {
 async function promptAndSetProKey(): Promise<string | undefined> {
   if (deactivated || !secrets) return undefined;
   const raw = await window.showInputBox({
-    title: 'AXIS Pro API Key',
-    prompt: 'Paste a PYNE Pro key (pyn_…). Empty clears. SecretStorage only.',
+    ...proKeyPromptCopy(),
     password: true,
     ignoreFocusOut: true,
-    placeHolder: 'pyn_…',
     validateInput: (value) => {
       const t = value.trim();
       if (!t) return null;

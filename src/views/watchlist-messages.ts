@@ -82,7 +82,7 @@ export function buildWatchlistBody(): string {
     <form id="watchlist-add-form" class="watchlist-add" autocomplete="off">
       <label class="watchlist-add__label" for="watchlist-symbol-input">Add symbol</label>
       <input id="watchlist-symbol-input" class="watchlist-input" type="text" placeholder="BTCUSDT" spellcheck="false" />
-      <button type="submit" id="watchlist-add" class="watchlist-btn watchlist-btn--primary">Add</button>
+      <button type="submit" id="watchlist-add" class="ax-btn ax-btn--primary ax-btn--md watchlist-btn"><span class="ax-btn__label">Add</span></button>
     </form>
     <p class="watchlist-empty" id="watchlist-empty">Add a ticker such as BTCUSDT. The status bar still follows the selected symbol.</p>
     <ul id="watchlist-rows" class="watchlist-rows"></ul>

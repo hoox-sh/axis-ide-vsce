@@ -30,7 +30,7 @@ import '@axis-shared/theme.css';
 import '@axis-shared/motion.css';
 import '@axis-shared/components.css';
 import './style.css';
-import { capsule, empty, header, panel, row, search } from '@axis-shared/components';
+import { btn, capsule, empty, header, panel, row, search } from '@axis-shared/components';
 import { createStudio } from '@axis-shared/studio';
 import {
   WATCHLIST_VIEW,
@@ -135,14 +135,14 @@ function emptyCheck(): HTMLElement {
 }
 
 function actionButton(action: 'select' | 'remove', symbol: string, label: string): HTMLButtonElement {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.className = 'watchlist-btn';
-  button.dataset.action = action;
-  button.dataset.symbol = symbol;
-  button.textContent = label;
-  button.setAttribute('aria-label', `${label} ${symbol}`);
-  return button;
+  return btn({
+    label,
+    variant: action === 'remove' ? 'ghost' : 'secondary',
+    size: 'sm',
+    className: 'watchlist-btn',
+    ariaLabel: `${label} ${symbol}`,
+    dataset: { action, symbol },
+  });
 }
 
 function createRow(item: WatchlistRowView): RowRef {
@@ -345,10 +345,12 @@ function buildAddForm(): HTMLFormElement {
   addInput.id = 'watchlist-symbol-input';
   addInput.spellcheck = false;
 
-  const submit = document.createElement('button');
-  submit.type = 'submit';
-  submit.className = 'watchlist-btn watchlist-btn--primary';
-  submit.textContent = 'Add';
+  const submit = btn({
+    label: 'Add',
+    variant: 'primary',
+    type: 'submit',
+    className: 'watchlist-btn',
+  });
 
   form.append(label, addInput, submit);
   return form;

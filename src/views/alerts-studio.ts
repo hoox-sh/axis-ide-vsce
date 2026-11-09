@@ -48,7 +48,7 @@ export function buildAlertsStudioBody(): string {
       <label class="alerts-field" for="alerts-condition">Condition
         <input id="alerts-condition" name="condition" type="text" placeholder="Optional condition" autocomplete="off" />
       </label>
-      <button type="button" id="alerts-add" data-action="add">Add</button>
+      <button type="button" id="alerts-add" class="ax-btn ax-btn--primary ax-btn--md alerts-add" data-action="add"><span class="ax-btn__label">Add</span></button>
     </div>
     <p id="alerts-live" class="alerts-live" aria-live="polite" aria-atomic="true"></p>
     <p id="alerts-empty" class="alerts-empty">Add a title and an optional condition, then press Add. This is the IDE list, not the full PWA alert engine.</p>

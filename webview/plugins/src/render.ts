@@ -24,7 +24,7 @@
  * host test suite, which asserts against its markup shape.
  */
 
-import { panel, header, row, chip, statusDot, empty } from '@axis-shared/components';
+import { badge, btn, panel, header, row, chip, statusDot, empty } from '@axis-shared/components';
 import { RESTORE_FOCUS_ATTR } from '@axis-shared/dom';
 import {
   KIND_TABS,
@@ -96,11 +96,14 @@ function h<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function badgeNode(badge: PluginBadge): HTMLElement {
-  if (badge.tone === 'warn') {
-    return statusDot({ label: badge.text, state: 'warn' });
+function badgeNode(item: PluginBadge): HTMLElement {
+  if (item.tone === 'warn') {
+    return badge({ text: item.text, tone: 'warn' });
   }
-  return chip({ label: badge.text, value: badge.text, pressed: false });
+  if (item.tone === 'active') {
+    return badge({ text: item.text, tone: 'up' });
+  }
+  return badge({ text: item.text, tone: 'neutral' });
 }
 
 function cardHeader(card: PluginCard, active: boolean, nameId: string): HTMLElement {
@@ -149,21 +152,25 @@ function cardFacts(card: PluginCard): HTMLElement | null {
 function cardActions(card: PluginCard, active: boolean): HTMLElement {
   const node = h('div', 'plugin-card__actions');
 
-  const copyBtn = h('button', 'plugin-card__copy', 'Copy id');
-  copyBtn.type = 'button';
-  copyBtn.title = 'Copy id';
-  copyBtn.setAttribute('aria-label', `Copy id ${card.id}`);
-  copyBtn.dataset.action = 'copy-id';
-  copyBtn.dataset.kind = card.kind;
-  copyBtn.dataset.id = card.id;
+  const copyBtn = btn({
+    label: 'Copy id',
+    variant: 'secondary',
+    size: 'sm',
+    title: 'Copy id',
+    ariaLabel: `Copy id ${card.id}`,
+    className: 'plugin-card__copy',
+    dataset: { action: 'copy-id', kind: card.kind, id: card.id },
+  });
 
-  const activateBtn = h('button', 'plugin-card__activate', active ? 'Active' : 'Activate');
-  activateBtn.type = 'button';
-  activateBtn.title = active ? 'Already active' : 'Activate';
-  activateBtn.disabled = active;
-  activateBtn.dataset.action = 'activate';
-  activateBtn.dataset.kind = card.kind;
-  activateBtn.dataset.id = card.id;
+  const activateBtn = btn({
+    label: active ? 'Active' : 'Activate',
+    variant: 'primary',
+    size: 'sm',
+    title: active ? 'Already active' : 'Activate',
+    disabled: active,
+    className: 'plugin-card__activate',
+    dataset: { action: 'activate', kind: card.kind, id: card.id },
+  });
 
   node.append(copyBtn, activateBtn);
   return node;
@@ -268,7 +275,7 @@ export function renderActiveChips(
   node.setAttribute('role', 'list');
   node.setAttribute('aria-label', formatActiveStatus(state.active));
   for (const c of chips) {
-    const btn = chip({
+    const chipBtn = chip({
       label: c.id,
       value: c.tab,
       icon: kindIconNode(c.kind),
@@ -276,11 +283,11 @@ export function renderActiveChips(
         if (isKindTab(tab)) onChipClick(tab);
       },
     });
-    btn.title = `${KIND_LABELS[c.tab]}: ${c.id}`;
-    btn.setAttribute('aria-label', `Show ${KIND_LABELS[c.tab]}, ${c.id}`);
-    btn.dataset.role = 'chip';
-    btn.dataset.tab = c.tab;
-    node.append(btn);
+    chipBtn.title = `${KIND_LABELS[c.tab]}: ${c.id}`;
+    chipBtn.setAttribute('aria-label', `Show ${KIND_LABELS[c.tab]}, ${c.id}`);
+    chipBtn.dataset.role = 'chip';
+    chipBtn.dataset.tab = c.tab;
+    node.append(chipBtn);
   }
   return node;
 }
@@ -297,9 +304,11 @@ export function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function badgeHtml(badge: PluginBadge): string {
-  const text = escapeHtml(badge.text);
-  return `<span class="plugin-badge plugin-badge--${badge.tone}">${text}</span>`;
+function badgeHtml(item: PluginBadge): string {
+  const text = escapeHtml(item.text);
+  const tone =
+    item.tone === 'warn' ? 'warn' : item.tone === 'active' ? 'up' : 'neutral';
+  return `<span class="ax-badge ax-badge--${tone}">${text}</span>`;
 }
 
 function factsHtml(card: PluginCard): string {
