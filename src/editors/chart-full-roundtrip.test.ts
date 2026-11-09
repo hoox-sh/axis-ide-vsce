@@ -21,17 +21,32 @@ import { defaultChartDocument } from './chart-document';
 import { handleChartWebviewMessage } from './chart-messages';
 import { buildChartSession } from '../host/chart-session';
 import { HOST_TO_VIEW, VIEW_TO_HOST, decode, encode } from '../protocol';
-import { chartLayoutOptions } from '../../webview/chart/src/paint';
+import { LineStyle } from 'lightweight-charts';
+import {
+  applyPlotOverlays,
+  chartLayoutOptions,
+  createChartPainter,
+  mapPlotLineStyle,
+  shapeMarkersFromPlots,
+  strategyMarkersFromTrades,
+  toFillBandPoints,
+  toOhlcOverlayPoints,
+} from '../../webview/chart/src/paint';
 import {
   applyChartHostMessage,
+  applyPlotWindow,
   classifyDeltaSeq,
   initialChartState,
   mergeBarTail,
   normalizeBars,
+  normalizeEngineDrawings,
+  normalizeInputs,
   normalizePlotLines,
+  normalizeStrategy,
   pickChartPlugins,
   pluginChipSpecs,
   reduceChartMessage,
+  resolvePlotPaintKind,
 } from '../../webview/chart/src/state';
 
 describe('chart.full encode → decode → reducer apply', () => {
@@ -162,6 +177,29 @@ describe('chart.full encode → decode → reducer apply', () => {
   test('reducer ignores unknown types', () => {
     const state = reduceChartMessage(initialChartState(), 'nope', {});
     expect(state).toEqual(initialChartState());
+  });
+
+  test('chart.full lookahead static grep is stored (not a live-safe proof)', () => {
+    const state = reduceChartMessage(initialChartState(), 'chart.full', {
+      bars: [{ time: 1, open: 1, high: 1, low: 1, close: 1 }],
+      seq: 1,
+      lookahead: {
+        static: true,
+        tainted: true,
+        hits: [{ kind: 'lookahead_on', line: 2, col: 0, text: 'lookahead_on' }],
+        note: 'Static grep overlay — not dynamic taint, not a live-safe proof.',
+      },
+    });
+    expect(state.lookahead?.tainted).toBe(true);
+    expect(state.lookahead?.static).toBe(true);
+    expect(state.lookahead?.hits[0]?.kind).toBe('lookahead_on');
+  });
+
+  test('chart.debugCursor sets debugBarIndex overlay (not a studio)', () => {
+    const state = reduceChartMessage(initialChartState(), 'chart.debugCursor', { barIndex: 4 });
+    expect(state.debugBarIndex).toBe(4);
+    const cleared = reduceChartMessage(state, 'chart.debugCursor', { barIndex: 'x' });
+    expect(cleared.debugBarIndex).toBeNull();
   });
 
   test('chart.init / host.run.status plugin fields are inert (lightweight core)', () => {
@@ -352,12 +390,14 @@ describe('chart.delta merge + seq gap → requestReload', () => {
       seq: 2,
     });
     expect(withPlots.plots).toEqual([
-      { id: 'sma', values: [10, 11, 12] },
-      { id: 'ema', values: [9, null, 11] },
+      { id: 'sma', values: [10, 11, 12], kind: 'line' },
+      { id: 'ema', values: [9, null, 11], kind: 'line' },
     ]);
-    expect(normalizePlotLines([1, 2, 3])).toEqual([{ id: 'plot', values: [1, 2, 3] }]);
+    expect(normalizePlotLines([1, 2, 3])).toEqual([
+      { id: 'plot', values: [1, 2, 3], kind: 'line' },
+    ]);
     expect(normalizePlotLines(undefined, { rsi: [30, 40] })).toEqual([
-      { id: 'rsi', values: [30, 40] },
+      { id: 'rsi', values: [30, 40], kind: 'line' },
     ]);
     expect(chartLayoutOptions().attributionLogo).toBe(false);
   });
@@ -386,5 +426,322 @@ describe('chart.delta merge + seq gap → requestReload', () => {
     expect(out.state.seq).toBe(2);
     expect(out.state.bars).toHaveLength(2);
     expect(out.state.bars[1]?.time).toBe(2);
+  });
+
+  test('resolvePlotPaintKind maps engine kind/style', () => {
+    expect(resolvePlotPaintKind({ kind: 'hline' })).toBe('hline');
+    expect(resolvePlotPaintKind({ kind: 'bgcolor' })).toBe('bgcolor');
+    expect(resolvePlotPaintKind({ kind: 'barcolor' })).toBe('barcolor');
+    expect(resolvePlotPaintKind({ kind: 'plotshape' })).toBe('shape');
+    expect(resolvePlotPaintKind({ kind: 'plotchar' })).toBe('shape');
+    expect(resolvePlotPaintKind({ kind: 'plotarrow' })).toBe('shape');
+    expect(resolvePlotPaintKind({ style: 'histogram' })).toBe('histogram');
+    expect(resolvePlotPaintKind({ style: 'plot.style_columns' })).toBe('histogram');
+    expect(resolvePlotPaintKind({ style: 'stepline' })).toBe('step');
+    expect(resolvePlotPaintKind({ style: 'area' })).toBe('area');
+    expect(resolvePlotPaintKind({ style: 'areabr' })).toBe('area');
+    expect(resolvePlotPaintKind({ style: 'linebr' })).toBe('line');
+    expect(resolvePlotPaintKind({ style: 'line' })).toBe('line');
+    expect(resolvePlotPaintKind({ kind: 'fill' })).toBe('fill');
+    expect(resolvePlotPaintKind({ kind: 'plotbar' })).toBe('plotbar');
+    expect(resolvePlotPaintKind({ kind: 'plotcandle' })).toBe('plotcandle');
+    expect(resolvePlotPaintKind({ style: 'bars' })).toBe('plotbar');
+    expect(resolvePlotPaintKind({ style: 'candles' })).toBe('plotcandle');
+  });
+
+  test('normalizePlotLines copies fill/ohlc edges and linestyle/offset/show_last', () => {
+    const plots = normalizePlotLines(
+      undefined,
+      {
+        mid: [1, 2, 3, 4],
+        upper: [2, 3, 4, 5],
+        lower: [0, 1, 2, 3],
+        px: [10, 11, 12, 13],
+        'px.open': [9, 10, 11, 12],
+        'px.high': [11, 12, 13, 14],
+        'px.low': [8, 9, 10, 11],
+        brs: [10, 11, 12, 13],
+        'brs.open': [9, 10, 11, 12],
+        'brs.high': [11, 12, 13, 14],
+        'brs.low': [8, 9, 10, 11],
+      },
+      {
+        mid: { kind: 'plot', linestyle: 'plot.linestyle_dotted', offset: 1, show_last: 2 },
+        band: { kind: 'fill', plot1: 'upper', plot2: 'lower', color: '#00ff00' },
+        px: { kind: 'plotcandle', open: 'px.open', high: 'px.high', low: 'px.low', wickcolor: '#111' },
+        brs: { kind: 'plotbar', style: 'bars' },
+      },
+    );
+    const mid = plots.find((p) => p.id === 'mid');
+    expect(mid?.linestyle).toBe('plot.linestyle_dotted');
+    expect(mid?.offset).toBe(1);
+    expect(mid?.showLast).toBe(2);
+    const band = plots.find((p) => p.id === 'band');
+    expect(band?.kind).toBe('fill');
+    expect(band?.plot1).toBe('upper');
+    expect(band?.plot2).toBe('lower');
+    expect(band?.values).toEqual([2, 3, 4, 5]);
+    expect(band?.fillLower).toEqual([0, 1, 2, 3]);
+    const cdl = plots.find((p) => p.id === 'px');
+    expect(cdl?.kind).toBe('plotcandle');
+    expect(cdl?.open).toEqual([9, 10, 11, 12]);
+    expect(cdl?.high).toEqual([11, 12, 13, 14]);
+    expect(cdl?.low).toEqual([8, 9, 10, 11]);
+    expect(cdl?.wickcolor).toBe('#111');
+    expect(plots.some((p) => p.id === 'px.open')).toBe(false);
+    expect(plots.find((p) => p.id === 'brs')?.kind).toBe('plotbar');
+  });
+
+  test('applyPlotWindow honours offset and show_last', () => {
+    expect(applyPlotWindow([10, 20, 30, 40], 1)).toEqual([null, 10, 20, 30]);
+    expect(applyPlotWindow([10, 20, 30, 40], -1)).toEqual([20, 30, 40, null]);
+    expect(applyPlotWindow([10, 20, 30, 40], 0, 2)).toEqual([null, null, 30, 40]);
+    expect(applyPlotWindow([10, 20, 30, 40], 1, 2)).toEqual([null, null, 20, 30]);
+  });
+
+  test('mapPlotLineStyle maps pine tokens', () => {
+    expect(mapPlotLineStyle('plot.linestyle_solid')).toBe(LineStyle.Solid);
+    expect(mapPlotLineStyle('hline.style_dashed')).toBe(LineStyle.Dashed);
+    expect(mapPlotLineStyle('linestyle_dotted')).toBe(LineStyle.Dotted);
+    expect(mapPlotLineStyle(undefined, LineStyle.Dashed)).toBe(LineStyle.Dashed);
+  });
+
+  test('chart.full maps plot_meta, engine drawings, inputs, strategy, window', () => {
+    const state = reduceChartMessage(initialChartState(), 'chart.full', {
+      bars: [b(1), b(2)],
+      series: { sma: [1, 2], bg: ['#112233', '#223344'] },
+      plotMeta: {
+        sma: { kind: 'plot', style: 'histogram', color: '#22d3ee' },
+        bg: { kind: 'bgcolor' },
+      },
+      drawings: [{ type: 'line', t1: 1, p1: 2, t2: 2, p2: 3, color: '#fff' }],
+      inputs: [{ title: 'Length', type: 'int', value: 14, defval: 9 }],
+      strategy: {
+        trades: [{ id: 'long', kind: 'entry', time: 1, price: 10, direction: 'long' }],
+        stats: { trades: 1, entries: 1, exits: 0 },
+        equity: [100, 110],
+      },
+      times: [1, 2],
+      window: { from_bar: 0, to_bar: 1, total_bars: 500 },
+      alerts: [{ message: 'x' }, { message: 'y' }],
+      seq: 4,
+    });
+    expect(state.plots.find((p) => p.id === 'sma')?.kind).toBe('histogram');
+    expect(state.plots.find((p) => p.id === 'bg')?.kind).toBe('bgcolor');
+    expect(state.engineDrawings).toEqual([
+      { type: 'line', t1: 1, p1: 2, t2: 2, p2: 3, color: '#fff' },
+    ]);
+    expect(state.inputs).toEqual([{ title: 'Length', type: 'int', value: 14, defval: 9 }]);
+    expect(state.strategy?.trades).toHaveLength(1);
+    expect(state.strategy?.equity).toEqual([100, 110]);
+    expect(state.window).toEqual({ fromBar: 0, toBar: 1, totalBars: 500 });
+    expect(state.alertsCount).toBe(2);
+    expect(state.drawings).toEqual([]);
+  });
+
+  test('user trendlines stay when engine drawings arrive; user batch replaces', () => {
+    const withUser = reduceChartMessage(initialChartState(), 'chart.init', {
+      theme: 'void',
+      seriesKey: 'k',
+      panes: [],
+      cssVars: {},
+      drawings: [
+        {
+          id: 'tl1',
+          tool: 'trendline',
+          points: [
+            { time: 1, price: 1 },
+            { time: 2, price: 2 },
+          ],
+        },
+      ],
+    });
+    expect(withUser.drawings).toHaveLength(1);
+    const engine = reduceChartMessage(withUser, 'chart.full', {
+      bars: [b(1)],
+      drawings: [{ type: 'label', t1: 1, p1: 2, text: 'hi' }],
+      seq: 2,
+    });
+    expect(engine.drawings).toHaveLength(1);
+    expect(engine.engineDrawings).toEqual([{ type: 'label', t1: 1, p1: 2, text: 'hi' }]);
+    const userBatch = reduceChartMessage(engine, 'chart.full', {
+      bars: [b(1)],
+      drawings: [],
+      seq: 3,
+    });
+    expect(userBatch.drawings).toEqual([]);
+  });
+
+  test('normalize helpers skip hostile / empty extras', () => {
+    expect(normalizeEngineDrawings([{ tool: 'trendline' }, { type: 'box', t1: 1, p1: 2, t2: 3, p2: 4 }])).toEqual([
+      { type: 'box', t1: 1, p1: 2, t2: 3, p2: 4 },
+    ]);
+    expect(normalizeEngineDrawings('nope')).toEqual([]);
+    expect(normalizeInputs({ Length: 9, On: true })).toEqual([
+      { title: 'Length', type: 'number', value: 9 },
+      { title: 'On', type: 'boolean', value: true },
+    ]);
+    expect(normalizeInputs([])).toEqual([]);
+    expect(normalizeStrategy({ trades: [{ id: 'x' }] })).toBeUndefined();
+    expect(normalizeStrategy({ trades: [{ id: 'x', kind: 'entry' }], equity: [1, 2] })?.stats.entries).toBe(1);
+  });
+
+  test('strategy and shape markers from envelope extras', () => {
+    const markers = strategyMarkersFromTrades({
+      trades: [
+        { id: 'L', kind: 'entry', direction: 'long', time: 1 },
+        { id: 'S', kind: 'entry', direction: 'short', time: 2 },
+        { id: 'X', kind: 'exit', time: 3 },
+      ],
+      stats: { trades: 3, entries: 2, exits: 1 },
+    });
+    expect(markers).toHaveLength(3);
+    expect(markers[0]?.shape).toBe('arrowUp');
+    expect(markers[1]?.shape).toBe('arrowDown');
+    expect(markers[2]?.shape).toBe('circle');
+    const shapes = shapeMarkersFromPlots(
+      [b(1), b(2)],
+      [{ id: 'sig', values: [1, 0], kind: 'shape', location: 'belowbar', char: '↓' }],
+    );
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]?.shape).toBe('arrowDown');
+  });
+
+  test('stub painter records plot kinds and strategy trade count', () => {
+    if (typeof document === 'undefined') return;
+    const host = document.createElement('div');
+    const ph = document.createElement('p');
+    ph.className = 'chart-host__placeholder';
+    host.append(ph);
+    const painter = createChartPainter(host);
+    painter.apply({
+      ...initialChartState(),
+      ready: true,
+      theme: 'void',
+      seriesKey: 'binance|spot|BTC/USDT|1m',
+      bars: [b(1), b(2)],
+      plots: [
+        { id: 'sma', values: [1, 2], kind: 'histogram' },
+        { id: 'hl', values: [1.5, 1.5], kind: 'hline' },
+      ],
+      strategy: {
+        trades: [{ id: 'L', kind: 'entry', time: 1, price: 1 }],
+        stats: { trades: 1, entries: 1, exits: 0 },
+      },
+      engineDrawings: [{ type: 'line', t1: 1, p1: 1, t2: 2, p2: 2 }],
+      seq: 7,
+    });
+    expect(host.getAttribute('data-axis-plot-kinds')).toBe('histogram,hline');
+    expect(host.getAttribute('data-axis-strategy-trades')).toBe('1');
+    expect(host.getAttribute('data-axis-engine-drawings')).toBe('1');
+    expect(host.getAttribute('data-axis-plot-count')).toBe('2');
+    painter.dispose();
+  });
+
+  test('applyPlotOverlays paints fill, plotbar, plotcandle and honours linestyle/offset/show_last', () => {
+    const bars = [b(1), b(2), b(3), b(4)];
+    const added: Array<{ type: unknown; opts: Record<string, unknown>; data: unknown[] }> = [];
+    const chart = {
+      addSeries(type: unknown, opts: Record<string, unknown>) {
+        const rec: { type: unknown; opts: Record<string, unknown>; data: unknown[] } = {
+          type,
+          opts,
+          data: [],
+        };
+        added.push(rec);
+        return {
+          setData(data: unknown[]) {
+            rec.data = data;
+          },
+          applyOptions(next: Record<string, unknown>) {
+            Object.assign(rec.opts, next);
+          },
+        };
+      },
+      removeSeries() {},
+      priceScale() {
+        return { applyOptions() {} };
+      },
+    };
+    const priceLines: Array<Record<string, unknown>> = [];
+    const candle = {
+      createPriceLine(opts: Record<string, unknown>) {
+        priceLines.push(opts);
+        return opts;
+      },
+      removePriceLine() {},
+    };
+    const band = normalizePlotLines(
+      undefined,
+      { upper: [2, 3, 4, 5], lower: [0, 1, 2, 3] },
+      { cloud: { kind: 'fill', plot1: 'upper', plot2: 'lower', color: '#22d3ee' } },
+    );
+    const ohlcPlots = normalizePlotLines(
+      undefined,
+      {
+        px: [10, 11, 12, 13],
+        'px.open': [9, 10, 11, 12],
+        'px.high': [11, 12, 13, 14],
+        'px.low': [8, 9, 10, 11],
+        brs: [10, 11, 12, 13],
+        'brs.open': [9, 10, 11, 12],
+        'brs.high': [11, 12, 13, 14],
+        'brs.low': [8, 9, 10, 11],
+        sma: [1, 2, 3, 4],
+      },
+      {
+        px: { kind: 'plotcandle', color: '#26a69a' },
+        brs: { kind: 'plotbar', color: '#ef5350' },
+        sma: { kind: 'plot', linestyle: 'dotted', offset: 1, show_last: 2 },
+        hl: { kind: 'hline', linestyle: 'hline.style_dotted' },
+      },
+    );
+    const hl = { id: 'hl', values: [1.5, 1.5, 1.5, 1.5], kind: 'hline' as const, linestyle: 'hline.style_dotted' };
+    applyPlotOverlays(
+      chart as never,
+      candle as never,
+      new Map(),
+      [],
+      bars,
+      [...band, ...ohlcPlots, hl],
+    );
+
+    const types = added.map((a) => a.type);
+    expect(types).toContain(added.find((a) => a.opts.title === 'cloud')?.type);
+    expect(added.some((a) => a.opts.title === 'cloud')).toBe(true);
+    expect(added.some((a) => a.opts.title === 'px')).toBe(true);
+    expect(added.some((a) => a.opts.title === 'brs')).toBe(true);
+    expect(added.some((a) => a.opts.title === 'sma')).toBe(true);
+
+    const sma = added.find((a) => a.opts.title === 'sma');
+    expect(sma?.opts.lineStyle).toBe(LineStyle.Dotted);
+    expect(sma?.data).toEqual([
+      { time: 3, value: 2 },
+      { time: 4, value: 3 },
+    ]);
+
+    expect(priceLines[0]?.lineStyle).toBe(LineStyle.Dotted);
+    expect(priceLines[0]?.price).toBe(1.5);
+
+    const px = ohlcPlots.find((p) => p.id === 'px');
+    expect(px).toBeDefined();
+    if (!px) return;
+    const ohlc = toOhlcOverlayPoints(bars, px);
+    expect(ohlc[0]).toEqual({ time: 1, open: 9, high: 11, low: 8, close: 10 });
+
+    const fill = band.find((p) => p.id === 'cloud');
+    expect(fill).toBeDefined();
+    if (!fill) return;
+    const fillPts = toFillBandPoints(bars, fill);
+    expect(fillPts[0]).toEqual({
+      time: 1,
+      open: 2,
+      high: 2,
+      low: 0,
+      close: 0,
+      color: '#22d3ee',
+    });
+    const cloud = added.find((a) => a.opts.title === 'cloud');
+    expect(cloud?.data[0]).toEqual({ time: 1, value: 2, color: '#22d3ee' });
   });
 });

@@ -46,12 +46,23 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain("base-uri 'none'");
     expect(html).toContain("form-action 'none'");
     expect(html).toContain("connect-src 'none'");
+    expect(html).not.toContain('data-axis-pyodide-cdn');
     expect(html).toContain(`src="${CSP_SOURCE}/main.js"`);
     expect(html).toContain(`href="${CSP_SOURCE}/main.css"`);
     expect(html).toContain('id="chart-host"');
     expect(html).toContain('id="chart-toolbar"');
+    expect(html).toContain('aria-label="Chart tools"');
     expect(html).toContain('id="tool-trendline"');
     expect(html).toContain('title="Trendline"');
+    expect(html).toContain('id="tool-layers"');
+    expect(html).toContain('id="tool-data"');
+    expect(html).toContain('id="tool-legend"');
+    expect(html).toContain('id="tool-fullscreen"');
+    expect(html).toContain('id="tool-open-source"');
+    expect(html).toContain('id="tool-live-safe"');
+    expect(html).toContain('id="chart-legend"');
+    expect(html).toContain('id="chart-layers"');
+    expect(html).toContain('id="chart-data-window"');
     expect(html).toContain('id="chart-mark"');
     expect(html).toContain('id="chart-hud"');
     expect(html).toContain('id="chart-plot-count"');
@@ -60,6 +71,17 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain('aria-hidden="true"');
     expect(html.toLowerCase()).not.toContain('tradingview');
     expect(html).toContain('id="drawing-overlay"');
+    expect(html).toContain('id="chart-toggle-inputs"');
+    expect(html).toContain('id="chart-toggle-strategy"');
+    expect(html).toContain('id="chart-inputs"');
+    expect(html).toContain('id="chart-inputs-apply"');
+    expect(html).toContain('id="chart-strategy"');
+    expect(html).toContain('id="chart-strategy-csv"');
+    expect(html).toContain('id="chart-engine-tables"');
+    expect(html).toContain('id="chart-window-chip"');
+    expect(html).toContain('id="chart-alerts-chip"');
+    expect(html).toContain('data-chrome="inputs"');
+    expect(html).toContain('data-chrome="strategy"');
     expect(html).toContain('class="vscode-dark"');
     expect(htmlHasInlineScript(html)).toBe(false);
     expect(html.includes('<script>')).toBe(false);
@@ -82,12 +104,13 @@ describe('chart CSP HTML builder', () => {
     expect(csp).not.toContain('worker-src');
   });
 
-  test('allowPyodide widens script-src and adds worker-src blob:', () => {
+  test('allowPyodide widens script-src, connect-src CDN, and worker-src blob:', () => {
     const directives = buildChartCspDirectives(CSP_SOURCE, true);
     const csp = directives.join('; ');
-    expect(csp).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval'`);
+    expect(csp).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval' https://cdn.jsdelivr.net`);
     expect(csp).toContain(`worker-src blob: ${CSP_SOURCE}`);
-    expect(csp).toContain("connect-src 'none'");
+    expect(csp).toContain('connect-src https://cdn.jsdelivr.net');
+    expect(csp).not.toContain("connect-src 'none'");
 
     const html = buildChartWebviewHtml({
       cspSource: CSP_SOURCE,
@@ -96,8 +119,9 @@ describe('chart CSP HTML builder', () => {
       bodyClass: 'vscode-dark',
       allowPyodide: true,
     });
-    expect(html).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval'`);
+    expect(html).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval' https://cdn.jsdelivr.net`);
     expect(html).toContain(`worker-src blob: ${CSP_SOURCE}`);
+    expect(html).toContain('data-axis-pyodide-cdn="https://cdn.jsdelivr.net/pyodide/v0.29.5/full/"');
     expect(htmlHasInlineScript(html)).toBe(false);
   });
 

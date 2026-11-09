@@ -26,7 +26,7 @@ import {
   buildChartInitStub,
   defaultChartCssVars,
 } from '../editors/chart-messages';
-import type { AxisChartDocV1 } from '../editors/chart-document';
+import { scriptInputsFromDoc, type AxisChartDocV1 } from '../editors/chart-document';
 import type { ChartFullPayload, ChartInitPayload } from '../protocol';
 import {
   MOCK_BARS_DEFAULT,
@@ -101,6 +101,7 @@ export function buildChartSession(opts: ChartSessionOptions): ChartSessionSnapsh
     seriesKey,
     cssVars: opts.cssVars ?? defaultChartCssVars(),
     drawings,
+    inputs: scriptInputsFromDoc(opts.doc),
     // plugins omitted (lightweight)
   });
   const seq =

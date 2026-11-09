@@ -84,6 +84,7 @@ const SAMPLES: { [K in MessageType]: PayloadByType[K] } = {
   [VIEW_TO_HOST.DrawingSetTool]: { tool: 'trendline' },
   [VIEW_TO_HOST.DrawingCommit]: { id: 'd1', points: [[0, 1]] },
   [VIEW_TO_HOST.ChartRequestReload]: {},
+  [VIEW_TO_HOST.ChartApplyInputs]: { inputs: { Length: 14 } },
   [VIEW_TO_HOST.ResultsFocus]: { runId: 'r1' },
   [VIEW_TO_HOST.ResultsReady]: {},
   [HOST_TO_VIEW.StudioInit]: { view: 'colors', data: { swatches: [] } },
@@ -91,6 +92,9 @@ const SAMPLES: { [K in MessageType]: PayloadByType[K] } = {
   [HOST_TO_VIEW.StudioNotice]: { view: 'logs', level: 'info', message: 'stream connected' },
   [VIEW_TO_HOST.StudioReady]: { view: 'colors', capabilities: ['copy'] },
   [VIEW_TO_HOST.StudioAction]: { view: 'colors', action: 'copy', args: { id: 'swatch-1' } },
+  [HOST_TO_VIEW.ChartDebugCursor]: { barIndex: 3 },
+  [VIEW_TO_HOST.ChartBarBreakpoint]: { barIndex: 3 },
+  [VIEW_TO_HOST.ChartSelectTrade]: { barIndex: 3 },
 };
 
 afterEach(() => {
@@ -110,7 +114,7 @@ describe('axis.webview.v1 protocol', () => {
   test('ALL_MESSAGE_TYPES matches frozen design §6 golden list', () => {
     expect([...ALL_MESSAGE_TYPES].sort()).toEqual([...SECTION_6_MESSAGE_TYPES].sort());
     expect(new Set(ALL_MESSAGE_TYPES).size).toBe(ALL_MESSAGE_TYPES.length);
-    expect(ALL_MESSAGE_TYPES.length).toBe(20);
+    expect(ALL_MESSAGE_TYPES.length).toBe(24);
   });
 
   test('round-trip encode→decode for every message type', () => {
@@ -150,6 +154,32 @@ describe('axis.webview.v1 protocol', () => {
     expect(env.id).toBeUndefined();
     expect(env.ts).toBeGreaterThanOrEqual(before);
     expect(env.ts).toBeLessThanOrEqual(after);
+  });
+
+  test('chart.full extras (plotMeta/inputs/strategy/window) round-trip', () => {
+    const env = encode(HOST_TO_VIEW.ChartFull, {
+      bars: [],
+      seq: 3,
+      plotMeta: { sma: { kind: 'hline' } },
+      inputs: { Length: 14 },
+      strategy: { trades: [], stats: { trades: 0, entries: 0, exits: 0 } },
+      window: { fromBar: 0, toBar: 1 },
+      times: [1],
+      alerts: [],
+      scriptType: 'strategy',
+    });
+    const result = decode(env);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const p = result.envelope.payload as {
+      plotMeta: unknown;
+      inputs: unknown;
+      strategy: unknown;
+      window: unknown;
+    };
+    expect(p.plotMeta).toEqual({ sma: { kind: 'hline' } });
+    expect(p.inputs).toEqual({ Length: 14 });
+    expect(p.window).toEqual({ fromBar: 0, toBar: 1 });
   });
 
   test('chart.drawing.apply accepts object batch', () => {
@@ -557,6 +587,15 @@ describe('decode reject paths', () => {
       { type: VIEW_TO_HOST.ChartRequestReload, payload: null, tip: 'object' },
       { type: VIEW_TO_HOST.ChartRequestReload, payload: [], tip: 'object' },
       { type: VIEW_TO_HOST.ChartRequestReload, payload: { x: 1 }, tip: 'empty' },
+      { type: VIEW_TO_HOST.ChartApplyInputs, payload: null, tip: 'object' },
+      { type: VIEW_TO_HOST.ChartApplyInputs, payload: {}, tip: 'inputs' },
+      { type: VIEW_TO_HOST.ChartApplyInputs, payload: { inputs: [] }, tip: 'inputs' },
+      { type: HOST_TO_VIEW.ChartDebugCursor, payload: null, tip: 'object' },
+      { type: HOST_TO_VIEW.ChartDebugCursor, payload: {}, tip: 'barIndex' },
+      { type: VIEW_TO_HOST.ChartBarBreakpoint, payload: null, tip: 'object' },
+      { type: VIEW_TO_HOST.ChartBarBreakpoint, payload: { barIndex: 'x' }, tip: 'barIndex' },
+      { type: VIEW_TO_HOST.ChartSelectTrade, payload: null, tip: 'object' },
+      { type: VIEW_TO_HOST.ChartSelectTrade, payload: { barIndex: 'x' }, tip: 'barIndex' },
       { type: VIEW_TO_HOST.ResultsFocus, payload: null, tip: 'object' },
       { type: VIEW_TO_HOST.ResultsFocus, payload: { runId: 1 }, tip: 'runId' },
       { type: VIEW_TO_HOST.ResultsReady, payload: null, tip: 'object' },

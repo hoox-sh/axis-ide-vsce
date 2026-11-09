@@ -44,7 +44,11 @@ export type ChartMessageHandle =
     }
   | { kind: 'setTool'; tool: string }
   | { kind: 'commit'; drawing: CommittedTrendlineDrawing }
-  | { kind: 'requestReload' };
+  | { kind: 'requestReload' }
+  | { kind: 'applyInputs'; inputs: Record<string, unknown> }
+  | { kind: 'viewport'; from: number; to: number }
+  | { kind: 'barBreakpoint'; barIndex: number }
+  | { kind: 'selectTrade'; barIndex: number };
 
 /**
  * VS Code theme CSS variables the chart shell inherits from the webview host.
@@ -87,6 +91,9 @@ export function buildChartInitStub(partial?: Partial<ChartInitPayload>): ChartIn
   };
   if ('drawings' in (partial ?? {}) && partial) {
     init.drawings = partial.drawings;
+  }
+  if ('inputs' in (partial ?? {}) && partial) {
+    init.inputs = partial.inputs;
   }
   // plugins omitted (lightweight core)
   return init;
@@ -146,6 +153,22 @@ export function handleChartWebviewMessage(
     }
     if (decoded.envelope.type === VIEW_TO_HOST.ChartRequestReload) {
       return { kind: 'requestReload' };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.ChartApplyInputs) {
+      const payload = decoded.envelope.payload as { inputs: Record<string, unknown> };
+      return { kind: 'applyInputs', inputs: payload.inputs };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.ChartViewport) {
+      const payload = decoded.envelope.payload as { from: number; to: number };
+      return { kind: 'viewport', from: payload.from, to: payload.to };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.ChartBarBreakpoint) {
+      const payload = decoded.envelope.payload as { barIndex: number };
+      return { kind: 'barBreakpoint', barIndex: payload.barIndex };
+    }
+    if (decoded.envelope.type === VIEW_TO_HOST.ChartSelectTrade) {
+      const payload = decoded.envelope.payload as { barIndex: number };
+      return { kind: 'selectTrade', barIndex: payload.barIndex };
     }
     if (decoded.envelope.type !== VIEW_TO_HOST.WebviewReady) {
       return { kind: 'ignore' };

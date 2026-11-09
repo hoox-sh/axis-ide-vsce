@@ -16,6 +16,8 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { PYODIDE_CDN_INDEX, PYODIDE_CDN_ORIGIN } from '../host/pyodide-profile';
+
 /** Inputs for the chart webview HTML shell (URIs already passed through asWebviewUri). */
 export interface ChartHtmlOptions {
   /** `webview.cspSource` — never hard-code `vscode-resource:` / `https:` here. */
@@ -47,8 +49,11 @@ export function escapeHtmlAttr(value: string): string {
 export function buildChartCspDirectives(cspSource: string, allowPyodide = false): string[] {
   const src = String(cspSource ?? '');
   const scriptSrc = allowPyodide
-    ? `script-src ${src} 'wasm-unsafe-eval'`
+    ? `script-src ${src} 'wasm-unsafe-eval' ${PYODIDE_CDN_ORIGIN}`
     : `script-src ${src}`;
+  const connectSrc = allowPyodide
+    ? `connect-src ${PYODIDE_CDN_ORIGIN}`
+    : "connect-src 'none'";
   const directives = [
     "default-src 'none'",
     "base-uri 'none'",
@@ -57,7 +62,7 @@ export function buildChartCspDirectives(cspSource: string, allowPyodide = false)
     `style-src ${src} 'unsafe-inline'`,
     // blob: reserved for canvas/LWC exports (design CSP matrix).
     `img-src ${src} data: blob:`,
-    "connect-src 'none'",
+    connectSrc,
   ];
   if (allowPyodide) {
     directives.push(`worker-src blob: ${src}`);
@@ -82,6 +87,9 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
   const safeScript = escapeHtmlAttr(scriptUri);
   const safeStyle = escapeHtmlAttr(styleUri);
   const safeClass = bodyClass.replace(/[^a-zA-Z0-9_-]/g, '');
+  const pyodideAttr = allowPyodide
+    ? ` data-axis-pyodide-cdn="${escapeHtmlAttr(PYODIDE_CDN_INDEX)}"`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -92,9 +100,9 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
   <title>AXIS Chart</title>
   <link rel="stylesheet" href="${safeStyle}" />
 </head>
-<body class="${safeClass}">
+<body class="${safeClass}"${pyodideAttr}>
   <div id="chart-shell" class="chart-shell" data-axis-chart-shell="1">
-    <div id="chart-toolbar" class="chart-toolbar" role="toolbar" aria-label="Drawing tools">
+    <div id="chart-toolbar" class="chart-toolbar" role="toolbar" aria-label="Chart tools">
       <svg id="chart-mark" class="chart-toolbar__mark" width="12" height="12" viewBox="0 0 1505.3611 1330.7858" aria-hidden="true" focusable="false">
         <g transform="matrix(2.2062294,0,0,2.2117592,-1506.9584,-1032.9513)" fill="currentColor">
           <path d="m 1024.04,675.876 c 9.61,8.797 21.53,21.439 30.93,30.842 l 60.92,60.911 64.67,-64.663 119.79,-0.021 65.02,64.909 -65.07,65.008 -119.48,0.035 c -21.7,-21.207 -43.47,-43.36 -64.98,-64.832 l -91.24,91.236 c -5.86,-2.803 -80.868,-79.926 -92.266,-91.298 l -64.893,64.883 -119.277,-0.045 -65.117,-65.099 64.831,-64.765 119.814,-0.031 64.627,64.595 z"/>
@@ -105,16 +113,48 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
         </g>
       </svg>
       <button type="button" id="tool-trendline" class="chart-toolbar__btn" data-tool="trendline" aria-pressed="false" title="Trendline">Trendline</button>
+      <button type="button" id="tool-layers" class="chart-toolbar__btn" data-chrome="layers" aria-pressed="false" title="Layers">Layers</button>
+      <button type="button" id="tool-data" class="chart-toolbar__btn" data-chrome="data" aria-pressed="false" title="Data window">Data</button>
+      <button type="button" id="tool-legend" class="chart-toolbar__btn" data-chrome="legend" aria-pressed="true" title="Legend">Legend</button>
+      <button type="button" id="tool-fullscreen" class="chart-toolbar__btn" data-chrome="fullscreen" aria-pressed="false" title="Fullscreen">Full</button>
+      <button type="button" id="tool-open-source" class="chart-toolbar__btn" data-chrome="open-source" title="Open source">Source</button>
+      <button type="button" id="tool-live-safe" class="chart-toolbar__btn" data-chrome="live-safe" aria-pressed="false" hidden title="Hide plots when static lookahead grep fired (not a live-safe proof)">Live-safe</button>
       <div id="chart-hud" class="chart-plugins" aria-label="Chart HUD">
         <span id="chart-plot-count" class="chart-plugins__chip" hidden></span>
+        <span id="chart-window-chip" class="chart-plugins__chip" hidden></span>
+        <span id="chart-alerts-chip" class="chart-plugins__chip" hidden></span>
         <div id="chart-plugins" class="chart-plugins" hidden aria-label="Active plugins"></div>
       </div>
+      <button type="button" id="chart-toggle-inputs" class="chart-toolbar__btn" data-chrome="inputs" aria-pressed="false" hidden>Inputs</button>
+      <button type="button" id="chart-toggle-strategy" class="chart-toolbar__btn" data-chrome="strategy" aria-pressed="false" hidden>Strategy</button>
+    </div>
+    <div id="chart-legend" class="chart-legend" aria-label="Legend">
+      <span id="chart-legend-title" class="chart-legend__title">AXIS</span>
+      <ul id="chart-legend-plots" class="chart-legend__plots"></ul>
+    </div>
+    <div id="chart-layers" class="chart-popover" hidden>
+      <p class="chart-popover__title">Layers</p>
+      <ul id="chart-layers-list" class="chart-layers__list"></ul>
+    </div>
+    <div id="chart-data-window" class="chart-data-window" hidden>
+      <p class="chart-popover__title">Data window</p>
+      <table id="chart-data-table" class="chart-data-window__table"></table>
     </div>
     <div id="chart-stage" class="chart-stage">
       <div id="chart-host" class="chart-host" data-axis-chart-host="1" role="presentation">
         <p class="chart-host__placeholder">AXIS chart host</p>
       </div>
       <svg id="drawing-overlay" class="drawing-overlay" aria-hidden="true"></svg>
+      <div id="chart-engine-tables" class="chart-engine-tables" hidden></div>
+    </div>
+    <div id="chart-inputs" class="chart-panel" hidden>
+      <div id="chart-inputs-fields" class="chart-panel__fields"></div>
+      <button type="button" id="chart-inputs-apply" class="chart-toolbar__btn">Apply &amp; Run</button>
+    </div>
+    <div id="chart-strategy" class="chart-panel" hidden>
+      <div id="chart-strategy-stats" class="chart-panel__stats"></div>
+      <button type="button" id="chart-strategy-csv" class="chart-toolbar__btn">CSV</button>
+      <div id="chart-strategy-table" class="chart-panel__table"></div>
     </div>
   </div>
   <script src="${safeScript}"></script>

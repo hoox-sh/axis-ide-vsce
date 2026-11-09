@@ -24,6 +24,7 @@ import {
   MISSING_ENDPOINT_ERROR,
   barsForPine,
   mapEngineResponse,
+  mapToWorkerTimeframe,
   postEngineRun,
   type FetchLike,
 } from './engine-http';
@@ -215,6 +216,25 @@ describe('mapEngineResponse', () => {
   });
 });
 
+describe('mapToWorkerTimeframe', () => {
+  test('passes worker-style intervals and maps Pine aliases', () => {
+    expect(mapToWorkerTimeframe('1m')).toBe('1m');
+    expect(mapToWorkerTimeframe('1h')).toBe('1h');
+    expect(mapToWorkerTimeframe('1d')).toBe('1d');
+    expect(mapToWorkerTimeframe('1M')).toBe('1M');
+    expect(mapToWorkerTimeframe('1H')).toBe('1h');
+    expect(mapToWorkerTimeframe(' 1D ')).toBe('1d');
+    expect(mapToWorkerTimeframe('D')).toBe('1d');
+    expect(mapToWorkerTimeframe('60')).toBe('1h');
+    expect(mapToWorkerTimeframe('15')).toBe('15m');
+    expect(mapToWorkerTimeframe('')).toBeUndefined();
+    expect(mapToWorkerTimeframe('  ')).toBeUndefined();
+    expect(mapToWorkerTimeframe(undefined)).toBeUndefined();
+    expect(mapToWorkerTimeframe(5)).toBeUndefined();
+    expect(mapToWorkerTimeframe('nope')).toBeUndefined();
+  });
+});
+
 describe('postEngineRun', () => {
   test('POSTs /run with Bearer and pine-ms bars', async () => {
     let seenUrl = '';
@@ -243,12 +263,237 @@ describe('postEngineRun', () => {
     expect(seenUrl).toBe('http://127.0.0.1:5002/run');
     expect(seenAuth).toBe('Bearer pyn_abcdefghijklmnopqrstuvwxyz0123456789');
     expect(seenBody.mode).toBe('auto');
+    expect(seenBody.timeframe).toBeUndefined();
+    expect(seenBody.from_bar).toBeUndefined();
+    expect(seenBody.to_bar).toBeUndefined();
     expect(seenBody.symbol).toBe('CHART');
     const data = seenBody.data as Array<{ time: number }>;
     expect(data[0]?.time).toBe(1_700_000_000_000);
     expect(result.status).toBe('success');
     expect(result.plots).toEqual([1]);
     expect(result.meta.transport).toBe('rest');
+  });
+
+  test('POSTs inputs when provided; omits empty map', async () => {
+    let seenBody: Record<string, unknown> = {};
+    const fetchImpl = mockFetch((_url, init) => {
+      seenBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      return {
+        ok: true,
+        status: 200,
+        body: JSON.stringify({ status: 'success', plots: [], series: {} }),
+      };
+    });
+    await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      inputs: { Length: 14 },
+      fetchImpl,
+    });
+    expect(seenBody.inputs).toEqual({ Length: 14 });
+    await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      inputs: {},
+      fetchImpl,
+    });
+    expect(seenBody.inputs).toBeUndefined();
+  });
+
+  test('POSTs timeframe + from_bar/to_bar; omits when unset or unknown', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fetchImpl = mockFetch((_url, init) => {
+      bodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      return {
+        ok: true,
+        status: 200,
+        body: JSON.stringify({ status: 'success', plots: [], series: {} }),
+      };
+    });
+    await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      timeframe: '1H',
+      fromBar: 0,
+      toBar: 1,
+      fetchImpl,
+    });
+    expect(bodies[0]?.timeframe).toBe('1h');
+    expect(bodies[0]?.from_bar).toBe(0);
+    expect(bodies[0]?.to_bar).toBe(1);
+
+    await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      timeframe: 'nope',
+      fromBar: Number.NaN,
+      toBar: Number.POSITIVE_INFINITY,
+      fetchImpl,
+    });
+    expect(bodies[1]?.timeframe).toBeUndefined();
+    expect(bodies[1]?.from_bar).toBeUndefined();
+    expect(bodies[1]?.to_bar).toBeUndefined();
+  });
+
+  test('retries once without timeframe on Flask UNKNOWN_FIELDS 400', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    let n = 0;
+    const fetchImpl = mockFetch((_url, init) => {
+      n += 1;
+      bodies.push(JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>);
+      if (n === 1) {
+        return {
+          ok: false,
+          status: 400,
+          body: JSON.stringify({
+            status: 'error',
+            code: 'UNKNOWN_FIELDS',
+            message: "Unexpected field(s): ['timeframe'].",
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        body: JSON.stringify({ status: 'success', plots: [1], series: {} }),
+      };
+    });
+    const result = await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      timeframe: '1m',
+      fromBar: 0,
+      toBar: 1,
+      fetchImpl,
+    });
+    expect(n).toBe(2);
+    expect(bodies[0]?.timeframe).toBe('1m');
+    expect(bodies[0]?.from_bar).toBe(0);
+    expect(bodies[1]?.timeframe).toBeUndefined();
+    expect(bodies[1]?.from_bar).toBe(0);
+    expect(bodies[1]?.to_bar).toBe(1);
+    expect(result.status).toBe('success');
+    expect(result.plots).toEqual([1]);
+  });
+
+  test('retries UNKNOWN_FIELDS when only parsed.code is set (success-shaped 400)', async () => {
+    let n = 0;
+    const fetchImpl = mockFetch(() => {
+      n += 1;
+      if (n === 1) {
+        return {
+          ok: false,
+          status: 400,
+          body: JSON.stringify({ code: 'UNKNOWN_FIELDS', plots: [] }),
+        };
+      }
+      return {
+        ok: false,
+        status: 400,
+        body: JSON.stringify({ status: 'error', code: 'UNKNOWN_FIELDS', message: 'still' }),
+      };
+    });
+    const result = await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      timeframe: '1m',
+      fetchImpl,
+    });
+    expect(n).toBe(2);
+    expect(result.status).toBe('error');
+    expect(result.code).toBe('UNKNOWN_FIELDS');
+  });
+
+  test('does not retry UNKNOWN_FIELDS when timeframe was not sent', async () => {
+    let n = 0;
+    const fetchImpl = mockFetch(() => {
+      n += 1;
+      return {
+        ok: false,
+        status: 400,
+        body: JSON.stringify({
+          status: 'error',
+          code: 'UNKNOWN_FIELDS',
+          message: "Unexpected field(s): ['ohlcv'].",
+        }),
+      };
+    });
+    const result = await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      fetchImpl,
+    });
+    expect(n).toBe(1);
+    expect(result.status).toBe('error');
+    expect(result.code).toBe('UNKNOWN_FIELDS');
+  });
+
+  test('does not retry non-UNKNOWN 400 even with timeframe', async () => {
+    let n = 0;
+    const fetchImpl = mockFetch(() => {
+      n += 1;
+      return {
+        ok: false,
+        status: 400,
+        body: JSON.stringify({
+          status: 'error',
+          code: 'INVALID_FIELD',
+          message: 'Field timeframe bad.',
+        }),
+      };
+    });
+    const result = await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      timeframe: '1m',
+      fetchImpl,
+    });
+    expect(n).toBe(1);
+    expect(result.code).toBe('INVALID_FIELD');
+  });
+
+  test('skips timeframe retry when the signal is already aborted', async () => {
+    const ac = new AbortController();
+    let n = 0;
+    const fetchImpl = mockFetch(() => {
+      n += 1;
+      ac.abort();
+      return {
+        ok: false,
+        status: 400,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'UNKNOWN_FIELDS: timeframe',
+        }),
+      };
+    });
+    const result = await postEngineRun({
+      endpoint: DEFAULT_ENGINE_ENDPOINT,
+      script: 'plot(1)',
+      bars: SAMPLE_BARS,
+      mode: 'auto',
+      timeframe: '1d',
+      signal: ac.signal,
+      fetchImpl,
+    });
+    expect(n).toBe(1);
+    expect(result.status).toBe('error');
   });
 
   test('maps HTTP error body', async () => {
@@ -372,6 +617,7 @@ describe('postEngineRun', () => {
     expect(called).toBe(true);
     expect(seenHeaders?.['X-AXIS-Client']).toBe('ide');
     expect(seenHeaders?.Authorization).toBeUndefined();
+    expect(seenHeaders?.['X-API-Key']).toBeUndefined();
     expect(result.status).toBe('success');
   });
 
@@ -393,6 +639,7 @@ describe('postEngineRun', () => {
     expect(seenHeaders?.Authorization).toBe(
       'Bearer pyn_abcdefghijklmnopqrstuvwxyz0123456789',
     );
+    expect(seenHeaders?.['X-API-Key']).toBe('pyn_abcdefghijklmnopqrstuvwxyz0123456789');
   });
 
   test('network failure becomes error result', async () => {
