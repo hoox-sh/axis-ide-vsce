@@ -48,13 +48,6 @@ import {
 import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
-import { readActivePlugins, workspaceStateFromContext } from '../plugins/active';
-import {
-  chartPluginsFromActive,
-  subscribeActivePlugins,
-  type ChartPluginIds,
-} from '../plugins/events';
-import type { ActivePluginsV1 } from '../plugins/types';
 import {
   type AxisChartDocV1,
   CHART_VIEW_TYPE,
@@ -62,7 +55,6 @@ import {
   serializeChartDocument,
 } from './chart-document';
 import { appendDrawingToDoc } from './chart-drawings';
-import { clearChartLiveDoc, setChartLiveDoc } from './chart-live-doc';
 import { isPyodideAllowed } from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
@@ -227,9 +219,7 @@ export class AxisChartDocument implements CustomDocument {
   dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
-    // Drop the in-memory live-doc snapshot so the module-level store does not
-    // retain every chart document ever opened for the life of the extension.
-    clearChartLiveDoc(this.uri.toString());
+    // lightweight core: no live-doc snapshot to clear
     this._onDidDispose.fire();
     this._onDidDispose.dispose();
     this._onDidChange.dispose();
@@ -313,14 +303,6 @@ function readChartHostSettings(): ChartHostSettings {
   return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote };
 }
 
-function pluginsForContext(context: ExtensionContext): ChartPluginIds | undefined {
-  try {
-    return chartPluginsFromActive(readActivePlugins(workspaceStateFromContext(context)));
-  } catch {
-    return undefined;
-  }
-}
-
 /** Read chart settings + document into a fresh session (no stale init closure). */
 function sessionForDocument(document: AxisChartDocument, context: ExtensionContext) {
   const settings = readChartHostSettings();
@@ -328,24 +310,7 @@ function sessionForDocument(document: AxisChartDocument, context: ExtensionConte
     doc: document.documentData,
     useMockBars: settings.useMockBars,
     historyBarsSetting: settings.historyBarsSetting,
-    plugins: pluginsForContext(context),
   });
-}
-
-/** Publish in-memory chart fields so Layers can see unsaved drawings. */
-function publishLiveChartDoc(document: AxisChartDocument): void {
-  const next = document.documentData;
-  const live: {
-    drawings?: unknown;
-    scripts?: unknown;
-    panes?: unknown;
-    overlays?: unknown;
-  } = {};
-  if ('drawings' in next) live.drawings = next.drawings;
-  if ('scripts' in next) live.scripts = next.scripts;
-  if ('panes' in next) live.panes = next.panes;
-  if ('overlays' in next) live.overlays = (next as { overlays?: unknown }).overlays;
-  setChartLiveDoc(document.uri.toString(), live);
 }
 
 /** Post cached run chart.full so hide→show / late open keeps paint. */
@@ -420,7 +385,7 @@ function postHandshake(
   },
 ): void {
   try {
-    if (opts?.document) publishLiveChartDoc(opts.document);
+    // live doc removed in lightweight core; no publish
     void webview.postMessage(encode(HOST_TO_VIEW.ChartInit, session.init));
     if (session.full) {
       void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
@@ -462,8 +427,6 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     }
   >();
   private readonly busSub: { dispose(): void };
-  private readonly pluginsSub: { dispose(): void };
-  private lastSourceId = '';
   private readonly onRequestReload: (() => void) | undefined;
 
   constructor(
@@ -500,43 +463,6 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         }
       }
     });
-    try {
-      this.lastSourceId = pluginsForContext(context)?.source ?? '';
-    } catch {
-      this.lastSourceId = '';
-    }
-    this.pluginsSub = subscribeActivePlugins((active) => {
-      this.onActivePluginsChanged(active);
-    });
-  }
-
-  private onActivePluginsChanged(active: ActivePluginsV1): void {
-    const plugins = chartPluginsFromActive(active);
-    const sourceChanged = this.lastSourceId !== (plugins.source ?? '');
-    this.lastSourceId = plugins.source ?? '';
-    const keys = new Set<string>();
-    for (const meta of this.openPanels.values()) {
-      if (meta.seriesKey) keys.add(meta.seriesKey);
-    }
-    const payload = { epoch: 0, state: 'plugins', plugins };
-    if (keys.size === 0) {
-      try {
-        notifyChart({ type: 'host.run.status', payload });
-      } catch {
-        // bus never-throw
-      }
-    } else {
-      for (const seriesKey of keys) {
-        try {
-          notifyChart({ type: 'host.run.status', payload, seriesKey });
-        } catch {
-          // bus never-throw
-        }
-      }
-    }
-    // Source change rebuilds handshake (init clears then full) so the new source paints.
-    // Stream change is HUD-only; live bridge already reads active stream from settings.
-    if (sourceChanged) this.rebuildOpenCharts();
   }
 
   private rebuildOpenCharts(): void {
@@ -555,7 +481,6 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
 
   dispose(): void {
     this.busSub.dispose();
-    this.pluginsSub.dispose();
     for (const meta of this.openPanels.values()) {
       try {
         meta.historyAbort?.abort();
@@ -712,7 +637,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         try {
           const next = appendDrawingToDoc(document.documentData, result.drawing);
           document.update(next);
-          publishLiveChartDoc(document);
+          // live doc publish removed (lightweight)
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           logError(`drawing.commit failed: ${message}`);
@@ -722,7 +647,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       if (result.kind === 'init') {
         if (disposed) return;
         try {
-          publishLiveChartDoc(document);
+          // live doc publish removed (lightweight)
           void webviewPanel.webview.postMessage(result.envelope);
           if (result.full && !disposed) {
             void webviewPanel.webview.postMessage(result.full);
@@ -806,7 +731,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
 
 /** Register `axis.chart` CustomEditorProvider (editable, not Readonly). */
 export type ChartEditorProviderOptions = {
-  /** Host handler for webview `chart.requestReload` (live resume / remint). */
+  /** Host handler for webview `chart.requestReload` (resume stub in lightweight). */
   onRequestReload?: () => void;
 };
 

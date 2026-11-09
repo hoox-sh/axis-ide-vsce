@@ -21,9 +21,9 @@
  */
 
 import type { OhlcvBar } from '../host/mock-bars';
-import type { ChartFullPayload, HostRunStatusPayload } from '../protocol';
-import { PRO_KEY_ERROR } from '../secrets/slots';
-import { validateProKey } from '../secrets/validate';
+import type { ChartFullPayload } from '../protocol';
+import { PRO_KEY_ERROR, WORKER_KEY_ERROR } from '../secrets/slots';
+import { type ValidateResult, validateProKey, validateWorkerKey } from '../secrets/validate';
 import type { ChartNotifyMessage } from './chart-bus';
 import {
   DEFAULT_ENGINE_ENDPOINT,
@@ -33,7 +33,6 @@ import {
   type RunMode,
   postEngineRun,
 } from './engine-http';
-import type { ResultsFocusStore } from './results-store';
 import { scrubSecrets } from './scrub';
 
 export type { RunMode };
@@ -57,8 +56,10 @@ export const UNSUPPORTED_ENGINE_ERROR =
   'AXIS Run supports engine id "server" only in this release (pyne-worker lands later).';
 
 export interface RunSecrets {
-  /** Resolve Pro (`pyn_…`) key for engineId `server`. Never-throw. */
+  /** Resolve Pro (`pyn_…`) key. Never-throw. */
   getProKey(): Promise<string | undefined>;
+  /** Resolve Worker (`pn_…`) key for self-hosted CF. Never-throw. */
+  getWorkerKey(): Promise<string | undefined>;
 }
 
 export interface RunOutput {
@@ -89,11 +90,8 @@ export interface RunDeps {
   bus: {
     notifyChart(message: ChartNotifyMessage): void;
   };
-  results: Pick<ResultsFocusStore, 'publish'>;
   output: RunOutput;
   diagnostics: RunDiagnostics;
-  /** Optional `host.run.status` fan-out. */
-  onRunStatus?: (payload: HostRunStatusPayload) => void;
 }
 
 export type RunOutcome =
@@ -119,35 +117,6 @@ function toRunDiagnostics(items: EngineCompileDiagnostic[]): RunDiagnostic[] {
     line: d.line,
     column: d.column,
   }));
-}
-
-const SCRUB_ENTRY_FIELDS = ['message', 'text', 'msg'] as const;
-
-/** Redact secrets on string entries and on message/text/msg string fields. */
-function scrubRunEntry(entry: unknown): unknown {
-  if (typeof entry === 'string') return scrubSecrets(entry);
-  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return entry;
-  const src = entry as Record<string, unknown>;
-  let copy: Record<string, unknown> | undefined;
-  for (const key of SCRUB_ENTRY_FIELDS) {
-    const field = src[key];
-    if (typeof field !== 'string') continue;
-    const scrubbed = scrubSecrets(field);
-    if (scrubbed === field) continue;
-    if (!copy) copy = { ...src };
-    copy[key] = scrubbed;
-  }
-  return copy ?? entry;
-}
-
-/** Scrub a logs/diagnostics array. Non-arrays pass through unchanged. */
-function scrubRunPayload(value: unknown): unknown {
-  if (!Array.isArray(value)) return value;
-  return value.map((entry) => scrubRunEntry(entry));
-}
-
-function publishedMeta(result: EngineRunResult, ms: number): Record<string, unknown> {
-  return { ...result.meta, ms, profile: result.meta.profile };
 }
 
 function combineSignals(a?: AbortSignal, b?: AbortSignal): AbortSignal | undefined {
@@ -197,8 +166,8 @@ export class RunOrchestrator {
   }
 
   /**
-   * Bump epoch, abort prior fetch, resolve Pro key, POST `/run`, apply
-   * chart/results/diagnostics only when the epoch is still current.
+   * Bump epoch, abort prior fetch, resolve optional Pro/Worker key, POST `/run`,
+   * apply chart/diagnostics only when the epoch is still current.
    * Never logs secret material.
    */
   async run(req: RunRequest, deps: RunDeps): Promise<RunOutcome> {
@@ -215,60 +184,49 @@ export class RunOrchestrator {
         deps.output,
         `run start epoch=${my} engine=${req.engineId} series=${req.seriesKey} bars=${req.bars.length} focus=${req.focus}`,
       );
-      this.emitStatus(deps, {
-        epoch: my,
-        state: 'running',
-        message: `epoch ${my}`,
-        seriesKey: req.seriesKey,
-      });
 
       if (req.engineId && req.engineId !== 'server') {
         const error = UNSUPPORTED_ENGINE_ERROR;
         this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
         safeLog(deps.output, `run error epoch=${my}: ${error}`);
-        this.emitStatus(deps, {
-          epoch: my,
-          state: 'error',
-          message: error,
-          seriesKey: req.seriesKey,
-        });
         return { ok: false, epoch: my, reason: 'error', error };
       }
 
       if (signal?.aborted) {
         safeLog(deps.output, `run aborted epoch=${my}`);
-        this.emitStatus(deps, {
-          epoch: my,
-          state: 'aborted',
-          seriesKey: req.seriesKey,
-        });
         return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted' };
       }
 
-      const rawKey = await deps.secrets.getProKey();
+      const rawPro = await deps.secrets.getProKey();
+      const rawWorker = await deps.secrets.getWorkerKey();
       if (my !== this.epoch) {
         safeLog(deps.output, `drop stale epoch ${my}`);
         return { ok: false, epoch: my, reason: 'stale' };
       }
-      // Open beta: an absent Pro key is not an error — the run goes out with
+      // Open beta: an absent key is not an error — the run goes out with
       // X-AXIS-Client: ide and no Authorization header. A present-but-malformed
       // key is still a user error and must not be silently dropped.
-      const proKey = typeof rawKey === 'string' ? rawKey.trim() : '';
-      if (proKey) {
-        const checked = validateProKey(proKey);
+      // Prefer a Worker key when both are set (self-hosted CF).
+      const workerKey = typeof rawWorker === 'string' ? rawWorker.trim() : '';
+      const proKey = typeof rawPro === 'string' ? rawPro.trim() : '';
+      if (workerKey) {
+        const checked: ValidateResult = validateWorkerKey(workerKey);
+        if (!checked.ok) {
+          const error = WORKER_KEY_ERROR;
+          this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
+          safeLog(deps.output, `run error epoch=${my}: ${error}`);
+          return { ok: false, epoch: my, reason: 'error', error };
+        }
+      } else if (proKey) {
+        const checked: ValidateResult = validateProKey(proKey);
         if (!checked.ok) {
           const error = PRO_KEY_ERROR;
           this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
           safeLog(deps.output, `run error epoch=${my}: ${error}`);
-          this.emitStatus(deps, {
-            epoch: my,
-            state: 'error',
-            message: error,
-            seriesKey: req.seriesKey,
-          });
           return { ok: false, epoch: my, reason: 'error', error };
         }
       }
+      const apiKey = workerKey || proKey || undefined;
 
       const endpoint = String(deps.endpoint ?? '').trim() || DEFAULT_ENGINE_ENDPOINT;
       const result = await postEngineRun({
@@ -277,7 +235,7 @@ export class RunOrchestrator {
         bars: req.bars,
         mode: req.mode || 'auto',
         symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
-        apiKey: proKey || undefined,
+        apiKey,
         allowRemote: deps.allowRemote,
         signal,
         fetchImpl: deps.fetchImpl,
@@ -290,11 +248,6 @@ export class RunOrchestrator {
 
       if (signal?.aborted) {
         safeLog(deps.output, `run aborted epoch=${my}`);
-        this.emitStatus(deps, {
-          epoch: my,
-          state: 'aborted',
-          seriesKey: req.seriesKey,
-        });
         return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted', result };
       }
 
@@ -310,28 +263,10 @@ export class RunOrchestrator {
             ? diags
             : [{ message: scrubbedError || 'Engine error', severity: 'error' }],
         );
-        deps.results.publish({
-          status: 'error',
-          focus: req.focus,
-          seriesKey: req.seriesKey,
-          engineId: req.engineId,
-          error: scrubbedError,
-          plots: result.plots,
-          series: result.series,
-          logs: scrubRunPayload(result.logs),
-          diagnostics: scrubRunPayload(result.diagnostics),
-          meta: publishedMeta(result, ms),
-        });
         safeLog(
           deps.output,
           `run error epoch=${my} ms=${Math.round(ms)} ${result.code ? `code=${result.code} ` : ''}${scrubbedError ?? ''}`.trim(),
         );
-        this.emitStatus(deps, {
-          epoch: my,
-          state: 'error',
-          message: scrubbedError,
-          seriesKey: req.seriesKey,
-        });
         return { ok: false, epoch: my, reason: 'error', error: scrubbedError, result };
       }
 
@@ -353,25 +288,8 @@ export class RunOrchestrator {
         seriesKey: req.seriesKey,
       });
 
-      const runId = deps.results.publish({
-        status: 'success',
-        focus: req.focus,
-        seriesKey: req.seriesKey,
-        engineId: req.engineId,
-        plots: result.plots,
-        series: result.series,
-        logs: scrubRunPayload(result.logs),
-        diagnostics: scrubRunPayload(result.diagnostics),
-        meta: publishedMeta(result, ms),
-      });
-
+      const runId = `run-${my}`;
       safeLog(deps.output, `run ok epoch=${my} ms=${Math.round(ms)} runId=${runId} seq=${nextSeq}`);
-      this.emitStatus(deps, {
-        epoch: my,
-        state: 'ok',
-        message: `ms=${Math.round(ms)}`,
-        seriesKey: req.seriesKey,
-      });
       return { ok: true, epoch: my, runId, result, seq: nextSeq };
     } catch (e) {
       if (my !== this.epoch) {
@@ -380,12 +298,6 @@ export class RunOrchestrator {
       }
       const error = scrubSecrets(e instanceof Error ? e.message : String(e));
       safeLog(deps.output, `run error epoch=${my}: ${error}`);
-      this.emitStatus(deps, {
-        epoch: my,
-        state: 'error',
-        message: error,
-        seriesKey: req.seriesKey,
-      });
       this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
       return { ok: false, epoch: my, reason: 'error', error };
     } finally {
@@ -406,23 +318,6 @@ export class RunOrchestrator {
       deps.diagnostics.set(uri, items);
     } catch {
       // ignore
-    }
-  }
-
-  private emitStatus(
-    deps: RunDeps,
-    payload: HostRunStatusPayload & { seriesKey?: string },
-  ): void {
-    try {
-      const { seriesKey, ...status } = payload;
-      deps.bus.notifyChart({
-        type: 'host.run.status',
-        payload: status,
-        seriesKey,
-      });
-      deps.onRunStatus?.(status);
-    } catch {
-      // optional path
     }
   }
 }

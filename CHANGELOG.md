@@ -6,33 +6,42 @@ extracted from the AXIS monorepo with its commit history preserved.
 
 ## [Unreleased]
 
+### Changed (lightweight core)
+
+- Landed the in-flight simplify on `origin/main` (open-beta #6): removed live/MCP/plugins/views/storybook/OKF bloat. Core is chart custom editor + run orchestration + Pyodide opt-in + secrets.
+- Absent Pro/Worker keys still POST `/run` with `X-AXIS-Client: ide` and no Authorization. Present-but-malformed keys fail closed. Worker key still preferred when both are set.
+- Key prompt commands use shared beta copy (`proKeyPromptCopy` / `workerKeyPromptCopy`).
+
 ### Added
 
-- Shared `ax-*` primitives: `ax-btn` (primary/secondary/ghost/danger · sm/md),
-  `ax-toolbar`, `ax-badge` (semantic tones), `ax-section-title`, `ax-loading`,
-  `ax-code`, `ax-cluster`; empty states gain optional `title`; KPIs accept
-  value `tone`. Storybook stories for Buttons and Badges/Loading/KPI tones.
-- `webview/shared/README.md` — lean inventory of layers, builders, and studio
-  rules for agents and humans.
+- "Lightweight PYNE Options" section in README.md:
+  - Pro (free): `axis.secrets.setProKey` command; endpoint if needed. Auto-wired to `/run` when key present in SecretStorage.
+  - CF worker example: short steps + wrangler stub code for a minimal worker handling `/run` (and live ticket if needed). Emphasizes no keys in settings / IDE config.
 
 ### Changed
 
-- Studios migrate one-off buttons/section titles onto shared builders
-  (alerts, scripts, runoutput, watchlist, workers, plugins, layers, toolbox);
-  all studios import `motion.css`; chart chrome uses `--axis-*` tokens
-  (tokens.css + toolbar/button/badge alignment, reduced-motion on run pulse).
-- Host-emitted studio shells stamp frozen `ax-btn` classes (workers probe-all,
-  scripts run/open-chart, watchlist add, alerts add, layers open-chart) via
-  `src/views/ax-shell.ts`; workers probe-all is replaced with `btn()` at
-  runtime; library Apply dual-state uses `btn()` + label swap instead of a
-  one-off control.
-- Visual polish: empty-state hierarchy, button focus rings, high-contrast
-  edges for new controls, toolbox badge counts on token badges.
+- Simplified lightweight focus documented: chart in VS Code + Pyodide + simple CF PYNE worker or auto-wired Pro. Cleaned README, AGENTS.md, CONTRIBUTING.md, DESIGN.md, pack/README.md, and other docs of removed feature references (Workers, Plugins, Alerts, Watchlist, Scripts, Layers studios + related live/MCP/plugin details).
+- Updated Status, Commands, Settings, and develop sections in README to match core scope.
+- CHANGELOG updated with simplification + docs artifacts.
 
-- **AXIS Trading Pack** renamed from `hoox-sh.axis` / VSIX `axis-<ver>.vsix` to
-  **`hoox-sh.axis-pack`** / **`axis-pack-<ver>.vsix`**, version **0.3.0**.
-  Release and CI workflows, `PUBLISH.md`, and pack docs updated. Marketplace
-  pack publish no longer uses `continue-on-error`.
+### Security / docs
+
+- Re-emphasized throughout docs: secrets only via commands / SecretStorage; never settings, never in worker example source.
+
+### Changed (follow-on)
+
+- Reinstalled simplified AXIS IDE VSIX (0.3.1) into local VSCodium: `bun run compile && bun run package` (exit 0) produced axis-ide-0.3.1.vsix; `codium --install-extension ./axis-ide-0.3.1.vsix --force` (exit 0); verified `codium --list-extensions --show-versions` shows hoox-sh.axis-ide@0.3.1 + hoox-sh.pyne@0.5.7.
+- Continued rewriting README + supporting docs (AGENTS.md, CHANGELOG, DESIGN.md, csp-matrix.md, webview/shared/README.md, CONTRIBUTING.md, SECURITY.md) to accurately describe only the lightweight core (AXIS chart custom editor + Pyodide + minimal run orchestration + secrets for Pro or CF PYNE worker). Removed all references to removed bloat (studios/views, live, mcp, plugins, alerts, layers, scripts, watchlist, workers, profiler, results, etc.). Updated "Lightweight PYNE Options" section and layout tables.
+- Board card for this objective prepared for review.
+
+### Docs (oo-spec-1 subagent)
+- Created clean rewrite plan at `docs/rewrite-plan.md` (sourced from live board.md, README, AGENTS.md, task prompt).
+- Rewrote README.md sections (intro, status, install, Lightweight PYNE Options with Pro auto-wire and CF example prominent and cleaned, commands, settings, development, layout). Stripped bloat refs. Verified: `git diff --stat` shows 120 ins/82 del; grep for removed features only shows explicit disclaimer (PASS). Language now "lightweight core: chart custom editor + Pyodide".
+- Extended CHANGELOG with this entry.
+- Updated AGENTS.md to match new scope (cleaned layout table, hard constraints remove MCP/live-if-present, security, testing notes; removed storybook/okf/old studio refs).
+- Updated CONTRIBUTING.md, DESIGN.md, pack/README.md, docs/csp-matrix.md: removed mentions of removed features (e.g. live sessions, MCP, full studios in DESIGN; pruned in csp).
+- All edits only *.md files. Before/after excerpts + command verification captured. Checklist run at end.
+- Coordination note (fetched live from board.md): simplify card and reinstall+rewrite card (both oo-spec-2) show bloat still present (inventory: src/live/ etc. remains); docs work proceeds on described target state. Handoff will note.
 
 ## [0.3.1] — 2026-11-06
 

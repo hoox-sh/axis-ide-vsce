@@ -26,8 +26,8 @@ esac
 FORMAT_CMD=''
 LINT_CMD='bun run lint'
 TYPECHECK_CMD='bun run check'
-TEST_CMD='bun run test'
-OKF_CMD='okn --no-telemetry validate --spec 0.2 okf'
+TEST_CMD='bun run test:coverage:gate'
+OKF_CMD=''
 # /oo:commands
 # Biome detected; the lint step runs `biome check`, which also checks format.
 

@@ -3,9 +3,7 @@
 Audit against design KD-6 / CSP matrix (Task 25 + Task 27). **Do not widen runtime CSP
 without updating this doc** (and README).
 
-HTML is host-generated (`src/editors/chart-html.ts` and the generic
-`src/views/studio-html.ts` shell used by every `WebviewViewProvider` studio)
-with `webview.cspSource` — never hard-coded `vscode-resource:` / `https:`.
+HTML is host-generated (`src/editors/chart-html.ts`) with `webview.cspSource` — never hard-coded `vscode-resource:` / `https:`. (Chart webview only in lightweight core.)
 
 Optional Pyodide widen is gated by **`axis.engine.allowPyodide`** (default **false**).
 Runtime helper: `buildChartCspDirectives(cspSource, allowPyodide)` in
@@ -13,9 +11,9 @@ Runtime helper: `buildChartCspDirectives(cspSource, allowPyodide)` in
 `src/host/pyodide-profile.ts` (calculator / bars-in only — not stream-owning; Wasm
 assets are **not** shipped in this VSIX).
 
-## Enforced (chart + all panel/activity webviews) — default
+## Enforced (chart primary; minimal core webviews) — default
 
-| Directive | Chart (`axis.chart`) | All other webviews (`runoutput`, `toolbox`, `alerts`, `library`, `layers`, `plugins`, `scripts`, `watchlist`, `workers`) |
+| Directive | Chart (`axis.chart`) | All other webviews (none in lightweight core) |
 | --- | --- | --- |
 | `default-src` | `'none'` | `'none'` |
 | `base-uri` | `'none'` | `'none'` |
@@ -29,7 +27,7 @@ assets are **not** shipped in this VSIX).
 
 `style-src 'unsafe-inline'` covers VS Code theme CSS variables and the shared
 `--axis-*` design-token layer. Scripts and styles load via `asWebviewUri` from
-`dist/webview/<studio>/` under `localResourceRoots`. Lightweight Charts is
+`dist/webview/chart/` under `localResourceRoots`. Lightweight Charts is
 bundled into the chart `main.js` (no CDN).
 
 ## vs AXIS PWA (`public/_headers`)
@@ -44,8 +42,7 @@ bundled into the chart `main.js` (no CDN).
 | `worker-src` | `'self' blob:` | omitted until Pyodide flag on |
 | COOP / COEP | same-origin / credentialless | N/A (VS Code iframe) |
 
-**Default policy:** extension host owns `fetch` / WS (Pro `/run`, Worker live
-tickets, datafeed). Webviews are paint / UI only. That keeps `connect-src
+**Default policy:** extension host owns `fetch` / WS (Pro `/run`, Worker `/run` endpoints, datafeed). Webviews are paint / UI only. That keeps `connect-src
 'none'` and matches KD-6.
 
 ## Optional widen (`axis.engine.allowPyodide` — off by default)
@@ -59,8 +56,7 @@ widened via `buildChartCspDirectives(..., true)` / `buildChartWebviewHtml({ allo
 | `worker-src` | `blob: ${webview.cspSource}` |
 
 All other directives stay on the paint-only matrix (`connect-src 'none'`, no
-inline script). Results / Strategy stay paint-only unless a future task documents
-otherwise.
+inline script). (No Results/Strategy webviews in lightweight core.)
 
 **Enable path checklist**
 
