@@ -46,6 +46,9 @@ bun.lockb
 # Storybook build output
 storybook-static/
 
+# Competitor research must not be committed. See AGENTS.md.
+docs/competitive/
+
 # Local agent / session data
 .opencode/
 .grok/
