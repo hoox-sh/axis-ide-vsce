@@ -142,12 +142,9 @@ function ensureDeclaredInputs(
   overrides?: Record<string, unknown>,
 ): void {
   if (!inputsMissing(result.inputs)) return;
-  try {
-    const declared = declarePineInputs(script, overrides);
-    if (declared.length > 0) result.inputs = declared;
-  } catch {
-    // a missing form must not fail the run
-  }
+  // declarePineInputs never throws; an empty list leaves the engine payload alone.
+  const declared = declarePineInputs(script, overrides);
+  if (declared.length > 0) result.inputs = declared;
 }
 
 function symbolFromSeriesKey(seriesKey: string): string {

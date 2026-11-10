@@ -126,4 +126,61 @@ describe('pyodide minimal subset', () => {
     expect(r.events?.[0]).toMatchObject({ kind: 'entry', id: 'L', direction: 'long', bar_index: 0 });
     expect(r.series.__equity).toEqual([0, 1, 2]);
   });
+
+  test('named inputs, aliases, nested args, overrides, and a hostile declaration', () => {
+    const script = [
+      'indicator("forms")',
+      'len = input.int(title="Length", defval=max(1, 2), tooltip="tip")',
+      'mult = input.float(1.5, "Mult")',
+      'badF = input.float(nope, "BadF")',
+      'name = input.string(title="Name")',
+      'srcIn = input.source(title="Src", defval="open")',
+      'on = input.bool(true, "On")',
+      'input.float(2.5, "Bare")',
+      'lenBroken = input.int(14, "Open"',
+      'src = close',
+      'copy = src',
+      'label = input.string("x", "Label")',
+      'ma = ta.sma(close, label)',
+      'plot(copy, "c", color=color.blue)',
+      'plot(close, "plain", color=color.nope)',
+      'plot(ma, "bad")',
+    ].join('\n');
+
+    const declared = declarePineInputs(script);
+    expect(declared.find((d) => d.title === 'Length')).toMatchObject({ type: 'int', value: 0 });
+    expect(declared.find((d) => d.title === 'Mult')).toMatchObject({ type: 'float', value: 1.5 });
+    expect(declared.find((d) => d.title === 'BadF')).toMatchObject({ type: 'float', value: 0 });
+    expect(declared.find((d) => d.title === 'Name')).toMatchObject({ type: 'string', value: '' });
+    expect(declared.find((d) => d.title === 'Src')).toMatchObject({ type: 'source', value: 'close' });
+    expect(declared.find((d) => d.title === 'Bare')).toMatchObject({ type: 'float', value: 2.5 });
+    expect(declared.find((d) => d.title === 'Open')).toBeUndefined();
+
+    const painted = evaluateMinimalSubset(script, BARS);
+    expect(painted.status).toBe('success');
+    expect(painted.plots.c).toEqual([11, 12, 13]);
+    expect(painted.plot_meta.c?.color).toBe('#8b9cff');
+    expect(painted.plot_meta.plain?.color).toBeUndefined();
+    expect(painted.plots.bad).toBeUndefined();
+    expect(painted.error_kind).toBe('partial');
+
+    expect(declarePineInputs(script, { On: false }).find((d) => d.title === 'On')?.value).toBe(false);
+    expect(declarePineInputs(script, { On: 'true' }).find((d) => d.title === 'On')?.value).toBe(true);
+    expect(declarePineInputs(script, { On: 'false' }).find((d) => d.title === 'On')?.value).toBe(false);
+    expect(declarePineInputs(script, { On: 'maybe' }).find((d) => d.title === 'On')?.value).toBe(true);
+    expect(declarePineInputs(script, { Length: '9' }).find((d) => d.title === 'Length')?.value).toBe(9);
+    expect(declarePineInputs(script, { Mult: '2.5' }).find((d) => d.title === 'Mult')?.value).toBe(2.5);
+    expect(declarePineInputs(script, { Length: 'nope' }).find((d) => d.title === 'Length')?.value).toBe(0);
+    expect(declarePineInputs(script, { Name: 'axis' }).find((d) => d.title === 'Name')?.value).toBe('axis');
+    expect(declarePineInputs(script, { Name: 3 }).find((d) => d.title === 'Name')?.value).toBe(3);
+    expect(declarePineInputs(script, { Name: true }).find((d) => d.title === 'Name')?.value).toBe(true);
+    expect(declarePineInputs(script, { Name: null }).find((d) => d.title === 'Name')?.value).toBe('');
+
+    const hostile = {
+      toString() {
+        throw new Error('boom');
+      },
+    };
+    expect(declarePineInputs(hostile as unknown as string)).toEqual([]);
+  });
 });
