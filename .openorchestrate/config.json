@@ -3,7 +3,7 @@
   "project": {
     "id": "axis-ide",
     "name": "axis-ide",
-    "description": "AXIS chart IDE for VS Code \u2014 run Pine Script\u2122 beside the editor with charts, results, and live sessions. Depends on PYNE Language Support (hoox-sh.pyne). Part of the HOOX open trading stack. Unofficial \u2014 not affiliated with TradingView, Inc.",
+    "description": "AXIS chart IDE for VS Code — run Pine Script™ beside the editor with charts, results, and live sessions. Depends on PYNE Language Support (hoox-sh.pyne). Part of the HOOX open trading stack. Unofficial — not affiliated with TradingView, Inc.",
     "kind": "project",
     "languages": [
       "TypeScript",
