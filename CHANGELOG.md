@@ -6,6 +6,12 @@ extracted from the AXIS monorepo with its commit history preserved.
 
 ## [Unreleased]
 
+- HOOX AXIS color theme (dark and light) with Pine Script / PYNE token colors and chart up/down colors.
+- Local run subset: `input.*`, simple assignments, and `strategy.entry` so the walkthrough study plots and shows its inputs when Pyodide cannot start. Pyodide load/wheel failures, including a 45s boot timeout, fall back to that subset (`uploaded=0`). Apply Inputs is forwarded on the Pyodide path.
+- Bar debug opens the script file. Editor line breakpoints are unverified instead of stopping on every bar.
+- Chart candles, trade markers, and the equity line use the HOOX AXIS palette.
+- Toolbar buttons with the `hidden` attribute stay hidden (a `display` rule had been showing Strategy and Live-safe on every chart). A later indicator run clears a previous strategy report. A keyed chart paint no longer lands on a chart that has not finished its handshake.
+
 - Strategy report: metric cards, round trips, equity sparkline, and trade filters under the chart.
 - Chart plots and drawings: equity on its own scale, clearer fills, toolbar, legend, and data window.
 - Run chrome: Running / Stopped, inputs Apply, plain-language Pick Data, and bar Start / Step.

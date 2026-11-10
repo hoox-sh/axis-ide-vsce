@@ -565,12 +565,9 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     this.busSub = subscribeChartNotify((message) => {
       for (const [panel, meta] of [...this.openPanels]) {
         try {
-          // Filter by seriesKey when present so one run does not overwrite another chart.
-          if (
-            message.seriesKey &&
-            meta.seriesKey &&
-            message.seriesKey !== meta.seriesKey
-          ) {
+          // A keyed paint must not land on a different chart, or on a panel
+          // that has not finished its handshake (empty seriesKey).
+          if (message.seriesKey && message.seriesKey !== meta.seriesKey) {
             continue;
           }
           if (message.type === 'chart.full') {

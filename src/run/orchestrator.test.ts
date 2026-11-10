@@ -880,6 +880,91 @@ describe('RunOrchestrator', () => {
     if (!outcome.ok) expect(outcome.reason).toBe('aborted');
   });
 
+  test('pyodide run forwards inputs and fills declarations the engine omitted', async () => {
+    let seen: Record<string, unknown> | undefined;
+    const orch = new RunOrchestrator();
+    const { deps, charts } = makeDeps();
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async (req) => {
+      seen = req.inputs;
+      return mapEngineResponse({ status: 'success', plots: { close: [1] }, series: { close: [1] } });
+    };
+    const script = 'indicator("t")\nlen = input.int(14, "Length")\nplot(close)\n';
+    const outcome = await orch.run(baseReq({ engineId: 'pyodide', script, inputs: { Length: 9 } }), deps);
+    expect(outcome.ok).toBe(true);
+    expect(seen).toEqual({ Length: 9 });
+    const full = charts.find((m) => m.type === 'chart.full');
+    const inputs = (full?.payload as { inputs?: Array<{ title: string; value: unknown }> } | undefined)
+      ?.inputs;
+    expect(inputs).toEqual([
+      expect.objectContaining({ title: 'Length', type: 'int', value: 9, defval: 14 }),
+    ]);
+  });
+
+  test('empty input object is filled; a present map or a non-object is kept', async () => {
+    const script = 'indicator("t")\nlen = input.int(14, "Length")\nplot(close)\n';
+    const orch = new RunOrchestrator();
+    const empty = makeDeps();
+    empty.deps.pyodideAllowed = true;
+    empty.deps.runPyodide = async () => {
+      const mapped = mapEngineResponse({ status: 'success', plots: { close: [1] }, series: { close: [1] } });
+      mapped.inputs = {};
+      return mapped;
+    };
+    const filled = await orch.run(baseReq({ engineId: 'pyodide', script }), empty.deps);
+    expect(filled.ok).toBe(true);
+    const filledFull = empty.charts.find((m) => m.type === 'chart.full');
+    const filledInputs = (
+      filledFull?.payload as { inputs?: Array<{ title: string; value: unknown }> } | undefined
+    )?.inputs;
+    expect(filledInputs).toEqual([
+      expect.objectContaining({ title: 'Length', type: 'int', value: 14 }),
+    ]);
+
+    const kept = new RunOrchestrator();
+    const present = makeDeps();
+    present.deps.pyodideAllowed = true;
+    present.deps.runPyodide = async () => {
+      const mapped = mapEngineResponse({ status: 'success', plots: { close: [1] }, series: { close: [1] } });
+      mapped.inputs = { Length: 21 };
+      return mapped;
+    };
+    await kept.run(baseReq({ engineId: 'pyodide', script }), present.deps);
+    const presentFull = present.charts.find((m) => m.type === 'chart.full');
+    const presentInputs = (presentFull?.payload as { inputs?: unknown } | undefined)?.inputs;
+    expect(presentInputs).toEqual({ Length: 21 });
+
+    const scalar = new RunOrchestrator();
+    const raw = makeDeps();
+    raw.deps.pyodideAllowed = true;
+    raw.deps.runPyodide = async () => {
+      const mapped = mapEngineResponse({ status: 'success', plots: { close: [1] }, series: { close: [1] } });
+      mapped.inputs = 3;
+      return mapped;
+    };
+    await scalar.run(baseReq({ engineId: 'pyodide', script }), raw.deps);
+    const scalarFull = raw.charts.find((m) => m.type === 'chart.full');
+    const scalarInputs = (scalarFull?.payload as { inputs?: unknown } | undefined)?.inputs;
+    expect(scalarInputs).toBe(3);
+  });
+
+  test('pyodide load failure falls back to the local subset', async () => {
+    const orch = new RunOrchestrator();
+    const { deps, charts, lines } = makeDeps();
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async () =>
+      mapEngineResponse({ status: 'error', error: 'cdn down', error_kind: 'load' });
+    const outcome = await orch.run(
+      baseReq({ engineId: 'pyodide', script: 'indicator("t")\nplot(close)\n' }),
+      deps,
+    );
+    expect(outcome.ok).toBe(true);
+    expect(lines.some((l) => l.includes('engine=local-subset uploaded=0'))).toBe(true);
+    const full = charts.find((m) => m.type === 'chart.full');
+    const plots = (full?.payload as { plots?: Record<string, number[]> } | undefined)?.plots;
+    expect(plots?.close).toEqual([100]);
+  });
+
   test('pyodide engine without flag is disabled without fetch', async () => {
     let called = false;
     const orch = new RunOrchestrator();

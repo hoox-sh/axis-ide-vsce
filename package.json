@@ -1,7 +1,7 @@
 {
   "name": "axis-ide",
   "displayName": "AXIS IDE",
-  "description": "Lightweight AXIS chart in VS Code (custom editor *.axis.json) + Pyodide engine option. Core: chart editor + run orchestration for painting + secrets for Pro/CF worker. Depends on PYNE. Unofficial — not affiliated with TradingView, Inc.",
+  "description": "AXIS charts for Pine Script and PYNE: run a script beside the editor, paint plots and strategy results, and step bars. Part of the HOOX stack. Depends on PYNE. Unofficial — not affiliated with TradingView, Inc.",
   "version": "0.4.0",
   "packageManager": "bun@1.4.4",
   "publisher": "hoox-sh",
@@ -44,8 +44,9 @@
     "hoox-sh.pyne"
   ],
   "categories": [
-    "Other",
-    "Visualization"
+    "Visualization",
+    "Debuggers",
+    "Themes"
   ],
   "keywords": [
     "axis",
@@ -110,17 +111,20 @@
       {
         "command": "axis.secrets.setProKey",
         "title": "Set Pro API Key",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(key)"
       },
       {
         "command": "axis.secrets.setWorkerKey",
         "title": "Set Worker API Key (CF)",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(key)"
       },
       {
         "command": "axis.secrets.clear",
         "title": "Clear Stored Secrets",
-        "category": "AXIS"
+        "category": "AXIS",
+        "icon": "$(clear-all)"
       },
       {
         "command": "axis.stopRun",
@@ -160,8 +164,9 @@
       },
       {
         "command": "axis.openWalkthroughFixture",
-        "title": "Open First-Plot Fixture",
-        "category": "AXIS"
+        "title": "Open Walkthrough Example",
+        "category": "AXIS",
+        "icon": "$(book)"
       }
     ],
     "breakpoints": [
@@ -286,7 +291,7 @@
       {
         "id": "axis.firstPlot",
         "title": "AXIS: first plot",
-        "description": "Open the fixture strategy and Run locally. Source is not uploaded (Pyodide, uploaded=0).",
+        "description": "Open the example study and run it locally. Source stays on this machine (uploaded=0).",
         "steps": [
           {
             "id": "axis.firstPlot.open",
@@ -299,12 +304,24 @@
           {
             "id": "axis.firstPlot.run",
             "title": "Run Script",
-            "description": "Press Ctrl+Enter (Cmd+Enter on macOS) or **AXIS: Run Script**. The AXIS Run channel should log `engine=pyodide … uploaded=0`.\n[Run Script](command:axis.runScript)",
+            "description": "Press Ctrl+Enter (Cmd+Enter on macOS) or **AXIS: Run Script**. The AXIS Run channel logs `uploaded=0`. If Pyodide cannot start, a local subset still plots this example and shows its inputs.\n[Run Script](command:axis.runScript)",
             "media": {
               "markdown": "media/walkthrough-first-plot.md"
             }
           }
         ]
+      }
+    ],
+    "themes": [
+      {
+        "label": "HOOX AXIS",
+        "uiTheme": "vs-dark",
+        "path": "./themes/hoox-axis-dark-color-theme.json"
+      },
+      {
+        "label": "HOOX AXIS Light",
+        "uiTheme": "vs",
+        "path": "./themes/hoox-axis-light-color-theme.json"
       }
     ],
     "configuration": [

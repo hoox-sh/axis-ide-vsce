@@ -161,6 +161,17 @@ describe('pyodide calculator session', () => {
     expect(failedRun.errorKind).toBe('wheel');
   });
 
+  test('a hung CDN load times out as a load error', async () => {
+    const calc = createPyodideCalculator({
+      load: () => new Promise(() => {}),
+      loadTimeoutMs: 30,
+    });
+    const failed = await calc.run(true, { script: FIXTURE, bars: BARS });
+    expect(failed.status).toBe('error');
+    expect(failed.errorKind).toBe('load');
+    expect(failed.error).toMatch(/timed out/i);
+  });
+
   test('load throw is surfaced; abort before/after load is error', async () => {
     const calc = createPyodideCalculator({
       load: async () => {

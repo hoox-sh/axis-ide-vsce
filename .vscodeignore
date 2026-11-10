@@ -27,6 +27,8 @@ bunfig.toml
 **/.DS_Store
 .pytest_cache/**
 test-fixtures/**
+# Sample workspace used for screenshots. Not part of the installed extension.
+examples/**
 # Ship walkthrough fixtures (not test-fixtures).
 !fixtures/
 !fixtures/**
