@@ -80,6 +80,16 @@ describe('chart-bus', () => {
     expect(getLastChartFull('binance|spot|BTC/USDT|1m')).toBeUndefined();
   });
 
+  test('fans out chart.debugCursor without retaining it as last full', () => {
+    const seen: ChartNotifyMessage[] = [];
+    subscribeChartNotify((m) => seen.push(m));
+    notifyChart({ type: 'chart.debugCursor', payload: { barIndex: 4 }, seriesKey: 'a|b|C|1m' });
+    expect(seen).toEqual([
+      { type: 'chart.debugCursor', payload: { barIndex: 4 }, seriesKey: 'a|b|C|1m' },
+    ]);
+    expect(getLastChartFull('a|b|C|1m')).toBeUndefined();
+  });
+
   test('stores last chart.full per seriesKey for replay', () => {
     notifyChart({
       type: 'chart.full',

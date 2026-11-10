@@ -3,7 +3,7 @@
   "project": {
     "id": "axis-ide",
     "name": "axis-ide",
-    "description": "AXIS chart IDE for VS Code \u2014 run Pine Script\u2122 beside the editor with charts, results, and live sessions. Depends on PYNE Language Support (hoox-sh.pyne). Part of the HOOX open trading stack. Unofficial \u2014 not affiliated with TradingView, Inc.",
+    "description": "AXIS chart IDE for VS Code — run Pine Script™ beside the editor with charts, results, and live sessions. Depends on PYNE Language Support (hoox-sh.pyne). Part of the HOOX open trading stack. Unofficial — not affiliated with TradingView, Inc.",
     "kind": "project",
     "languages": [
       "TypeScript",
@@ -112,7 +112,7 @@
         "job": "Audit the codebase: dead code, load time, bundle size, failing checks. Open small PRs with proof. Never merge.",
         "file": "routines/nightly-audit.md",
         "enabled": true,
-        "silentOnNoChange": false
+        "silentOnNoChange": true
       }
     ]
   },
@@ -168,7 +168,13 @@
     "includeSecrets": false
   },
   "optionalSkills": {
-    "enabledPacks": []
+    "enabledPacks": [
+      "catalog/addyosmani-agent-skills",
+      "catalog/cloudflare-security-audit",
+      "catalog/google-elephant-goldfish",
+      "catalog/kepano-obsidian-skills",
+      "catalog/mattpocock-skills"
+    ]
   },
   "setup": {
     "createdAt": "2026-11-07T21:12:54.528Z",

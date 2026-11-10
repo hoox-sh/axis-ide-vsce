@@ -6,6 +6,39 @@ extracted from the AXIS monorepo with its commit history preserved.
 
 ## [Unreleased]
 
+- Strategy report: metric cards, round trips, equity sparkline, and trade filters under the chart.
+- Chart plots and drawings: equity on its own scale, clearer fills, toolbar, legend, and data window.
+- Run chrome: Running / Stopped, inputs Apply, plain-language Pick Data, and bar Start / Step.
+- README images live in `./media/` and stay relative in the packaged extension.
+
+## [0.4.0] — 2026-11-09
+
+Lightweight gallery listing matches this working tree: **no studios**, Pyodide default **on**, PYNE SecretStorage, walkthrough, CSV bars, `axis-bar` debug, static lookahead hatch.
+
+### Changed (Wave 2)
+
+- **Pick Data CSV bars:** `axis.pickData` lists workspace `.csv` files (or Browse). The path is stored on `*.axis.json` as `barsPath`. Run and chart handshake load those OHLCV rows (unix seconds / ms / ISO). No OHLCV studio.
+- **Lookahead radar (static grep):** Run stamps `chart.full.lookahead`. Chart hatches when `lookahead_on` / `request.security` / `calc_on_every_tick=true` appear in source. **Live-safe** hides overlays. PYNE warns with `pyne.lookahead.static`. This is **not** dynamic taint and **not** a live-safe proof.
+- **PYNE semantic tokens + format:** `series` / `simple` token types + theme colors; Format Document gated by `pynescript.formatting.enabled`.
+
+### Changed (Wave 1)
+
+- **Pyodide is the default run path.** `axis.engine.allowPyodide` defaults **true**. First Run uses the local `hoox-pyne` wheel; AXIS Run logs `engine=pyodide wheel=hoox_pyne-0.6.29 uploaded=0`. `pyodide.mjs` is cached in extension `globalStorage` after the first CDN fetch (Wasm still not in the VSIX). Set the flag false to force remote `/run` only.
+- **PYNE missing** is a modal: Install PYNE (`hoox-sh.pyne`) + Run is gated until it is present.
+- **Bar debug:** strategy-table click posts `chart.selectTrade` and seeks the live `axis-bar` session to that bar (last-run snapshot + seek).
+- **Get Started walkthrough** `axis.firstPlot` opens `fixtures/orb.pine` + sibling chart.
+
+### Added
+
+- Bar debugger DAP type **`axis-bar`** (not `pyne`): bar-step, chart-bar breakpoints, Bar/Series variables with Pine `na`, chart overlay `chart.debugCursor`. Native VS Code Debug view. Commands `axis.debug.start` / `axis.debug.stepBar` / `axis.debug.toggleBarBreakpoint`.
+- Optional Pyodide **0.29.5** bars-in calculator when `axis.engine.allowPyodide` is true (default still **false**): host loads Wasm from jsDelivr (not the VSIX). `ready` only after `1+1` **and** pynescript Runtime smoke (`callable(run_script)`). Micropip installs a trusted `hoox-pyne` wheel from `media/pyodide/`, `axis.engine.pyodideWheelUrl`, or sibling `pynescript/dist`. Same `/run` envelope as Flask/worker (`plots`, `plot_meta`, drawings, inputs, strategy, logs, window) onto `chart.full`. Not available in Wasm: Numba compile, Cloudflare R2, cron. Chart CSP widens `script-src`/`connect-src` for `https://cdn.jsdelivr.net` plus `'wasm-unsafe-eval'` and `worker-src blob:` only when the flag is on.
+- Consume HOOX Pro / pyne-worker POST `/run` envelope on the chart: `plot_meta` (histogram, step, area, hline, bgcolor, barcolor, shapes, fill, plotbar, plotcandle) plus `linestyle` / `offset` / `show_last`, engine `drawings` (line/label/box/table/polyline/linefill), `inputs` editor in chart chrome (persist `scripts[].inputs` + re-run), strategy trades/equity markers + table/CSV, `times`/`window`/`alerts`/`error_kind`/`script_type`. No studios restored.
+- POST `/run` leftover host fields: `timeframe` from `*.axis.json` `interval` (worker-style `1m`/`1h`/`1d`; one retry without `timeframe` on Flask `UNKNOWN_FIELDS`), `from_bar`/`to_bar` from chart viewport or full bar window, dual `Authorization: Bearer` + `X-API-Key` when a key is present, capped `result.logs` dumped to the AXIS Run output channel (`log.info` visible via Show Run Output).
+- Host chrome for lightweight chart+run: **Stop Run** (`axis.stopRun`) swaps the title-bar Run button and aborts in-flight `/run`; **Show Run Output** (`axis.showRunOutput`); **Pick Data** (`axis.pickData`) Quick Pick for symbol/timeframe/mock vs datafeed.
+- Run / Open Chart menus and Ctrl/Cmd+Enter `when` clauses cover PYNE language id `pinescript` plus `.pyne` / `.pine` / `.pinev5` / `.pinev6` / `.pinescript` extnames.
+- Chart toolbar chrome (webview only): layers popup, data window, legend, fullscreen, open source.
+- Manifest `capabilities.untrustedWorkspaces` / `virtualWorkspaces` declared unsupported (run executes script against an engine; sibling `*.axis.json` needs a real filesystem).
+
 ### Changed (lightweight core)
 
 - Landed the in-flight simplify on `origin/main` (open-beta #6): removed live/MCP/plugins/views/storybook/OKF bloat. Core is chart custom editor + run orchestration + Pyodide opt-in + secrets.

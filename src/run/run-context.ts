@@ -26,6 +26,7 @@
 import {
   defaultChartDocument,
   parseChartDocument,
+  scriptInputsFromDoc,
   type AxisChartDocV1,
 } from '../editors/chart-document';
 import {
@@ -38,9 +39,62 @@ import {
   fetchHistorical,
   type HistoryFetchLike,
 } from '../host/history-client';
+import {
+  loadOhlcvCsvFile,
+  resolveBarsFilePath,
+} from '../host/csv-bars';
 import type { OhlcvBar } from '../host/mock-bars';
-import { DEFAULT_ENGINE_ENDPOINT } from './engine-http';
+import { DEFAULT_ENGINE_ENDPOINT, mapToWorkerTimeframe } from './engine-http';
 import type { RunMode } from './orchestrator';
+
+/** Last `chart.viewport` from the webview (logical from/to). */
+let lastViewport: { from: number; to: number } | undefined;
+
+/** Record visible range reported by the chart webview. Never throws. */
+export function recordChartViewport(from: number, to: number): void {
+  if (!Number.isFinite(from) || !Number.isFinite(to)) return;
+  lastViewport = { from, to };
+}
+
+/** Copy of last reported viewport, if any. */
+export function lastChartViewport(): { from: number; to: number } | undefined {
+  return lastViewport ? { from: lastViewport.from, to: lastViewport.to } : undefined;
+}
+
+/** Test-only: drop cached viewport. */
+export function resetChartViewportForTests(): void {
+  lastViewport = undefined;
+}
+
+/**
+ * Inclusive `from_bar`/`to_bar` for POST /run.
+ * Visible range when reported; otherwise the full bar window. Omitted when
+ * there are no bars.
+ */
+export function barWindowFromVisibleRange(
+  barCount: number,
+  range?: { from: number; to: number },
+): { fromBar: number; toBar: number } | undefined {
+  const n = Math.floor(barCount);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  if (
+    !range ||
+    !Number.isFinite(range.from) ||
+    !Number.isFinite(range.to)
+  ) {
+    return { fromBar: 0, toBar: n - 1 };
+  }
+  let from = Math.floor(range.from);
+  let to = Math.floor(range.to);
+  if (from > to) {
+    const tmp = from;
+    from = to;
+    to = tmp;
+  }
+  from = Math.min(Math.max(from, 0), n - 1);
+  to = Math.min(Math.max(to, 0), n - 1);
+  return { fromBar: from, toBar: to };
+}
 
 export interface RunContextSettings {
   historyBarsSetting?: number;
@@ -56,6 +110,12 @@ export interface RunContextSettings {
   allowRemote?: boolean;
   fetchImpl?: HistoryFetchLike;
   signal?: AbortSignal;
+  /** Directory of the sibling `*.axis.json` (relative `barsPath`). */
+  chartDir?: string;
+  /** First workspace folder (relative `barsPath`). */
+  workspaceRoot?: string;
+  /** Injected file reader for CSV bars (tests). */
+  readText?: (path: string) => Promise<string> | string;
 }
 
 export interface ResolvedRunContext {
@@ -71,16 +131,48 @@ export interface ResolvedRunContext {
    */
   seq: number;
   useMockBars: boolean;
+  /** Persisted `scripts[].inputs` overrides, when present. */
+  inputs?: Record<string, unknown>;
+  /** Worker-style timeframe from `doc.interval`. Omitted when unknown. */
+  timeframe?: string;
+  /** Inclusive envelope start (visible range or full window). */
+  fromBar?: number;
+  /** Inclusive envelope end (visible range or full window). */
+  toBar?: number;
 }
 
 export type ResolveRunContextResult =
   | { ok: true; ctx: ResolvedRunContext }
   | { ok: false; error: string; reason?: 'aborted' };
 
+function withDocInputs(ctx: ResolvedRunContext): ResolvedRunContext {
+  const inputs = scriptInputsFromDoc(ctx.doc);
+  if (!inputs) return ctx;
+  return { ...ctx, inputs };
+}
+
+/** Timeframe + envelope fields for a run. Omits keys when unset. */
+export function runWindowFields(
+  interval: string,
+  barCount: number,
+  range?: { from: number; to: number },
+): { timeframe?: string; fromBar?: number; toBar?: number } {
+  const timeframe = mapToWorkerTimeframe(interval);
+  const win = barWindowFromVisibleRange(barCount, range);
+  return {
+    ...(timeframe ? { timeframe } : {}),
+    ...(win ? { fromBar: win.fromBar, toBar: win.toBar } : {}),
+  };
+}
+
+function finishRunContext(ctx: ResolvedRunContext): ResolvedRunContext {
+  return { ...withDocInputs(ctx), ...runWindowFields(ctx.doc.interval, ctx.bars.length, lastViewport) };
+}
+
 function fallbackMockContext(): ResolvedRunContext {
   const doc = defaultChartDocument();
   const session = buildChartSession({ doc, useMockBars: true });
-  return {
+  return finishRunContext({
     doc,
     bars: session.bars,
     seriesKey: session.seriesKey,
@@ -89,7 +181,7 @@ function fallbackMockContext(): ResolvedRunContext {
     mode: 'auto',
     seq: session.full.seq,
     useMockBars: true,
-  };
+  });
 }
 
 /**
@@ -107,7 +199,6 @@ export async function resolveRunContext(
       if (parsed.ok) doc = parsed.doc;
     }
 
-    const useMockBars = settings?.useMockBars !== false;
     const engineId =
       (settings?.engineId && settings.engineId.trim()) ||
       (settings?.activeEngineId && settings.activeEngineId.trim()) ||
@@ -116,6 +207,42 @@ export async function resolveRunContext(
     const endpoint =
       (settings?.endpoint && settings.endpoint.trim()) || DEFAULT_ENGINE_ENDPOINT;
 
+    const barsPath = typeof doc.barsPath === 'string' ? doc.barsPath.trim() : '';
+    if (barsPath) {
+      const roots = [settings?.chartDir, settings?.workspaceRoot].filter(
+        (r): r is string => typeof r === 'string' && Boolean(r.trim()),
+      );
+      const resolved = resolveBarsFilePath(barsPath, roots);
+      if (!resolved.ok) return { ok: false, error: resolved.error };
+      const read =
+        settings?.readText ??
+        (async (p: string) => {
+          const fs = await import('node:fs/promises');
+          return fs.readFile(p, 'utf8');
+        });
+      const csv = await loadOhlcvCsvFile(resolved.fsPath, read);
+      if (!csv.ok) return { ok: false, error: csv.error };
+      const session = buildChartSession({
+        doc,
+        useMockBars: false,
+        historyBarsSetting: settings?.historyBarsSetting,
+      });
+      return {
+        ok: true,
+        ctx: finishRunContext({
+          doc,
+          bars: csv.bars,
+          seriesKey: session.seriesKey,
+          engineId,
+          endpoint,
+          mode: 'auto',
+          seq: CHART_HISTORY_SEQ,
+          useMockBars: false,
+        }),
+      };
+    }
+
+    const useMockBars = settings?.useMockBars !== false;
     if (useMockBars) {
       const session = buildChartSession({
         doc,
@@ -124,7 +251,7 @@ export async function resolveRunContext(
       });
       return {
         ok: true,
-        ctx: {
+        ctx: finishRunContext({
           doc,
           bars: session.bars,
           seriesKey: session.seriesKey,
@@ -133,7 +260,7 @@ export async function resolveRunContext(
           mode: 'auto',
           seq: session.full.seq || CHART_HANDSHAKE_SEQ,
           useMockBars: true,
-        },
+        }),
       };
     }
 
@@ -166,7 +293,7 @@ export async function resolveRunContext(
     }
     return {
       ok: true,
-      ctx: {
+      ctx: finishRunContext({
         doc,
         bars: history.bars,
         seriesKey: session.seriesKey,
@@ -175,7 +302,7 @@ export async function resolveRunContext(
         mode: 'auto',
         seq: CHART_HISTORY_SEQ,
         useMockBars: false,
-      },
+      }),
     };
   } catch (e) {
     // Hostile settings / unexpected — only mock fallback when mock was requested.

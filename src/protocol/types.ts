@@ -55,6 +55,7 @@ export const HOST_TO_VIEW = {
   StudioInit: 'studio.init',
   StudioSet: 'studio.set',
   StudioNotice: 'studio.notice',
+  ChartDebugCursor: 'chart.debugCursor',
 } as const;
 
 /** View → host message types. */
@@ -64,6 +65,9 @@ export const VIEW_TO_HOST = {
   DrawingSetTool: 'drawing.setTool',
   DrawingCommit: 'drawing.commit',
   ChartRequestReload: 'chart.requestReload',
+  ChartApplyInputs: 'chart.applyInputs',
+  ChartBarBreakpoint: 'chart.barBreakpoint',
+  ChartSelectTrade: 'chart.selectTrade',
   ResultsFocus: 'results.focus',
   ResultsReady: 'results.ready',
   StudioReady: 'studio.ready',
@@ -102,6 +106,7 @@ export const SECTION_6_MESSAGE_TYPES: readonly MessageType[] = [
   VIEW_TO_HOST.DrawingSetTool,
   VIEW_TO_HOST.DrawingCommit,
   VIEW_TO_HOST.ChartRequestReload,
+  VIEW_TO_HOST.ChartApplyInputs,
   HOST_TO_VIEW.ResultsSet,
   VIEW_TO_HOST.ResultsFocus,
   VIEW_TO_HOST.ResultsReady,
@@ -110,6 +115,9 @@ export const SECTION_6_MESSAGE_TYPES: readonly MessageType[] = [
   HOST_TO_VIEW.StudioNotice,
   VIEW_TO_HOST.StudioReady,
   VIEW_TO_HOST.StudioAction,
+  HOST_TO_VIEW.ChartDebugCursor,
+  VIEW_TO_HOST.ChartBarBreakpoint,
+  VIEW_TO_HOST.ChartSelectTrade,
 ];
 
 export const HOST_TO_VIEW_TYPES: ReadonlySet<string> = new Set(Object.values(HOST_TO_VIEW));
@@ -133,6 +141,8 @@ export interface ChartInitPayload {
   drawings?: unknown;
   /** Active plugins; omitted is backward compatible. */
   plugins?: ChartPluginsPayload;
+  /** Persisted `scripts[].inputs` (title → value); optional. */
+  inputs?: unknown;
 }
 
 export interface ChartFullPayload {
@@ -142,6 +152,17 @@ export interface ChartFullPayload {
   series?: unknown;
   drawings?: unknown;
   seq: number;
+  /** Engine `plot_meta` (kind/style/color per plot title). */
+  plotMeta?: unknown;
+  /** Engine `inputs` declarations or title→value map. */
+  inputs?: unknown;
+  alerts?: unknown;
+  times?: unknown;
+  window?: unknown;
+  strategy?: unknown;
+  scriptType?: unknown;
+  /** Static lookahead grep (P8). Never claimed as dynamic taint. */
+  lookahead?: unknown;
 }
 
 export interface ChartDeltaPayload {
@@ -192,6 +213,11 @@ export interface DrawingSetToolPayload {
 export type DrawingCommitPayload = Record<string, unknown>;
 
 export type ChartRequestReloadPayload = Record<string, never>;
+
+/** Persist + re-run input overrides from the chart webview editor. */
+export interface ChartApplyInputsPayload {
+  inputs: Record<string, unknown>;
+}
 
 export interface ResultsSetPayload {
   lastRun: unknown;
@@ -244,6 +270,21 @@ export interface StudioActionPayload {
   args?: Record<string, unknown>;
 }
 
+/** Host → chart: bar debugger cursor (overlay, not a studio). */
+export interface ChartDebugCursorPayload {
+  barIndex: number;
+}
+
+/** Chart click → host: toggle a bar-index breakpoint. */
+export interface ChartBarBreakpointPayload {
+  barIndex: number;
+}
+
+/** Strategy table row → host: seek DAP + debug cursor to that bar. */
+export interface ChartSelectTradePayload {
+  barIndex: number;
+}
+
 /** Payload map keyed by message-type constants (no duplicated wire strings). */
 export type PayloadByType = {
   [HOST_TO_VIEW.ChartInit]: ChartInitPayload;
@@ -259,6 +300,7 @@ export type PayloadByType = {
   [VIEW_TO_HOST.DrawingSetTool]: DrawingSetToolPayload;
   [VIEW_TO_HOST.DrawingCommit]: DrawingCommitPayload;
   [VIEW_TO_HOST.ChartRequestReload]: ChartRequestReloadPayload;
+  [VIEW_TO_HOST.ChartApplyInputs]: ChartApplyInputsPayload;
   [VIEW_TO_HOST.ResultsFocus]: ResultsFocusPayload;
   [VIEW_TO_HOST.ResultsReady]: ResultsReadyPayload;
   [HOST_TO_VIEW.StudioInit]: StudioInitPayload;
@@ -266,6 +308,9 @@ export type PayloadByType = {
   [HOST_TO_VIEW.StudioNotice]: StudioNoticePayload;
   [VIEW_TO_HOST.StudioReady]: StudioReadyPayload;
   [VIEW_TO_HOST.StudioAction]: StudioActionPayload;
+  [HOST_TO_VIEW.ChartDebugCursor]: ChartDebugCursorPayload;
+  [VIEW_TO_HOST.ChartBarBreakpoint]: ChartBarBreakpointPayload;
+  [VIEW_TO_HOST.ChartSelectTrade]: ChartSelectTradePayload;
 };
 
 export interface ProtocolError {

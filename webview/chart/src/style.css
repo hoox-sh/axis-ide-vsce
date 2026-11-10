@@ -1,3 +1,6 @@
+@import './strategy.css';
+@import './chrome.css';
+@import './run-chrome.css';
 /* Copyright (C) 2026 jango_blockchained
  * SPDX-License-Identifier: AGPL-3.0-only
  *
@@ -23,6 +26,7 @@ body {
 
 .chart-shell {
   box-sizing: border-box;
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -139,6 +143,119 @@ body {
   font-size: 10px;
 }
 
+.chart-legend {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--axis-gap-xs, 4px);
+  min-height: 22px;
+  padding: 2px 8px 4px;
+  border-bottom: var(--axis-border-w, 1px) solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.22)));
+  font-size: 11px;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
+}
+
+.chart-legend[hidden] {
+  display: none;
+}
+
+.chart-legend__title {
+  font-weight: 600;
+  color: var(--axis-text, var(--vscode-editor-foreground, #e0e0e0));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chart-legend__plots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart-legend__plot {
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.chart-legend__plot.is-hidden {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+.chart-popover,
+.chart-data-window {
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--axis-toolbar-h, 36px) + 22px);
+  left: 8px;
+  min-width: 180px;
+  max-width: min(320px, calc(100% - 16px));
+  max-height: min(280px, 50%);
+  overflow: auto;
+  padding: 8px 10px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: var(--axis-bg-elev, var(--vscode-editorWidget-background, #10131b));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.chart-popover[hidden],
+.chart-data-window[hidden] {
+  display: none;
+}
+
+.chart-popover__title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chart-layers__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chart-layers__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  font-size: 11px;
+}
+
+.chart-data-window__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.chart-data-window__table th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
+  padding: 1px 8px 1px 0;
+}
+
+.chart-data-window__table td {
+  text-align: right;
+  padding: 1px 0;
+}
+
+.chart-shell.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: var(--axis-bg, var(--vscode-editor-background, #050505));
+}
+
 .chart-stage {
   position: relative;
   flex: 1 1 auto;
@@ -151,6 +268,22 @@ body {
   position: absolute;
   inset: 0;
   display: block;
+}
+
+.chart-host.is-lookahead-tainted::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--vscode-editorWarning-foreground, #d29922) 22%, transparent),
+    color-mix(in srgb, var(--vscode-editorWarning-foreground, #d29922) 22%, transparent) 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  opacity: 0.35;
 }
 
 .chart-host__placeholder {
@@ -231,4 +364,111 @@ body {
   .chart-shell[data-run-status='error'] {
     animation: none;
   }
+}
+
+.chart-panel {
+  flex: 0 0 auto;
+  max-height: 28%;
+  overflow: auto;
+  padding: 6px 8px;
+  border-top: var(--axis-border-w, 1px) solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.22)));
+  background: var(--axis-bg-elev, var(--vscode-editorWidget-background, transparent));
+  font-size: 11px;
+}
+
+.chart-panel[hidden] {
+  display: none;
+}
+
+.chart-panel__fields {
+  display: grid;
+  grid-template-columns: minmax(6em, 1fr) minmax(8em, 2fr);
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.chart-panel__fields label {
+  color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
+}
+
+.chart-panel__fields input,
+.chart-panel__fields select {
+  min-height: 22px;
+  padding: 2px 6px;
+  border: var(--axis-border-w, 1px) solid
+    var(--axis-border, var(--vscode-input-border, rgba(128, 128, 128, 0.35)));
+  border-radius: var(--axis-radius-chip, 2px);
+  background: var(--vscode-input-background, transparent);
+  color: inherit;
+  font: inherit;
+}
+
+.chart-panel__stats {
+  margin-bottom: 6px;
+  font-family: var(--axis-font-mono, ui-monospace, monospace);
+}
+
+.chart-panel__table {
+  overflow: auto;
+  max-height: 12em;
+}
+
+.chart-panel__table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.chart-panel__table th,
+.chart-panel__table td {
+  padding: 2px 6px;
+  text-align: left;
+  border-bottom: 1px solid
+    var(--axis-border-soft, var(--vscode-widget-border, rgba(128, 128, 128, 0.18)));
+}
+
+.chart-engine-tables {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  pointer-events: none;
+  font-size: 10px;
+}
+
+.chart-engine-tables[hidden] {
+  display: none;
+}
+
+.chart-engine-tables table {
+  border-collapse: collapse;
+  background: var(--axis-bg-elev, rgba(0, 0, 0, 0.55));
+}
+
+.chart-engine-tables td {
+  padding: 2px 6px;
+}
+
+.drawing-overlay__engine {
+  stroke: var(--vscode-charts-blue, #569cd6);
+  stroke-width: 1.5;
+  fill: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.drawing-overlay__box {
+  fill: rgba(86, 156, 214, 0.12);
+  stroke: var(--vscode-charts-blue, #569cd6);
+  stroke-width: 1;
+}
+
+.drawing-overlay__label {
+  fill: var(--vscode-editor-foreground, #e0e0e0);
+  font-size: 11px;
+}
+
+.drawing-overlay__fill {
+  fill: rgba(86, 156, 214, 0.18);
+  stroke: none;
 }

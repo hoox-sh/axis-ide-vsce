@@ -135,16 +135,60 @@ describe('chart webview message handler', () => {
     }
   });
 
-  test('ignores non-ready view→host types', () => {
+  test('chart.viewport → viewport kind', () => {
     const viewport = encode(VIEW_TO_HOST.ChartViewport, { from: 1, to: 2 });
     const result = handleChartWebviewMessage(viewport, session);
+    expect(result.kind).toBe('viewport');
+    if (result.kind === 'viewport') {
+      expect(result.from).toBe(1);
+      expect(result.to).toBe(2);
+    }
+  });
+
+  test('chart.barBreakpoint → barBreakpoint kind', () => {
+    const bp = encode(VIEW_TO_HOST.ChartBarBreakpoint, { barIndex: 9 });
+    const result = handleChartWebviewMessage(bp, session);
+    expect(result.kind).toBe('barBreakpoint');
+    if (result.kind === 'barBreakpoint') {
+      expect(result.barIndex).toBe(9);
+    }
+  });
+
+  test('chart.selectTrade → selectTrade kind', () => {
+    const msg = encode(VIEW_TO_HOST.ChartSelectTrade, { barIndex: 4 });
+    const result = handleChartWebviewMessage(msg, session);
+    expect(result.kind).toBe('selectTrade');
+    if (result.kind === 'selectTrade') {
+      expect(result.barIndex).toBe(4);
+    }
+  });
+
+  test('ignores non-ready view→host types', () => {
+    const focus = encode(VIEW_TO_HOST.ResultsFocus, { runId: 'run-1' });
+    const result = handleChartWebviewMessage(focus, session);
     expect(result.kind).toBe('ignore');
+  });
+
+  test('drawing.setTool open-source is accepted', () => {
+    const msg = encode(VIEW_TO_HOST.DrawingSetTool, { tool: 'open-source' });
+    const result = handleChartWebviewMessage(msg, session);
+    expect(result.kind).toBe('setTool');
+    if (result.kind === 'setTool') expect(result.tool).toBe('open-source');
   });
 
   test('chart.requestReload → requestReload kind', () => {
     const reload = encode(VIEW_TO_HOST.ChartRequestReload, {});
     const result = handleChartWebviewMessage(reload, session);
     expect(result.kind).toBe('requestReload');
+  });
+
+  test('chart.applyInputs → applyInputs kind', () => {
+    const msg = encode(VIEW_TO_HOST.ChartApplyInputs, { inputs: { Length: 14, On: true } });
+    const result = handleChartWebviewMessage(msg, session);
+    expect(result.kind).toBe('applyInputs');
+    if (result.kind === 'applyInputs') {
+      expect(result.inputs).toEqual({ Length: 14, On: true });
+    }
   });
 
   test('catches encode failures when init stub is invalid', () => {

@@ -17,6 +17,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { existsSync } from 'node:fs';
+import { dirname } from 'node:path';
 import {
   type CancellationToken,
   CancellationError,
@@ -33,6 +34,7 @@ import {
   type WebviewPanel,
   EventEmitter,
   Uri as UriClass,
+  ViewColumn,
   window,
   workspace,
 } from 'vscode';
@@ -48,19 +50,44 @@ import {
 import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
+import { recordChartViewport } from '../run/run-context';
 import {
   type AxisChartDocV1,
   CHART_VIEW_TYPE,
+  mergeScriptInputs,
   parseChartDocument,
   serializeChartDocument,
 } from './chart-document';
 import { appendDrawingToDoc } from './chart-drawings';
-import { isPyodideAllowed } from '../host/pyodide-profile';
+import {
+  loadOhlcvCsvFile,
+  resolveBarsFilePath,
+} from '../host/csv-bars';
+import { ALLOW_PYODIDE_DEFAULT, isPyodideAllowed } from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
+import {
+  OPEN_CHART_SOURCE_TOOL,
+  resolveChartSourcePath,
+  siblingPineCandidates,
+} from '../host/open-chart';
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+
+/** Open custom-editor documents — data pick / open-source without a studio. */
+const openChartDocuments = new Map<string, AxisChartDocument>();
+
+/**
+ * Apply a chart doc in-memory and refresh webviews without marking dirty
+ * (caller already wrote the same bytes to disk).
+ */
+export function applyChartDocumentQuiet(uri: Uri, next: AxisChartDocV1): boolean {
+  const doc = openChartDocuments.get(uri.toString());
+  if (!doc) return false;
+  doc.replaceQuiet(next);
+  return true;
+}
 
 function themeBodyClass(kind: ColorThemeKind): string {
   switch (kind) {
@@ -144,7 +171,12 @@ export class AxisChartDocument implements CustomDocument {
         `AXIS chart: invalid document at ${uri.toString()}: ${parsed.error}`,
       );
     }
-    return new AxisChartDocument(uri, parsed.doc);
+    const document = new AxisChartDocument(uri, parsed.doc);
+    openChartDocuments.set(uri.toString(), document);
+    document.onDidDispose(() => {
+      openChartDocuments.delete(uri.toString());
+    });
+    return document;
   }
 
   get documentData(): AxisChartDocV1 {
@@ -156,6 +188,13 @@ export class AxisChartDocument implements CustomDocument {
     if (this._disposed) return;
     this._doc = doc;
     this._onDidChange.fire({ document: this });
+  }
+
+  /** Replace content and refresh webviews without dirtying (disk already matches). */
+  replaceQuiet(doc: AxisChartDocV1): void {
+    if (this._disposed) return;
+    this._doc = doc;
+    this._onDidRefresh.fire(this);
   }
 
   async save(cancellation: CancellationToken): Promise<void> {
@@ -240,15 +279,45 @@ function assertChartAssets(extensionUri: Uri): void {
   }
 }
 
-/** Read `axis.engine.allowPyodide` (default false; never throws). */
+/** Read `axis.engine.allowPyodide` (default true; never throws). */
 function readAllowPyodide(): boolean {
   try {
     return isPyodideAllowed(
-      workspace.getConfiguration('axis.engine').get<boolean>('allowPyodide', false),
+      workspace.getConfiguration('axis.engine').get<boolean>('allowPyodide', ALLOW_PYODIDE_DEFAULT),
     );
   } catch {
-    return false;
+    return ALLOW_PYODIDE_DEFAULT;
   }
+}
+
+async function openChartSource(document: AxisChartDocument): Promise<void> {
+  const fsPath = document.uri.scheme === 'file' ? document.uri.fsPath : '';
+  if (!fsPath) {
+    void window.showErrorMessage('AXIS: Open source needs a file-backed chart.');
+    return;
+  }
+  const preferred = resolveChartSourcePath(fsPath, document.documentData.scripts);
+  const candidates = [
+    ...(preferred ? [preferred] : []),
+    ...siblingPineCandidates(fsPath),
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    try {
+      const uri = UriClass.file(candidate);
+      await workspace.fs.stat(uri);
+      await window.showTextDocument(uri, {
+        viewColumn: ViewColumn.Beside,
+        preview: false,
+      });
+      return;
+    } catch {
+      // try next suffix
+    }
+  }
+  void window.showErrorMessage('AXIS: No sibling Pine source found for this chart.');
 }
 
 function getChartHtml(webview: Webview, extensionUri: Uri): string {
@@ -306,9 +375,10 @@ function readChartHostSettings(): ChartHostSettings {
 /** Read chart settings + document into a fresh session (no stale init closure). */
 function sessionForDocument(document: AxisChartDocument, context: ExtensionContext) {
   const settings = readChartHostSettings();
+  const fileBars = Boolean(document.documentData.barsPath?.trim());
   return buildChartSession({
     doc: document.documentData,
-    useMockBars: settings.useMockBars,
+    useMockBars: settings.useMockBars && !fileBars,
     historyBarsSetting: settings.historyBarsSetting,
   });
 }
@@ -336,8 +406,58 @@ async function paintHistoryAfterHandshake(
   isDisposed: () => boolean,
 ): Promise<void> {
   const settings = readChartHostSettings();
-  if (settings.useMockBars) return;
   const doc = document.documentData;
+  const barsPath = typeof doc.barsPath === 'string' ? doc.barsPath.trim() : '';
+  if (barsPath) {
+    const roots: string[] = [];
+    if (document.uri.scheme === 'file' && document.uri.fsPath) {
+      roots.push(dirname(document.uri.fsPath));
+    }
+    for (const folder of workspace.workspaceFolders ?? []) {
+      if (folder.uri.scheme === 'file') roots.push(folder.uri.fsPath);
+    }
+    const resolved = resolveBarsFilePath(barsPath, roots);
+    if (!resolved.ok) {
+      logError(resolved.error);
+      try {
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: resolved.error }),
+        );
+      } catch {
+        // disposing
+      }
+      return;
+    }
+    const csv = await loadOhlcvCsvFile(resolved.fsPath, async (p) => {
+      const fs = await import('node:fs/promises');
+      return fs.readFile(p, 'utf8');
+    });
+    if (isDisposed() || signal.aborted) return;
+    if (!csv.ok) {
+      logError(csv.error);
+      try {
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: csv.error }),
+        );
+      } catch {
+        // disposing
+      }
+      return;
+    }
+    try {
+      void webview.postMessage(
+        encode(HOST_TO_VIEW.ChartFull, {
+          bars: csv.bars,
+          seq: CHART_HISTORY_SEQ,
+        }),
+      );
+      if (!isDisposed()) replayLastRunFull(webview, seriesKey);
+    } catch {
+      // disposing
+    }
+    return;
+  }
+  if (settings.useMockBars) return;
   const limit = resolveMockBarCount(doc.historyBars, settings.historyBarsSetting);
   const history = await fetchHistorical({
     exchange: doc.exchange || 'binance',
@@ -428,12 +548,20 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
   >();
   private readonly busSub: { dispose(): void };
   private readonly onRequestReload: (() => void) | undefined;
+  private readonly onApplyInputs:
+    | ((inputs: Record<string, unknown>, document: AxisChartDocument) => void)
+    | undefined;
+  private readonly onBarBreakpoint: ((barIndex: number) => void) | undefined;
+  private readonly onSelectTrade: ((barIndex: number) => void) | undefined;
 
   constructor(
     private readonly context: ExtensionContext,
     opts?: ChartEditorProviderOptions,
   ) {
     this.onRequestReload = opts?.onRequestReload;
+    this.onApplyInputs = opts?.onApplyInputs;
+    this.onBarBreakpoint = opts?.onBarBreakpoint;
+    this.onSelectTrade = opts?.onSelectTrade;
     this.busSub = subscribeChartNotify((message) => {
       for (const [panel, meta] of [...this.openPanels]) {
         try {
@@ -456,6 +584,10 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           } else if (message.type === 'host.run.status') {
             void panel.webview.postMessage(
               encode(HOST_TO_VIEW.HostRunStatus, message.payload),
+            );
+          } else if (message.type === 'chart.debugCursor') {
+            void panel.webview.postMessage(
+              encode(HOST_TO_VIEW.ChartDebugCursor, message.payload),
             );
           }
         } catch {
@@ -621,7 +753,9 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         return;
       }
       if (result.kind === 'setTool') {
-        // MVP: webview owns tool chrome; host ack is a no-op (TreeView tools later).
+        if (result.tool === OPEN_CHART_SOURCE_TOOL) {
+          void openChartSource(document);
+        }
         return;
       }
       if (result.kind === 'requestReload') {
@@ -641,6 +775,38 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         } catch (e) {
           const message = e instanceof Error ? e.message : String(e);
           logError(`drawing.commit failed: ${message}`);
+        }
+        return;
+      }
+      if (result.kind === 'applyInputs') {
+        if (disposed) return;
+        try {
+          const next = mergeScriptInputs(document.documentData, result.inputs);
+          document.update(next);
+          this.onApplyInputs?.(result.inputs, document);
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e);
+          logError(`chart.applyInputs failed: ${message}`);
+        }
+        return;
+      }
+      if (result.kind === 'viewport') {
+        recordChartViewport(result.from, result.to);
+        return;
+      }
+      if (result.kind === 'barBreakpoint') {
+        try {
+          this.onBarBreakpoint?.(result.barIndex);
+        } catch {
+          // debug session must not tear down the editor
+        }
+        return;
+      }
+      if (result.kind === 'selectTrade') {
+        try {
+          this.onSelectTrade?.(result.barIndex);
+        } catch {
+          // debug session must not tear down the editor
         }
         return;
       }
@@ -733,6 +899,12 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
 export type ChartEditorProviderOptions = {
   /** Host handler for webview `chart.requestReload` (resume stub in lightweight). */
   onRequestReload?: () => void;
+  /** Persist `scripts[].inputs` then re-run with overrides (no Inputs studio). */
+  onApplyInputs?: (inputs: Record<string, unknown>, document: AxisChartDocument) => void;
+  /** Chart-bar breakpoint from webview click (DAP, not a studio). */
+  onBarBreakpoint?: (barIndex: number) => void;
+  /** Strategy table row → seek DAP to that bar (click the lying trade). */
+  onSelectTrade?: (barIndex: number) => void;
 };
 
 export function registerChartEditorProvider(

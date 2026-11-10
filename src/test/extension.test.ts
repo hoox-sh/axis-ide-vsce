@@ -71,12 +71,20 @@ const EXPECTED_COMMANDS = [
   'axis.secrets.setProKey',
   'axis.secrets.setWorkerKey',
   'axis.secrets.clear',
+  'axis.stopRun',
+  'axis.showRunOutput',
+  'axis.pickData',
+  'axis.debug.start',
+  'axis.debug.stepBar',
+  'axis.debug.toggleBarBreakpoint',
+  'axis.openWalkthroughFixture',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
   'axis.engine.endpoint',
   'axis.engine.allowRemoteEndpoint',
   'axis.engine.allowPyodide',
+  'axis.engine.pyodideWheelUrl',
   'axis.chart.historyBars',
   'axis.chart.useMockBars',
   'axis.datafeed.url',
@@ -90,13 +98,20 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'customEditors',
   'menus',
   'keybindings',
+  'debuggers',
+  'breakpoints',
+  'walkthroughs',
 ]);
 const EXPECTED_KEYBINDINGS = [
   {
     command: 'axis.runScript',
     key: 'ctrl+enter',
     mac: 'cmd+enter',
-    when: 'editorTextFocus && editorLangId == pinescript',
+  },
+  {
+    command: 'axis.stopRun',
+    key: 'ctrl+enter',
+    mac: 'cmd+enter',
   },
 ] as const;
 const EXPECTED_CUSTOM_EDITORS = [
@@ -109,7 +124,7 @@ const EXPECTED_CUSTOM_EDITORS = [
 ] as const;
 
 const PYNE_EXT_ID = 'hoox-sh.pyne';
-const PYNE_RECOMMENDED_MIN = '0.5.4';
+const PYNE_RECOMMENDED_MIN = '0.5.8';
 
 suite('AXIS IDE Extension Structure', () => {
   test('package.json identity', () => {
@@ -159,6 +174,7 @@ suite('AXIS IDE Extension Structure', () => {
       [
         ...EXPECTED_COMMANDS.map((id) => `onCommand:${id}`),
         `onCustomEditor:${CHART_VIEW_TYPE}`,
+        'onDebug:axis-bar',
         ...EXPECTED_WORKSPACE_CONTAINS,
       ].sort(),
       'activationEvents inventory drifted',
@@ -248,7 +264,8 @@ suite('AXIS IDE Extension Structure', () => {
       assert.ok(found, `missing keybinding for ${expected.command}`);
       assert.strictEqual(found?.key, expected.key);
       assert.strictEqual(found?.mac, expected.mac);
-      assert.strictEqual(found?.when, expected.when);
+      assert.ok(found?.when?.includes('pinescript'), `${expected.command} when must include pinescript`);
+      assert.ok(found?.when?.includes('.pyne'), `${expected.command} when must include .pyne`);
     }
   });
 
@@ -258,10 +275,14 @@ suite('AXIS IDE Extension Structure', () => {
     const title = menus?.['editor/title'] ?? [];
     const open = title.find((e) => e.command === 'axis.openChart');
     assert.ok(open, 'editor/title must contribute axis.openChart');
-    assert.strictEqual(open?.when, 'resourceLangId == pinescript');
+    assert.ok(open?.when?.includes('pinescript'));
+    assert.ok(open?.when?.includes('.pyne'));
     const run = title.find((e) => e.command === 'axis.runScript');
     assert.ok(run, 'editor/title must contribute axis.runScript');
-    assert.strictEqual(run?.when, 'resourceLangId == pinescript');
+    assert.ok(run?.when?.includes('!axis.run.running'));
+    const stop = title.find((e) => e.command === 'axis.stopRun');
+    assert.ok(stop, 'editor/title must contribute axis.stopRun');
+    assert.ok(stop?.when?.includes('axis.run.running'));
   });
 
   test('context menus cover editor and explorer only (no view menus)', () => {
@@ -272,12 +293,20 @@ suite('AXIS IDE Extension Structure', () => {
     )?.menus;
     const editorCtx = menus?.['editor/context'] ?? [];
     assert.ok(
-      editorCtx.some((e) => e.command === 'axis.runScript' && e.when === 'editorLangId == pinescript'),
+      editorCtx.some(
+        (e) =>
+          e.command === 'axis.runScript' &&
+          Boolean(e.when?.includes('pinescript') && e.when.includes('.pyne')),
+      ),
       'editor/context runScript',
     );
     const explorer = menus?.['explorer/context'] ?? [];
     assert.ok(
-      explorer.some((e) => e.command === 'axis.openChart' && e.when === 'resourceLangId == pinescript'),
+      explorer.some(
+        (e) =>
+          e.command === 'axis.openChart' &&
+          Boolean(e.when?.includes('pinescript') && e.when.includes('.pyne')),
+      ),
       'explorer/context openChart',
     );
     assert.strictEqual(menus?.['view/title'], undefined);
@@ -291,7 +320,10 @@ suite('AXIS IDE Extension Structure', () => {
     const palette = menus?.commandPalette ?? [];
     const silent = palette.find((e) => e.command === 'axis.runScriptSilent');
     assert.ok(silent, 'commandPalette must contribute axis.runScriptSilent');
-    assert.strictEqual(silent?.when, 'editorLangId == pinescript');
+    assert.ok(silent?.when?.includes('pinescript'));
+    assert.ok(silent?.when?.includes('.pyne'));
+    const show = palette.find((e) => e.command === 'axis.showRunOutput');
+    assert.ok(show, 'commandPalette must contribute axis.showRunOutput');
   });
 });
 
@@ -335,6 +367,19 @@ suite('AXIS IDE Extension Activation', () => {
     assert.strictEqual(config.get('allowRemoteEndpoint'), false);
   });
 
+  test('capabilities declare untrusted and virtual workspaces unsupported', () => {
+    const caps = (
+      pkg as {
+        capabilities?: {
+          untrustedWorkspaces?: { supported?: boolean };
+          virtualWorkspaces?: { supported?: boolean };
+        };
+      }
+    ).capabilities;
+    assert.strictEqual(caps?.untrustedWorkspaces?.supported, false);
+    assert.strictEqual(caps?.virtualWorkspaces?.supported, false);
+  });
+
   test('axis.engine.allowRemoteEndpoint is application-scoped (not workspace)', () => {
     const configuration = Array.isArray(pkg.contributes?.configuration)
       ? pkg.contributes.configuration
@@ -349,6 +394,35 @@ suite('AXIS IDE Extension Activation', () => {
     const meta = entry?.[1] as { scope?: string; default?: boolean };
     assert.strictEqual(meta.scope, 'application');
     assert.strictEqual(meta.default, false);
+  });
+
+  test('axis.engine.allowPyodide defaults true (Wave 1)', () => {
+    const configuration = Array.isArray(pkg.contributes?.configuration)
+      ? pkg.contributes.configuration
+      : pkg.contributes?.configuration
+        ? [pkg.contributes.configuration]
+        : [];
+    const props = configuration.flatMap((group) => Object.entries(group.properties ?? {}));
+    const entry = props.find(([key]) => key === 'axis.engine.allowPyodide');
+    assert.ok(entry, 'missing axis.engine.allowPyodide');
+    const meta = entry?.[1] as { default?: boolean };
+    assert.strictEqual(meta.default, true);
+  });
+
+  test('walkthrough axis.firstPlot ships fixtures', () => {
+    const walks = (
+      pkg.contributes as {
+        walkthroughs?: Array<{ id: string; steps?: Array<{ id: string }> }>;
+      }
+    )?.walkthroughs ?? [];
+    const first = walks.find((w) => w.id === 'axis.firstPlot');
+    assert.ok(first, 'missing walkthrough axis.firstPlot');
+    assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.open'));
+    assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.run'));
+    const root = path.resolve(__dirname, '../../');
+    assert.ok(fs.existsSync(path.join(root, 'fixtures', 'orb.pine')));
+    assert.ok(fs.existsSync(path.join(root, 'fixtures', 'orb.axis.json')));
+    assert.ok(fs.existsSync(path.join(root, 'media', 'walkthrough-first-plot.md')));
   });
 
   test('default axis.telemetry.offline is true', () => {

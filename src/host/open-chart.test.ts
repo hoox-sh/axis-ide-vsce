@@ -19,13 +19,17 @@
 import { describe, expect, test } from 'bun:test';
 import { CHART_SCHEMA, parseChartDocument } from '../editors/chart-document';
 import {
+  OPEN_CHART_SOURCE_TOOL,
   OPEN_CHART_VIEW_COLUMN_BESIDE,
+  chartSourceFromScripts,
   defaultChartDocumentForPine,
   isPineFilePath,
   openChartEditorOptions,
   planSiblingChartOpen,
+  resolveChartSourcePath,
   serializeSiblingChartDocument,
   siblingAxisJsonPath,
+  siblingPineCandidates,
 } from './open-chart';
 
 describe('openChart sibling helper', () => {
@@ -151,5 +155,49 @@ describe('openChart sibling helper', () => {
       expect(bad.error).toContain('Open Chart failed');
       expect(bad.error).toContain('boom');
     }
+  });
+
+  test('siblingPineCandidates maps axis.json stem to PYNE suffixes', () => {
+    expect(siblingPineCandidates('/w/rsi.axis.json')).toEqual([
+      '/w/rsi.pyne',
+      '/w/rsi.pine',
+      '/w/rsi.pinev5',
+      '/w/rsi.pinev6',
+      '/w/rsi.pinescript',
+    ]);
+    expect(siblingPineCandidates('/w/rsi.pyne')).toEqual([]);
+    expect(siblingPineCandidates('.axis.json')).toEqual([]);
+    expect(siblingPineCandidates('')).toEqual([]);
+    expect(OPEN_CHART_SOURCE_TOOL).toBe('open-source');
+  });
+
+  test('chartSourceFromScripts resolves ./name.pyne and rejects traversal', () => {
+    expect(
+      chartSourceFromScripts([{ id: 'rsi', uri: './rsi.pyne' }], '/proj/rsi.axis.json'),
+    ).toBe('/proj/rsi.pyne');
+    expect(
+      chartSourceFromScripts([{ uri: 'macd.pine' }], 'C:\\a\\chart.axis.json'),
+    ).toBe('C:\\a\\macd.pine');
+    expect(chartSourceFromScripts(null, '/w/x.axis.json')).toBeNull();
+    expect(chartSourceFromScripts([null, 1, { uri: '' }], '/w/x.axis.json')).toBeNull();
+    expect(
+      chartSourceFromScripts([{ uri: 'https://evil.example/x.pyne' }], '/w/x.axis.json'),
+    ).toBeNull();
+    expect(chartSourceFromScripts([{ uri: '../secret.pyne' }], '/w/x.axis.json')).toBeNull();
+    expect(chartSourceFromScripts([{ uri: 'sub/x.pyne' }], '/w/x.axis.json')).toBeNull();
+    expect(chartSourceFromScripts([{ uri: 'readme.md' }], '/w/x.axis.json')).toBeNull();
+    expect(chartSourceFromScripts([{ uri: './' }], '/w/x.axis.json')).toBeNull();
+    expect(chartSourceFromScripts([[{ uri: 'rsi.pyne' }]], '/w/x.axis.json')).toBeNull();
+    expect(chartSourceFromScripts([{ uri: 'rsi.pyne' }], 'rsi.axis.json')).toBe(
+      'rsi.pyne',
+    );
+  });
+
+  test('resolveChartSourcePath prefers scripts uri then .pyne candidate', () => {
+    expect(
+      resolveChartSourcePath('/w/macd.axis.json', [{ uri: './macd.pine' }]),
+    ).toBe('/w/macd.pine');
+    expect(resolveChartSourcePath('/w/rsi.axis.json')).toBe('/w/rsi.pyne');
+    expect(resolveChartSourcePath('/w/readme.md')).toBeNull();
   });
 });

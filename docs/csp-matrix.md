@@ -5,11 +5,14 @@ without updating this doc** (and README).
 
 HTML is host-generated (`src/editors/chart-html.ts`) with `webview.cspSource` — never hard-coded `vscode-resource:` / `https:`. (Chart webview only in lightweight core.)
 
-Optional Pyodide widen is gated by **`axis.engine.allowPyodide`** (default **false**).
+Optional Pyodide widen is gated by **`axis.engine.allowPyodide`** (default **true**, Wave 1).
 Runtime helper: `buildChartCspDirectives(cspSource, allowPyodide)` in
 `src/editors/chart-html.ts`. Version lock: `LOCAL_PYODIDE_VERSION = '0.29.5'` in
-`src/host/pyodide-profile.ts` (calculator / bars-in only — not stream-owning; Wasm
-assets are **not** shipped in this VSIX).
+`src/host/pyodide-profile.ts` (calculator / bars-in only — not stream-owning). Wasm
+is **not** shipped in this VSIX; when the flag is on the host loads **0.29.5** from
+jsDelivr (`https://cdn.jsdelivr.net/pyodide/v0.29.5/full/`) and `ready` is true
+only after a `1+1` smoke **and** a pynescript Runtime smoke (trusted wheel, not
+Wasm in the VSIX).
 
 ## Enforced (chart primary; minimal core webviews) — default
 
@@ -45,25 +48,30 @@ bundled into the chart `main.js` (no CDN).
 **Default policy:** extension host owns `fetch` / WS (Pro `/run`, Worker `/run` endpoints, datafeed). Webviews are paint / UI only. That keeps `connect-src
 'none'` and matches KD-6.
 
-## Optional widen (`axis.engine.allowPyodide` — off by default)
+## Optional widen (`axis.engine.allowPyodide` — on by default)
 
 When `axis.engine.allowPyodide` is **true**, the **chart** webview CSP only is
 widened via `buildChartCspDirectives(..., true)` / `buildChartWebviewHtml({ allowPyodide: true })`:
 
 | Directive | Value |
 | --- | --- |
-| `script-src` | `${webview.cspSource} 'wasm-unsafe-eval'` |
+| `script-src` | `${webview.cspSource} 'wasm-unsafe-eval' https://cdn.jsdelivr.net` |
+| `connect-src` | `https://cdn.jsdelivr.net` |
 | `worker-src` | `blob: ${webview.cspSource}` |
 
-All other directives stay on the paint-only matrix (`connect-src 'none'`, no
-inline script). (No Results/Strategy webviews in lightweight core.)
+No inline script. Chart HTML also sets `data-axis-pyodide-cdn` to the 0.29.5
+index URL. Evaluation this pass is **host-side** (extension host fetches the
+CDN, smokes `1+1`, then a minimal bars-in subset) so paint/POST stay untouched.
+The chart CSP is widened so a blob worker *may* fetch the same origin.
 
 **Enable path checklist**
 
-1. Setting default remains **false** in `package.json` / contributes fragment.
+1. Setting default is **true** in `package.json` (Wave 1). Set false to skip the widen and force remote `/run`.
 2. Host reads the flag when building chart HTML (`chart-editor` → `allowPyodide`).
 3. Calculator profile is bars-in only (`src/host/pyodide-profile.ts`); do not treat
    Pyodide as stream-owning.
-4. Do **not** vendor multi-MB Pyodide under `dist/` / VSIX until a dedicated task
-   ships assets; flag + CSP alone do not load Wasm.
+4. Do **not** vendor multi-MB Pyodide under `dist/` / VSIX. Load from jsDelivr.
+   `pyodideRuntimeStatus.ready` is true only after Wasm smoke **and** a pynescript
+   Runtime smoke (`callable(run_script)`), never from the flag alone. Trusted
+   `hoox-pyne` + `antlr4` wheels live in `media/pyodide/` (not Wasm).
 5. Update this matrix + README whenever the widen set changes.

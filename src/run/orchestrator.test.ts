@@ -19,8 +19,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { OhlcvBar } from '../host/mock-bars';
 import {
+  PYODIDE_DISABLED_ERROR,
   RunOrchestrator,
   UNSUPPORTED_ENGINE_ERROR,
+  mapEngineResponse,
   type ChartNotifyMessage,
   type FetchLike,
   type RunDeps,
@@ -137,8 +139,10 @@ describe('RunOrchestrator', () => {
     const orch = new RunOrchestrator();
     const { deps, charts, lines, diagnostics } = makeDeps();
     let seenAuth = '';
+    let seenApiKey = '';
     deps.fetchImpl = mockFetch((_url, init) => {
       seenAuth = init?.headers?.Authorization ?? '';
+      seenApiKey = init?.headers?.['X-API-Key'] ?? '';
       return {
         ok: true,
         status: 200,
@@ -151,6 +155,7 @@ describe('RunOrchestrator', () => {
     expect(outcome.ok).toBe(true);
     if (!outcome.ok) return;
     expect(seenAuth).toBe(`Bearer ${PRO_KEY}`);
+    expect(seenApiKey).toBe(PRO_KEY);
     expect(outcome.seq).toBe(2); // baseSeq 1 + 1 — avoids handshake collision
     expect(outcome.runId).toBe(`run-${outcome.epoch}`);
 
@@ -191,6 +196,45 @@ describe('RunOrchestrator', () => {
     if (full?.type === 'chart.full') {
       expect(full.payload.drawings).toEqual([{ id: 'd1' }]);
       expect(full.payload.plots).toEqual([9]);
+    }
+  });
+
+  test('success chart.full carries plot_meta, inputs, window, strategy', async () => {
+    let seenBody: Record<string, unknown> = {};
+    const orch = new RunOrchestrator();
+    const { deps, charts } = makeDeps({
+      fetchImpl: mockFetch((_url, init) => {
+        seenBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        return {
+          ok: true,
+          status: 200,
+          body: JSON.stringify({
+            status: 'success',
+            plots: [1],
+            series: { sma: [1], __equity: [100, 110] },
+            plot_meta: { sma: { kind: 'plot', style: 'histogram' } },
+            inputs: [{ title: 'Length', type: 'int', value: 14 }],
+            window: { from_bar: 0, to_bar: 1, total_bars: 10 },
+            times: [1_700_000_000],
+            events: [{ kind: 'entry', id: 'L', bar_time: 1_700_000_000, ohlc: [1, 1, 1, 1] }],
+            alerts: [{ message: 'a' }],
+            script_type: 'strategy',
+          }),
+        };
+      }),
+    });
+    const outcome = await orch.run(baseReq({ inputs: { Length: 14 } }), deps);
+    expect(outcome.ok).toBe(true);
+    expect(seenBody.inputs).toEqual({ Length: 14 });
+    const full = charts.find((m) => m.type === 'chart.full');
+    expect(full?.type).toBe('chart.full');
+    if (full?.type === 'chart.full') {
+      expect(full.payload.plotMeta).toEqual({ sma: { kind: 'plot', style: 'histogram' } });
+      expect(full.payload.window).toEqual({ fromBar: 0, toBar: 1, totalBars: 10 });
+      const strategy = full.payload.strategy as { trades: Array<{ id: string }> } | undefined;
+      expect(strategy?.trades[0]?.id).toBe('L');
+      expect(full.payload.inputs).toEqual([{ title: 'Length', type: 'int', value: 14 }]);
+      expect(full.payload.alerts).toEqual([{ message: 'a' }]);
     }
   });
 
@@ -668,11 +712,13 @@ describe('RunOrchestrator', () => {
     const workerKey = `pn_${'ab'.repeat(24)}`;
     const orch = new RunOrchestrator();
     let seenAuth = '';
+    let seenApiKey = '';
     const { deps, charts } = makeDeps({
       missingProKey: true,
       workerKey,
       fetchImpl: mockFetch((_url, init) => {
         seenAuth = init?.headers?.Authorization ?? '';
+        seenApiKey = init?.headers?.['X-API-Key'] ?? '';
         return {
           ok: true,
           status: 200,
@@ -683,6 +729,169 @@ describe('RunOrchestrator', () => {
     const outcome = await orch.run(baseReq(), deps);
     expect(outcome.ok).toBe(true);
     expect(seenAuth).toBe(`Bearer ${workerKey}`);
+    expect(seenApiKey).toBe(workerKey);
     expect(charts.some((m) => m.type === 'chart.full')).toBe(true);
+  });
+
+  test('POSTs timeframe and from_bar/to_bar when provided', async () => {
+    let seenBody: Record<string, unknown> = {};
+    const orch = new RunOrchestrator();
+    const { deps } = makeDeps({
+      fetchImpl: mockFetch((_url, init) => {
+        seenBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+        return {
+          ok: true,
+          status: 200,
+          body: JSON.stringify({ status: 'success', plots: [1], series: {} }),
+        };
+      }),
+    });
+    const outcome = await orch.run(
+      baseReq({ timeframe: '5m', fromBar: 2, toBar: 9 }),
+      deps,
+    );
+    expect(outcome.ok).toBe(true);
+    expect(seenBody.timeframe).toBe('5m');
+    expect(seenBody.from_bar).toBe(2);
+    expect(seenBody.to_bar).toBe(9);
+  });
+
+  test('dumps capped engine logs including log.info onto the run channel', async () => {
+    const orch = new RunOrchestrator();
+    const { deps, lines } = makeDeps({
+      fetchImpl: mockFetch(() => ({
+        ok: true,
+        status: 200,
+        body: JSON.stringify({
+          status: 'success',
+          plots: [1],
+          series: {},
+          logs: [
+            { level: 'info', message: 'hello from pine' },
+            { msg: 'via-msg' },
+            { text: 'via-text', severity: 'warning' },
+            { level: 'error' },
+            { foo: 1 },
+            'log.info already-a-string',
+            '  ',
+            42,
+            null,
+          ],
+        }),
+      })),
+    });
+    const outcome = await orch.run(baseReq(), deps);
+    expect(outcome.ok).toBe(true);
+    expect(lines.some((l) => l === 'log.info hello from pine')).toBe(true);
+    expect(lines.some((l) => l === 'log.info via-msg')).toBe(true);
+    expect(lines.some((l) => l === 'log.warning via-text')).toBe(true);
+    expect(lines.some((l) => l === 'log.error')).toBe(true);
+    expect(lines.some((l) => l === 'log.info already-a-string')).toBe(true);
+  });
+
+  test('dumps engine logs on error and scrubs secrets in log lines', async () => {
+    const orch = new RunOrchestrator();
+    const { deps, lines } = makeDeps({
+      fetchImpl: mockFetch(() => ({
+        ok: false,
+        status: 400,
+        body: JSON.stringify({
+          status: 'error',
+          message: 'compile failed',
+          logs: [{ level: 'info', message: `key ${PRO_KEY}` }],
+        }),
+      })),
+    });
+    const outcome = await orch.run(baseReq(), deps);
+    expect(outcome.ok).toBe(false);
+    expect(lines.some((l) => l.startsWith('log.info key '))).toBe(true);
+    expect(lines.join('\n')).not.toContain(PRO_KEY);
+  });
+
+  test('pyodide engine runs calculator without fetch and paints chart.full', async () => {
+    let called = false;
+    const orch = new RunOrchestrator();
+    const { deps, charts, lines } = makeDeps({
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, text: async () => '{}' };
+      },
+    });
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async () => {
+      const mapped = mapEngineResponse({
+        status: 'success',
+        plots: { close: [100] },
+        series: { close: [100] },
+      });
+      mapped.meta.wheel = 'hoox_pyne-0.6.29';
+      return mapped;
+    };
+    const outcome = await orch.run(baseReq({ engineId: 'pyodide' }), deps);
+    expect(called).toBe(false);
+    expect(outcome.ok).toBe(true);
+    expect(charts.some((m) => m.type === 'chart.full')).toBe(true);
+    expect(lines.some((l) => l === 'engine=pyodide wheel=hoox_pyne-0.6.29 uploaded=0')).toBe(true);
+    const full = charts.find((m) => m.type === 'chart.full');
+    const look = (full?.payload as { lookahead?: { tainted?: boolean; static?: boolean } })?.lookahead;
+    expect(look?.static).toBe(true);
+    expect(look?.tainted).toBe(false);
+  });
+
+  test('lookahead_on script stamps chart.full.lookahead tainted', async () => {
+    const orch = new RunOrchestrator();
+    const { deps, charts } = makeDeps();
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async () =>
+      mapEngineResponse({ status: 'success', plots: { close: [1] }, series: { close: [1] } });
+    const outcome = await orch.run(
+      baseReq({
+        engineId: 'pyodide',
+        script: '//@version=6\nindicator("x")\nrequest.security(syminfo.tickerid, "D", close)\n',
+      }),
+      deps,
+    );
+    expect(outcome.ok).toBe(true);
+    const full = charts.find((m) => m.type === 'chart.full');
+    const look = (full?.payload as { lookahead?: { tainted?: boolean; hits?: unknown[] } })?.lookahead;
+    expect(look?.tainted).toBe(true);
+    expect((look?.hits ?? []).length).toBeGreaterThan(0);
+  });
+
+  test('pyodide engine respects abort before calculator', async () => {
+    let called = false;
+    const orch = new RunOrchestrator();
+    const ac = new AbortController();
+    ac.abort();
+    const { deps } = makeDeps({
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, text: async () => '{}' };
+      },
+    });
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async () => {
+      called = true;
+      return mapEngineResponse({ status: 'success', plots: [] });
+    };
+    const outcome = await orch.run(baseReq({ engineId: 'pyodide', signal: ac.signal }), deps);
+    expect(called).toBe(false);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toBe('aborted');
+  });
+
+  test('pyodide engine without flag is disabled without fetch', async () => {
+    let called = false;
+    const orch = new RunOrchestrator();
+    const { deps } = makeDeps({
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, text: async () => '{}' };
+      },
+    });
+    const outcome = await orch.run(baseReq({ engineId: 'pyodide' }), deps);
+    expect(called).toBe(false);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.error).toBe(PYODIDE_DISABLED_ERROR);
   });
 });
