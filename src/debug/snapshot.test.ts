@@ -37,6 +37,9 @@ describe('bar debug snapshot', () => {
     });
     expect(launch.series?.close).toEqual([2, null, 3]);
     expect(launch.series?.skip).toBeUndefined();
+    expect(launch.program).toBeUndefined();
+    const withProgram = launchFromRun([{ time: 1, close: 2 }], undefined, ' /tmp/sma.pine ');
+    expect(withProgram.program).toBe('/tmp/sma.pine');
     rememberBarDebugLaunch(launch);
     expect(lastBarDebugLaunch()?.bars).toHaveLength(1);
   });

@@ -112,14 +112,33 @@ describe('AXIS bar DAP (type axis-bar, not pyne)', () => {
     expect(s.toggleBarBreakpoint(2)).toBe(false);
   });
 
-  test('line breakpoints verify; continue with line BP stops every bar', () => {
+  test('editor line breakpoints are unverified and do not stop the bar session', () => {
     const s = new AxisBarDebugSession();
     s.handle(req('launch', 1, { bars: BARS }));
     const set = s.handle(req('setBreakpoints', 2, { breakpoints: [{ line: 3 }, { line: 0 }] }));
-    const bps = (firstResponse(set).body as { breakpoints: Array<{ line: number }> }).breakpoints;
-    expect(bps).toEqual([{ line: 3, verified: true }]);
+    const bps = (
+      firstResponse(set).body as { breakpoints: Array<{ line: number; verified: boolean; message?: string }> }
+    ).breakpoints;
+    expect(bps).toEqual([
+      {
+        line: 3,
+        verified: false,
+        message: 'AXIS steps bars, not source lines. Use AXIS: Toggle Bar Breakpoint.',
+      },
+    ]);
     s.handle(req('continue', 3));
-    expect(s.currentBar).toBe(1);
+    expect(s.currentBar).toBe(2);
+  });
+
+  test('launch program opens the script path on the stack frame', () => {
+    const s = new AxisBarDebugSession();
+    s.handle(req('launch', 1, { bars: BARS, program: '/tmp/orb.pine' }));
+    const stack = firstResponse(s.handle(req('stackTrace', 2)));
+    const frame = (
+      stack.body as { stackFrames: Array<{ source?: { name?: string; path?: string } }> }
+    ).stackFrames[0];
+    expect(frame?.source?.name).toBe('orb.pine');
+    expect(frame?.source?.path).toBe('/tmp/orb.pine');
   });
 
   test('threads/stack/scopes/pause/disconnect; ignore garbage; unknown command fails', () => {

@@ -30,10 +30,12 @@ import {
   type EngineRunResult,
   type FetchLike,
   type RunMode,
+  mapEngineResponse,
   postEngineRun,
 } from './engine-http';
 import { scanPineLookahead } from '../host/lookahead';
 import { formatPyodideRunBanner } from '../host/pyodide-profile';
+import { declarePineInputs, evaluateMinimalSubset } from './pyodide-subset';
 import { chartFullFromRunResult, withLookahead } from './run-envelope';
 import { scrubSecrets } from './scrub';
 
@@ -107,6 +109,7 @@ export interface RunDeps {
     bars: OhlcvBar[];
     mode: RunMode;
     signal?: AbortSignal;
+    inputs?: Record<string, unknown>;
   }) => Promise<EngineRunResult>;
   bus: {
     notifyChart(message: ChartNotifyMessage): void;
@@ -124,6 +127,28 @@ export type RunOutcome =
       error?: string;
       result?: EngineRunResult;
     };
+
+function inputsMissing(raw: unknown): boolean {
+  if (raw === undefined || raw === null) return true;
+  if (Array.isArray(raw)) return raw.length === 0;
+  if (typeof raw === 'object') return Object.keys(raw as Record<string, unknown>).length === 0;
+  return false;
+}
+
+/** Fill the inputs form from source when the engine did not declare any. */
+function ensureDeclaredInputs(
+  result: EngineRunResult,
+  script: string,
+  overrides?: Record<string, unknown>,
+): void {
+  if (!inputsMissing(result.inputs)) return;
+  try {
+    const declared = declarePineInputs(script, overrides);
+    if (declared.length > 0) result.inputs = declared;
+  } catch {
+    // a missing form must not fail the run
+  }
+}
 
 function symbolFromSeriesKey(seriesKey: string): string {
   const parts = String(seriesKey ?? '').split('|');
@@ -244,12 +269,28 @@ export class RunOrchestrator {
           safeLog(deps.output, `run aborted epoch=${my}`);
           return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted' };
         }
-        const result = await deps.runPyodide({
+        let result = await deps.runPyodide({
           script: req.script,
           bars: req.bars,
           mode: req.mode || 'auto',
           signal,
+          inputs: req.inputs,
         });
+        if (
+          result.status === 'error' &&
+          (result.errorKind === 'load' || result.errorKind === 'wheel')
+        ) {
+          const subset = evaluateMinimalSubset(req.script, req.bars, req.inputs);
+          if (subset.status === 'success') {
+            safeLog(
+              deps.output,
+              `pyodide unavailable (${result.errorKind}); engine=local-subset uploaded=0`,
+            );
+            const mapped = mapEngineResponse(subset, { ms: result.meta.ms });
+            mapped.meta.fallback = 'local-subset';
+            result = mapped;
+          }
+        }
         dumpEngineLogs(deps.output, result.logs);
         return this.finishRun(req, deps, my, started, result, signal);
       }
@@ -374,6 +415,7 @@ export class RunOrchestrator {
     const base = typeof req.baseSeq === 'number' && Number.isFinite(req.baseSeq) ? req.baseSeq : 0;
     const nextSeq = Math.max(this.seq, base) + 1;
     this.seq = nextSeq;
+    ensureDeclaredInputs(result, req.script, req.inputs);
     const full = withLookahead(
       chartFullFromRunResult(result, req.bars, nextSeq),
       scanPineLookahead(req.script),
@@ -386,11 +428,15 @@ export class RunOrchestrator {
 
     const runId = `run-${my}`;
     if (req.engineId === 'pyodide') {
-      const wheel =
-        typeof result.meta?.wheel === 'string' && result.meta.wheel.trim()
-          ? result.meta.wheel.trim()
-          : 'hoox_pyne';
-      safeLog(deps.output, formatPyodideRunBanner(wheel));
+      if (result.meta?.fallback === 'local-subset') {
+        safeLog(deps.output, 'engine=local-subset uploaded=0');
+      } else {
+        const wheel =
+          typeof result.meta?.wheel === 'string' && result.meta.wheel.trim()
+            ? result.meta.wheel.trim()
+            : 'hoox_pyne';
+        safeLog(deps.output, formatPyodideRunBanner(wheel));
+      }
     }
     safeLog(deps.output, `run ok epoch=${my} ms=${Math.round(ms)} runId=${runId} seq=${nextSeq}`);
     return { ok: true, epoch: my, runId, result, seq: nextSeq };

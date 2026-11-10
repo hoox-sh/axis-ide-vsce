@@ -41,13 +41,19 @@ import {
 import type { ChartBar, ChartPlotLine, ChartViewState, StrategyView } from './state';
 import { applyPlotWindow, plotPoints, plotTimeAt } from './state';
 
+/** HOOX AXIS chart palette — up, down, accent. Matches the HOOX AXIS theme. */
+const AXIS_UP = '#3ddc97';
+const AXIS_DOWN = '#f07178';
+const AXIS_ACCENT = '#8b9cff';
+const AXIS_WARN = '#e8b84a';
+
 const PLOT_COLORS = [
-  '#22d3ee',
-  '#fbbf24',
-  '#a78bfa',
-  '#34d399',
-  '#fb7185',
-  '#60a5fa',
+  AXIS_ACCENT,
+  '#6ee7f5',
+  AXIS_UP,
+  AXIS_WARN,
+  AXIS_DOWN,
+  '#c4b5fd',
 ];
 
 /** Layout options — TradingView attribution logo off (VSIX NOTICE already ships). */
@@ -379,7 +385,7 @@ export function strategyMarkersFromTrades(
     out.push({
       time: time as UTCTimestamp,
       position: isEntry ? (isShort ? 'aboveBar' : 'belowBar') : isShort ? 'belowBar' : 'aboveBar',
-      color: isEntry ? (isShort ? '#ef5350' : '#26a69a') : '#fbbf24',
+      color: isEntry ? (isShort ? AXIS_DOWN : AXIS_UP) : AXIS_WARN,
       shape: isEntry ? (isShort ? 'arrowDown' : 'arrowUp') : 'circle',
       text: t.id,
     });
@@ -411,7 +417,7 @@ export function shapeMarkersFromPlots(
       out.push({
         time: v.time as UTCTimestamp,
         position,
-        color: readableOnDark(plot.colors?.[i] ?? plot.color ?? '#a78bfa', '#a78bfa'),
+        color: readableOnDark(plot.colors?.[i] ?? plot.color ?? AXIS_ACCENT, AXIS_ACCENT),
         shape,
         text: plot.text ?? plot.char ?? '',
       });
@@ -472,7 +478,7 @@ export function applyPlotOverlays(
     .map((plot, index) => ({ plot, index }))
     .sort((a, b) => paintRank(a.plot) - paintRank(b.plot) || a.index - b.index);
   for (const { plot, index } of paintOrder) {
-    const fallback = PLOT_COLORS[index % PLOT_COLORS.length] ?? '#22d3ee';
+    const fallback = PLOT_COLORS[index % PLOT_COLORS.length] ?? AXIS_ACCENT;
     const color = readableOnDark(plot.color ?? fallback, fallback);
     const width = (
       plot.linewidth && plot.linewidth > 0 ? Math.min(4, plot.linewidth) : plot.id === EQUITY_PLOT_ID ? 1 : 2
@@ -739,11 +745,11 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
       timeScale: { borderVisible: false },
     });
     series = chart.addSeries(CandlestickSeries, {
-      upColor: '#26a69a',
-      downColor: '#ef5350',
+      upColor: AXIS_UP,
+      downColor: AXIS_DOWN,
       borderVisible: false,
-      wickUpColor: '#26a69a',
-      wickDownColor: '#ef5350',
+      wickUpColor: AXIS_UP,
+      wickDownColor: AXIS_DOWN,
     });
     if (placeholder) placeholder.remove();
     host.setAttribute('data-axis-paint', 'lwc');
@@ -864,7 +870,7 @@ export function createChartPainter(host: HTMLElement): ChartPainter {
             id: EQUITY_PLOT_ID,
             values: equity,
             kind: 'line',
-            color: '#e7e5e4',
+            color: AXIS_ACCENT,
             linewidth: 1,
           });
         }

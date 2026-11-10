@@ -50,11 +50,17 @@ export function resolveTradeBarIndex(
   return undefined;
 }
 
-export function launchFromRun(bars: AxisBarOhlcv[], series?: Record<string, unknown>): AxisBarLaunch {
+export function launchFromRun(
+  bars: AxisBarOhlcv[],
+  series?: Record<string, unknown>,
+  program?: string,
+): AxisBarLaunch {
+  const path = typeof program === 'string' ? program.trim() : '';
   return {
     bars: Array.isArray(bars) ? bars : [],
     series: seriesColumns(series),
     stopOnEntry: true,
+    program: path || undefined,
   };
 }
 

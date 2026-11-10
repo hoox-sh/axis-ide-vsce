@@ -91,7 +91,7 @@ export {
   type PyodideRuntime,
   type PyodideRunRequest,
 } from './pyodide-calculator';
-export { evaluateMinimalSubset } from './pyodide-subset';
+export { declarePineInputs, evaluateMinimalSubset, type PineInputDecl } from './pyodide-subset';
 export {
   callPyodideRunScript,
   installPynescriptRuntime,

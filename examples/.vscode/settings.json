@@ -1,0 +1,12 @@
+{
+  "workbench.colorTheme": "HOOX AXIS",
+  "axis.chart.useMockBars": true,
+  "editor.fontSize": 15,
+  "editor.minimap.enabled": false,
+  "window.autoDetectColorScheme": false,
+  "workbench.startupEditor": "none",
+  "files.associations": {
+    "*.pine": "pinescript",
+    "*.pyne": "pinescript"
+  }
+}

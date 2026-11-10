@@ -88,7 +88,7 @@ import { existsSync } from 'node:fs';
 import { join as joinPath } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { registerAxisBarDebugger, type AxisBarDebugHandle } from './debug/register';
-import { launchFromRun, rememberBarDebugLaunch } from './debug/snapshot';
+import { lastBarDebugLaunch, launchFromRun, rememberBarDebugLaunch } from './debug/snapshot';
 import {
   DEFAULT_ENGINE_ENDPOINT,
   RunOrchestrator,
@@ -424,7 +424,9 @@ async function runScriptCore(opts: {
 
     if (outcome.ok) {
       try {
-        rememberBarDebugLaunch(launchFromRun(ctx.bars, outcome.result.series));
+        rememberBarDebugLaunch(
+          launchFromRun(ctx.bars, outcome.result.series, pinePath || undefined),
+        );
       } catch {
         // debug snapshot is best-effort
       }
@@ -840,7 +842,7 @@ export function activate(context: ExtensionContext): void {
       const path = await import('node:path');
       const { pathToFileURL: toUrl } = await import('node:url');
       return loadPyodideFromCdn(cacheDir, {
-        fetchImpl: (url) => fetch(url),
+        fetchImpl: (url) => fetch(url, { signal: AbortSignal.timeout(20_000) }),
         mkdir: async (dir) => {
           await fs.mkdir(dir, { recursive: true });
         },
@@ -925,7 +927,21 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.stopRun, () => stopRunCommand()),
     commands.registerCommand(COMMANDS.showRunOutput, () => showRunOutputCommand()),
     commands.registerCommand(COMMANDS.pickData, () => pickDataCommand()),
-    commands.registerCommand(COMMANDS.debugStart, () => barDebug?.start()),
+    commands.registerCommand(COMMANDS.debugStart, () => {
+      const doc = window.activeTextEditor?.document;
+      const pinePath =
+        doc && doc.uri.scheme === 'file' && isPineFilePath(doc.uri.fsPath) ? doc.uri.fsPath : '';
+      if (pinePath) {
+        const last = lastBarDebugLaunch();
+        rememberBarDebugLaunch({
+          bars: last?.bars ?? [],
+          series: last?.series,
+          stopOnEntry: last?.stopOnEntry !== false,
+          program: pinePath,
+        });
+      }
+      return barDebug?.start();
+    }),
     commands.registerCommand(COMMANDS.debugStepBar, () => barDebug?.stepBar()),
     commands.registerCommand(COMMANDS.debugToggleBarBreakpoint, () => {
       const session = barDebug?.session();

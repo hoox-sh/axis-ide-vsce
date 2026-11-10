@@ -90,10 +90,31 @@ export type PyodideCalculator = {
   reset(): void;
 };
 
+/** CDN + Wasm boot budget. A hang must become a load error so the local subset can run. */
+export const PYODIDE_LOAD_TIMEOUT_MS = 45_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 /** Create a session. `load` is injected (tests mock; host uses CDN). */
 export function createPyodideCalculator(opts: {
   load: PyodideLoadFn;
   install?: PyodideInstallFn;
+  /** Defaults to {@link PYODIDE_LOAD_TIMEOUT_MS}. */
+  loadTimeoutMs?: number;
 }): PyodideCalculator {
   let wasmLoaded = false;
   let runtimeReady = false;
@@ -107,7 +128,12 @@ export function createPyodideCalculator(opts: {
     if (runtime && wasmLoaded && runtimeReady) return;
     if (signal?.aborted) throw new Error('Aborted');
     if (!runtime || !wasmLoaded) {
-      const py = await opts.load(PYODIDE_CDN_INDEX);
+      const timeout = opts.loadTimeoutMs ?? PYODIDE_LOAD_TIMEOUT_MS;
+      const py = await withTimeout(
+        opts.load(PYODIDE_CDN_INDEX),
+        timeout,
+        `Pyodide load timed out after ${timeout}ms`,
+      );
       if (signal?.aborted) throw new Error('Aborted');
       await smokeOnePlusOne(py);
       runtime = py;

@@ -880,6 +880,44 @@ describe('RunOrchestrator', () => {
     if (!outcome.ok) expect(outcome.reason).toBe('aborted');
   });
 
+  test('pyodide run forwards inputs and fills declarations the engine omitted', async () => {
+    let seen: Record<string, unknown> | undefined;
+    const orch = new RunOrchestrator();
+    const { deps, charts } = makeDeps();
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async (req) => {
+      seen = req.inputs;
+      return mapEngineResponse({ status: 'success', plots: { close: [1] }, series: { close: [1] } });
+    };
+    const script = 'indicator("t")\nlen = input.int(14, "Length")\nplot(close)\n';
+    const outcome = await orch.run(baseReq({ engineId: 'pyodide', script, inputs: { Length: 9 } }), deps);
+    expect(outcome.ok).toBe(true);
+    expect(seen).toEqual({ Length: 9 });
+    const full = charts.find((m) => m.type === 'chart.full');
+    const inputs = (full?.payload as { inputs?: Array<{ title: string; value: unknown }> } | undefined)
+      ?.inputs;
+    expect(inputs).toEqual([
+      expect.objectContaining({ title: 'Length', type: 'int', value: 9, defval: 14 }),
+    ]);
+  });
+
+  test('pyodide load failure falls back to the local subset', async () => {
+    const orch = new RunOrchestrator();
+    const { deps, charts, lines } = makeDeps();
+    deps.pyodideAllowed = true;
+    deps.runPyodide = async () =>
+      mapEngineResponse({ status: 'error', error: 'cdn down', error_kind: 'load' });
+    const outcome = await orch.run(
+      baseReq({ engineId: 'pyodide', script: 'indicator("t")\nplot(close)\n' }),
+      deps,
+    );
+    expect(outcome.ok).toBe(true);
+    expect(lines.some((l) => l.includes('engine=local-subset uploaded=0'))).toBe(true);
+    const full = charts.find((m) => m.type === 'chart.full');
+    const plots = (full?.payload as { plots?: Record<string, number[]> } | undefined)?.plots;
+    expect(plots?.close).toEqual([100]);
+  });
+
   test('pyodide engine without flag is disabled without fetch', async () => {
     let called = false;
     const orch = new RunOrchestrator();

@@ -17,8 +17,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { describe, expect, test } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PYODIDE_PINE_WHEEL_NEXT } from '../host/pyodide-profile';
-import { evaluateMinimalSubset } from './pyodide-subset';
+import { declarePineInputs, evaluateMinimalSubset } from './pyodide-subset';
 
 const BARS = [
   { time: 1_700_000_000, open: 10, high: 12, low: 9, close: 11, volume: 1 },
@@ -96,5 +98,32 @@ describe('pyodide minimal subset', () => {
       { time: 2, open: 1, high: 1, low: 1, close: Number.NaN, volume: 1 },
     ]);
     expect(gappy.plots.sma2).toEqual([null, null]);
+  });
+
+  test('walkthrough fixture: input length, source, assignment, and plot color', () => {
+    const script = readFileSync(join(import.meta.dir, '../../fixtures/orb.pine'), 'utf8');
+    const declared = declarePineInputs(script);
+    expect(declared.map((d) => d.title)).toEqual(['Length', 'Source']);
+    expect(declared[0]).toMatchObject({ type: 'int', value: 14, defval: 14 });
+    const r = evaluateMinimalSubset(script, BARS);
+    expect(r.status).toBe('success');
+    expect(r.script_name).toBe('AXIS first plot');
+    expect(r.plots.SMA).toEqual([null, null, null]);
+    expect(r.plot_meta.SMA?.color?.toLowerCase()).toBe('#939fff');
+    expect(r.inputs?.[0]?.title).toBe('Length');
+    const shorter = evaluateMinimalSubset(script, BARS, { Length: 2, Source: 'open' });
+    expect(shorter.plots.SMA).toEqual([null, 10.5, 11.5]);
+    expect(shorter.inputs?.find((d) => d.title === 'Length')?.value).toBe(2);
+  });
+
+  test('strategy.entry on bar_index paints one trade and an equity curve', () => {
+    const script = readFileSync(join(import.meta.dir, '../../fixtures/pyodide-strategy.pine'), 'utf8');
+    const r = evaluateMinimalSubset(script, BARS);
+    expect(r.status).toBe('success');
+    expect(r.script_type).toBe('strategy');
+    expect(r.plots.close).toEqual([11, 12, 13]);
+    expect(r.plots.sma2).toEqual([null, 11.5, 12.5]);
+    expect(r.events?.[0]).toMatchObject({ kind: 'entry', id: 'L', direction: 'long', bar_index: 0 });
+    expect(r.series.__equity).toEqual([0, 1, 2]);
   });
 });

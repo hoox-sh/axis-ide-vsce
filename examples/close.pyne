@@ -1,0 +1,3 @@
+//@version=6
+indicator("Close", overlay=true)
+plot(close, "Close", color=color.aqua)
