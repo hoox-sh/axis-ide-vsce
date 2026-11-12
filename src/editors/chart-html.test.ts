@@ -46,7 +46,7 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain("base-uri 'none'");
     expect(html).toContain("form-action 'none'");
     expect(html).toContain("connect-src 'none'");
-    expect(html).not.toContain('data-axis-pyodide-cdn');
+    expect(html).not.toContain('data-axis-pyodide-index');
     expect(html).toContain(`src="${CSP_SOURCE}/main.js"`);
     expect(html).toContain(`href="${CSP_SOURCE}/main.css"`);
     expect(html).toContain('id="chart-host"');
@@ -123,12 +123,12 @@ describe('chart CSP HTML builder', () => {
     expect(csp).not.toContain('worker-src');
   });
 
-  test('allowPyodide widens script-src, connect-src CDN, and worker-src blob:', () => {
+  test('allowPyodide widens script-src, connect-src (webview + CDN), and worker-src blob:', () => {
     const directives = buildChartCspDirectives(CSP_SOURCE, true);
     const csp = directives.join('; ');
     expect(csp).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval' https://cdn.jsdelivr.net`);
     expect(csp).toContain(`worker-src blob: ${CSP_SOURCE}`);
-    expect(csp).toContain('connect-src https://cdn.jsdelivr.net');
+    expect(csp).toContain(`connect-src ${CSP_SOURCE} https://cdn.jsdelivr.net`);
     expect(csp).not.toContain("connect-src 'none'");
 
     const html = buildChartWebviewHtml({
@@ -140,8 +140,24 @@ describe('chart CSP HTML builder', () => {
     });
     expect(html).toContain(`script-src ${CSP_SOURCE} 'wasm-unsafe-eval' https://cdn.jsdelivr.net`);
     expect(html).toContain(`worker-src blob: ${CSP_SOURCE}`);
-    expect(html).toContain('data-axis-pyodide-cdn="https://cdn.jsdelivr.net/pyodide/v0.29.5/full/"');
+    expect(html).toContain('data-axis-pyodide-index="https://cdn.jsdelivr.net/pyodide/v0.29.5/full/"');
     expect(htmlHasInlineScript(html)).toBe(false);
+  });
+
+  test('allowPyodide uses the bundled webview index when provided', () => {
+    const bundled = `${CSP_SOURCE}/vendor/pyodide/0.29.5/`;
+    const html = buildChartWebviewHtml({
+      cspSource: CSP_SOURCE,
+      scriptUri: `${CSP_SOURCE}/main.js`,
+      styleUri: `${CSP_SOURCE}/main.css`,
+      bodyClass: 'vscode-dark',
+      allowPyodide: true,
+      pyodideIndex: bundled,
+    });
+    expect(html).toContain(`data-axis-pyodide-index="${bundled}"`);
+    expect(html).not.toContain('data-axis-pyodide-index="https://cdn.jsdelivr.net');
+    // Bundled boot still needs connect-src for the extension origin (Wasm fetch).
+    expect(html).toContain(`connect-src ${CSP_SOURCE}`);
   });
 
   test('escapes URI attribute characters', () => {

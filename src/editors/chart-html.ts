@@ -31,6 +31,11 @@ export interface ChartHtmlOptions {
    * Default false — paint-only matrix unchanged. See `docs/csp-matrix.md`.
    */
   allowPyodide?: boolean;
+  /**
+   * Index URL handed to the chart worker. Host passes the bundled
+   * `vendor/pyodide/<version>/` webview URI; defaults to the jsDelivr index.
+   */
+  pyodideIndex?: string;
 }
 
 /** Escape a value for use inside a double-quoted HTML attribute. */
@@ -45,6 +50,8 @@ export function escapeHtmlAttr(value: string): string {
 /**
  * Chart CSP directives (KD-6). Default paint-only; optional Pyodide widen adds
  * `'wasm-unsafe-eval'` + `worker-src blob: ${cspSource}` when `allowPyodide`.
+ * `connect-src` also allows `${cspSource}` so a bundled worker can read the
+ * Wasm/stdlib from the extension (jsDelivr stays for the no-bundle fallback).
  */
 export function buildChartCspDirectives(cspSource: string, allowPyodide = false): string[] {
   const src = String(cspSource ?? '');
@@ -52,7 +59,7 @@ export function buildChartCspDirectives(cspSource: string, allowPyodide = false)
     ? `script-src ${src} 'wasm-unsafe-eval' ${PYODIDE_CDN_ORIGIN}`
     : `script-src ${src}`;
   const connectSrc = allowPyodide
-    ? `connect-src ${PYODIDE_CDN_ORIGIN}`
+    ? `connect-src ${src} ${PYODIDE_CDN_ORIGIN}`
     : "connect-src 'none'";
   const directives = [
     "default-src 'none'",
@@ -87,8 +94,9 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
   const safeScript = escapeHtmlAttr(scriptUri);
   const safeStyle = escapeHtmlAttr(styleUri);
   const safeClass = bodyClass.replace(/[^a-zA-Z0-9_-]/g, '');
+  const pyodideIndex = String(opts.pyodideIndex ?? '').trim() || PYODIDE_CDN_INDEX;
   const pyodideAttr = allowPyodide
-    ? ` data-axis-pyodide-cdn="${escapeHtmlAttr(PYODIDE_CDN_INDEX)}"`
+    ? ` data-axis-pyodide-index="${escapeHtmlAttr(pyodideIndex)}"`
     : '';
 
   return `<!DOCTYPE html>

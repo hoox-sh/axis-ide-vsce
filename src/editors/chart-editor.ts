@@ -17,7 +17,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { existsSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join as joinPath } from 'node:path';
 import {
   type CancellationToken,
   CancellationError,
@@ -63,7 +63,13 @@ import {
   loadOhlcvCsvFile,
   resolveBarsFilePath,
 } from '../host/csv-bars';
-import { ALLOW_PYODIDE_DEFAULT, isPyodideAllowed } from '../host/pyodide-profile';
+import {
+  ALLOW_PYODIDE_DEFAULT,
+  isPyodideAllowed,
+  isPyodideBundleComplete,
+  PYODIDE_BUNDLE_PARTS,
+  PYODIDE_CDN_INDEX,
+} from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
 import {
@@ -324,13 +330,29 @@ function getChartHtml(webview: Webview, extensionUri: Uri): string {
   assertChartAssets(extensionUri);
   const script = webview.asWebviewUri(chartAssetPath(extensionUri, 'main.js'));
   const style = webview.asWebviewUri(chartAssetPath(extensionUri, 'main.css'));
+  const allowPyodide = readAllowPyodide();
   return buildChartWebviewHtml({
     cspSource: webview.cspSource,
     scriptUri: script.toString(),
     styleUri: style.toString(),
     bodyClass: themeBodyClass(window.activeColorTheme.kind),
-    allowPyodide: readAllowPyodide(),
+    allowPyodide,
+    pyodideIndex: allowPyodide ? bundledPyodideIndex(webview, extensionUri) : undefined,
   });
+}
+
+/**
+ * Webview URL for the Pyodide copy shipped in the VSIX. Falls back to the
+ * jsDelivr index only when the vendor dir is absent (dev tree without
+ * `bun run vendor:pyodide`).
+ */
+function bundledPyodideIndex(webview: Webview, extensionUri: Uri): string {
+  const dir = UriClass.joinPath(extensionUri, ...PYODIDE_BUNDLE_PARTS);
+  if (!isPyodideBundleComplete(dir.fsPath, existsSync, joinPath)) {
+    return PYODIDE_CDN_INDEX;
+  }
+  const base = webview.asWebviewUri(dir).toString();
+  return base.endsWith('/') ? base : `${base}/`;
 }
 
 interface ChartHostSettings {
@@ -715,6 +737,8 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       localResourceRoots: [
         UriClass.joinPath(this.context.extensionUri, 'dist', 'webview', 'chart'),
         UriClass.joinPath(this.context.extensionUri, 'media'),
+        // Bundled Pyodide boot files (chart worker reads pyodide.js + Wasm).
+        UriClass.joinPath(this.context.extensionUri, ...PYODIDE_BUNDLE_PARTS),
       ],
     };
 

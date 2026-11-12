@@ -18,7 +18,7 @@
 
 /**
  * Resolve a trusted pynescript / hoox-pyne wheel for Pyodide micropip.
- * Wasm stays on the CDN; this artifact is a pure-Python wheel.
+ * Pyodide 0.29.5 ships in the VSIX; this artifact is a pure-Python wheel.
  */
 
 export const PYODIDE_WHEEL_SETTING = 'axis.engine.pyodideWheelUrl';

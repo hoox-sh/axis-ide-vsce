@@ -6,6 +6,10 @@ out/
 dist/
 *.tsbuildinfo
 
+# Vendored Pyodide boot files (scripts/vendor-pyodide.mjs fills this at package
+# time; the VSIX ships them, the repo does not carry ~12 MB of Wasm).
+vendor/pyodide/
+
 # Test / coverage
 coverage/
 .nyc_output/

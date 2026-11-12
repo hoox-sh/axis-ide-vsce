@@ -78,11 +78,12 @@ import {
   workerKeyPromptCopy,
 } from './secrets';
 import { DEFAULT_DATAFEED_URL } from './host/history-client';
-import { setLogSink } from './host/logger';
+import { logInfo, setLogSink } from './host/logger';
 import {
   ALLOW_PYODIDE_DEFAULT,
   isPyodideAllowed,
   LOCAL_PYODIDE_VERSION,
+  PYODIDE_BUNDLE_PARTS,
 } from './host/pyodide-profile';
 import { existsSync } from 'node:fs';
 import { join as joinPath } from 'node:path';
@@ -95,7 +96,7 @@ import {
   checkEngineEndpoint,
   createPyodideCalculator,
   installPynescriptRuntime,
-  loadPyodideFromCdn,
+  loadPyodideRuntime,
   notifyChart,
   resolvePyodideAssets,
   resolveRunContext,
@@ -834,29 +835,34 @@ export function activate(context: ExtensionContext): void {
   const cacheDir = context.globalStorageUri
     ? Uri.joinPath(context.globalStorageUri, 'pyodide', LOCAL_PYODIDE_VERSION).fsPath
     : '';
+  const bundledDir = Uri.joinPath(context.extensionUri, ...PYODIDE_BUNDLE_PARTS).fsPath;
   pyodideCalc = createPyodideCalculator({
     load: async (indexURL) => {
       const fs = await import('node:fs/promises');
       const path = await import('node:path');
       const { pathToFileURL: toUrl } = await import('node:url');
-      return loadPyodideFromCdn(cacheDir, {
-        fetchImpl: (url) => fetch(url),
-        mkdir: async (dir) => {
-          await fs.mkdir(dir, { recursive: true });
+      return loadPyodideRuntime(
+        { cacheDir, bundledDir, downloadBase: indexURL },
+        {
+          fetchImpl: (url) => fetch(url),
+          mkdir: async (dir) => {
+            await fs.mkdir(dir, { recursive: true });
+          },
+          writeFile: (filePath, data) => fs.writeFile(filePath, data),
+          importModule: (fileUrl) => import(fileUrl),
+          joinPath: (...parts) => path.join(...parts),
+          toFileUrl: (fsPath) => toUrl(fsPath).href,
+          exists: async (filePath) => {
+            try {
+              await fs.access(filePath);
+              return true;
+            } catch {
+              return false;
+            }
+          },
+          log: (message) => logInfo(message),
         },
-        writeFile: (filePath, data) => fs.writeFile(filePath, data),
-        importModule: (fileUrl) => import(fileUrl),
-        joinPath: (...parts) => path.join(...parts),
-        toFileUrl: (fsPath) => toUrl(fsPath).href,
-        exists: async (filePath) => {
-          try {
-            await fs.access(filePath);
-            return true;
-          } catch {
-            return false;
-          }
-        },
-      }, indexURL);
+      );
     },
     install: async (py) => {
       const fs = await import('node:fs/promises');

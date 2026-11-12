@@ -108,6 +108,15 @@ jobs:
       - name: Build IDE VSIX
         run: bun run package
 
+      - name: Verify VSIX ships Pyodide
+        run: |
+          VSIX="axis-ide-$(node -p "require('./package.json').version").vsix"
+          for FILE in pyodide.mjs pyodide.js pyodide-lock.json pyodide.asm.js pyodide.asm.wasm python_stdlib.zip; do
+            unzip -l "$VSIX" | grep -q "extension/vendor/pyodide/0.29.5/$FILE" \
+              || { echo "::error::$VSIX is missing vendor/pyodide/0.29.5/$FILE"; exit 1; }
+          done
+          echo "$VSIX ships the pinned Pyodide 0.29.5 runtime."
+
       - name: Install pack dependencies
         working-directory: pack
         run: bun install --frozen-lockfile

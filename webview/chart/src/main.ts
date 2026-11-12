@@ -32,7 +32,7 @@ import {
   type DrawingOverlay,
 } from './drawings';
 import { createChartPainter, type ChartCrosshairSample, type ChartPainter } from './paint';
-import { bootPyodideCdnWorker } from './pyodide-boot';
+import { bootPyodideWorker } from './pyodide-boot';
 import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
 import {
   applyChartHostMessage,
@@ -1430,7 +1430,7 @@ function main(): void {
   ensureOverlay();
   syncToolButton();
   refreshChrome();
-  bootPyodideCdnWorker();
+  bootPyodideWorker();
   postReady(api);
 }
 

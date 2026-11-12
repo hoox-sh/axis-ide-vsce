@@ -20,10 +20,12 @@
  * Optional Pyodide calculator profile (Task 27 / PR-15).
  *
  * Bars-in only — not stream-owning (engine redesign §5.2). Version matches the
- * AXIS PWA lock. Multi-MB Wasm is **never** shipped in this VSIX; when the flag
- * is on the host loads 0.29.5 from jsDelivr into `globalStorage`. `ready` is
- * true only after Wasm smoke (`1+1`) **and** a pynescript Runtime smoke
- * (`callable(run_script)`). Wave 1: setting default is **true**.
+ * AXIS PWA lock. Pyodide **0.29.5 is shipped in this VSIX** under
+ * `vendor/pyodide/0.29.5/` (see `scripts/vendor-pyodide.mjs`); the host boots
+ * from that read-only copy and only falls back to jsDelivr → `globalStorage`
+ * when the bundle is absent (dev tree without `bun run vendor:pyodide`).
+ * `ready` is true only after Wasm smoke (`1+1`) **and** a pynescript Runtime
+ * smoke (`callable(run_script)`). Wave 1: setting default is **true**.
  */
 
 /** Locked Pyodide runtime version (same as PWA `src/engines/catalog.ts`). */
@@ -38,8 +40,47 @@ export const ALLOW_PYODIDE_DEFAULT = true;
 /** Origin allowed in chart CSP only when the flag is on (jsDelivr official CDN). */
 export const PYODIDE_CDN_ORIGIN = 'https://cdn.jsdelivr.net';
 
-/** Trailing-slash index URL for `loadPyodide({ indexURL })`. */
+/** Trailing-slash jsDelivr index: fallback download base and no-bundle webview index. */
 export const PYODIDE_CDN_INDEX = `${PYODIDE_CDN_ORIGIN}/pyodide/v${LOCAL_PYODIDE_VERSION}/full/`;
+
+/** Path parts (under the extension root) of the Pyodide copy shipped in the VSIX. */
+export const PYODIDE_BUNDLE_PARTS = ['vendor', 'pyodide', LOCAL_PYODIDE_VERSION] as const;
+
+/** One file `loadPyodide` (or the chart worker) reads from an index directory. */
+export type PyodideBootFile = {
+  /** CDN file name — the bundled dir keeps the same layout. */
+  name: string;
+  /** Reject truncated downloads / HTML error pages. */
+  minBytes: number;
+};
+
+/**
+ * Every file a boot needs. The bundled dir, the `globalStorage` cache, and the
+ * CDN all use the same names so one list covers all three.
+ */
+export const PYODIDE_BOOT_FILES: readonly PyodideBootFile[] = [
+  { name: 'pyodide.mjs', minBytes: 1024 },
+  { name: 'pyodide.js', minBytes: 1024 },
+  { name: 'pyodide-lock.json', minBytes: 1024 },
+  { name: 'pyodide.asm.js', minBytes: 1024 },
+  { name: 'pyodide.asm.wasm', minBytes: 65536 },
+  { name: 'python_stdlib.zip', minBytes: 1024 },
+];
+
+/** True when `dir` holds every boot file (bundled VSIX copy or a warm cache). */
+export function isPyodideBundleComplete(
+  dir: string,
+  exists: (absPath: string) => boolean,
+  joinPath: (...parts: string[]) => string,
+): boolean {
+  const root = String(dir ?? '').trim();
+  if (!root) return false;
+  try {
+    return PYODIDE_BOOT_FILES.every((file) => exists(joinPath(root, file.name)));
+  } catch {
+    return false;
+  }
+}
 
 /** Honest missing-wheel copy (wheel is not on the Pyodide CDN). */
 export const PYODIDE_PINE_WHEEL_NEXT =
@@ -101,7 +142,7 @@ export function pyodideRuntimeStatus(
   if (load?.wasmLoaded === true && load.runtimeReady === true) {
     return {
       ready: true,
-      reason: `Pyodide ${LOCAL_PYODIDE_VERSION} + pynescript Runtime ready (CDN ${PYODIDE_CDN_ORIGIN}; Wasm not in VSIX)`,
+      reason: `Pyodide ${LOCAL_PYODIDE_VERSION} + pynescript Runtime ready (bundled copy; no runtime download)`,
       version: LOCAL_PYODIDE_VERSION,
       profile: PYODIDE_CALCULATOR_PROFILE,
     };
@@ -120,7 +161,7 @@ export function pyodideRuntimeStatus(
     ready: false,
     reason:
       err ||
-      `Pyodide ${LOCAL_PYODIDE_VERSION} not loaded yet — will fetch Wasm from ${PYODIDE_CDN_INDEX} into globalStorage (not shipped in this VSIX)`,
+      `Pyodide ${LOCAL_PYODIDE_VERSION} not loaded yet — boots from the bundled ${PYODIDE_BUNDLE_PARTS.join('/')} copy; missing files are fetched from ${PYODIDE_CDN_INDEX} into globalStorage`,
     version: LOCAL_PYODIDE_VERSION,
     profile: PYODIDE_CALCULATOR_PROFILE,
   };

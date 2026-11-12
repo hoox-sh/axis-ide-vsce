@@ -82,7 +82,11 @@ export {
   type StrategyReport,
   type StrategyTrade,
 } from './run-envelope';
-export { loadPyodideFromCdn, type PyodideCdnLoaderDeps } from './pyodide-cdn-loader';
+export {
+  loadPyodideRuntime,
+  type PyodideBootOptions,
+  type PyodideLoadDeps,
+} from './pyodide-cdn-loader';
 export {
   createPyodideCalculator,
   type PyodideCalculator,
