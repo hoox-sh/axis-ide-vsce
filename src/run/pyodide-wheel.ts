@@ -23,8 +23,8 @@
 
 export const PYODIDE_WHEEL_SETTING = 'axis.engine.pyodideWheelUrl';
 
-export const VENDORED_PYNE_WHEEL = 'hoox_pyne-0.6.29-py3-none-any.whl';
-export const VENDORED_PYNESCRIPT_WHEEL = 'pynescript-0.6.29-py3-none-any.whl';
+export const VENDORED_PYNE_WHEEL = 'hoox_pyne-0.7.0-py3-none-any.whl';
+export const VENDORED_PYNESCRIPT_WHEEL = 'pynescript-0.7.0-py3-none-any.whl';
 
 /** Stem used in `engine=pyodide wheel=… uploaded=0`. */
 export function pyodideWheelBannerName(fileName = VENDORED_PYNE_WHEEL): string {

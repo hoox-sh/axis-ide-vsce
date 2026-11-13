@@ -130,7 +130,7 @@ describe('pyodide calculator session', () => {
     });
     expect(result.scriptName).toBe('axis pyodide fixture');
     expect(result.scriptType).toBe('strategy');
-    expect(result.meta.wheel).toBe('hoox_pyne-0.6.29');
+    expect(result.meta.wheel).toBe('hoox_pyne-0.7.0');
   });
 
   test('failed 1+1 keeps ready false; reset retries; wheel smoke fail is wheel kind', async () => {

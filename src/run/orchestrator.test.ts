@@ -824,14 +824,14 @@ describe('RunOrchestrator', () => {
         plots: { close: [100] },
         series: { close: [100] },
       });
-      mapped.meta.wheel = 'hoox_pyne-0.6.29';
+      mapped.meta.wheel = 'hoox_pyne-0.7.0';
       return mapped;
     };
     const outcome = await orch.run(baseReq({ engineId: 'pyodide' }), deps);
     expect(called).toBe(false);
     expect(outcome.ok).toBe(true);
     expect(charts.some((m) => m.type === 'chart.full')).toBe(true);
-    expect(lines.some((l) => l === 'engine=pyodide wheel=hoox_pyne-0.6.29 uploaded=0')).toBe(true);
+    expect(lines.some((l) => l === 'engine=pyodide wheel=hoox_pyne-0.7.0 uploaded=0')).toBe(true);
     const full = charts.find((m) => m.type === 'chart.full');
     const look = (full?.payload as { lookahead?: { tainted?: boolean; static?: boolean } })?.lookahead;
     expect(look?.static).toBe(true);
