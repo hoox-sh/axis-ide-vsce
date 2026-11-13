@@ -101,6 +101,7 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'debuggers',
   'breakpoints',
   'walkthroughs',
+  'themes',
 ]);
 const EXPECTED_KEYBINDINGS = [
   {
@@ -250,6 +251,29 @@ suite('AXIS IDE Extension Structure', () => {
         `unexpected contributes.${key} — allowed: ${[...ALLOWED_CONTRIBUTE_KEYS].join('/')}`,
       );
     }
+  });
+
+  test('contributes HOOX AXIS dark and light themes', () => {
+    const themes = (
+      pkg.contributes as {
+        themes?: Array<{ label?: string; uiTheme?: string; path?: string }>;
+      }
+    )?.themes ?? [];
+    assert.deepStrictEqual(
+      themes.map((theme) => ({ label: theme.label, uiTheme: theme.uiTheme, path: theme.path })),
+      [
+        {
+          label: 'HOOX AXIS',
+          uiTheme: 'vs-dark',
+          path: './themes/hoox-axis-dark-color-theme.json',
+        },
+        {
+          label: 'HOOX AXIS Light',
+          uiTheme: 'vs',
+          path: './themes/hoox-axis-light-color-theme.json',
+        },
+      ],
+    );
   });
 
   test('keybinding ctrl/cmd+enter → axis.runScript for pinescript', () => {

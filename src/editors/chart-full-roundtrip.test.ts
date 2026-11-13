@@ -613,7 +613,7 @@ describe('chart.delta merge + seq gap → requestReload', () => {
     const bare = shapeMarkersFromPlots([b(1)], [{ id: 'sig', values: [1], kind: 'shape' }]);
     expect(bare).toHaveLength(1);
     expect(bare[0]?.text).toBe('');
-    expect(bare[0]?.color).toBe('#a78bfa');
+    expect(bare[0]?.color).toBe('#8b9cff');
   });
 
   test('stub painter records plot kinds and strategy trade count', () => {
@@ -904,5 +904,30 @@ describe('chart.delta merge + seq gap → requestReload', () => {
     expect(classes.indexOf('drawing-overlay__box')).toBeLessThan(classes.lastIndexOf('drawing-overlay__line'));
     overlay.dispose();
     expect(svg.childNodes.length).toBe(0);
+  });
+
+  test('a later run without strategy clears a previous report; bars-only full does not', () => {
+    const withStrategy = applyChartHostMessage(initialChartState(), 'chart.full', {
+      bars: [b(1)],
+      plots: { close: [1] },
+      seq: 2,
+      strategy: {
+        trades: [{ id: 'L', kind: 'entry', direction: 'long', price: 1 }],
+        stats: { trades: 1, entries: 1, exits: 0 },
+      },
+    });
+    expect(withStrategy.state.strategy?.trades).toHaveLength(1);
+    const indicator = applyChartHostMessage(withStrategy.state, 'chart.full', {
+      bars: [b(1), b(2)],
+      plots: { SMA: [1, 2] },
+      seq: 3,
+    });
+    expect(indicator.state.strategy).toBeUndefined();
+    expect(indicator.state.plots.map((p) => p.id)).toContain('SMA');
+    const history = applyChartHostMessage(withStrategy.state, 'chart.full', {
+      bars: [b(1), b(2), b(3)],
+      seq: 4,
+    });
+    expect(history.state.strategy?.trades).toHaveLength(1);
   });
 });

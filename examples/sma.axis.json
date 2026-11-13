@@ -1,0 +1,42 @@
+{
+  "schema": "axis.chart.v1",
+  "symbol": "BTCUSDT",
+  "exchange": "binance",
+  "market": "spot",
+  "interval": "1h",
+  "historyBars": 90,
+  "chartType": "candles",
+  "theme": "void",
+  "panes": [
+    {
+      "id": "price",
+      "kind": "price"
+    }
+  ],
+  "scripts": [
+    {
+      "id": "sma",
+      "uri": "./sma.pine",
+      "inputs": {}
+    }
+  ],
+  "drawings": [
+    {
+      "id": "tl-mwatucig-1",
+      "tool": "trendline",
+      "points": [
+        {
+          "time": 1703991600,
+          "price": 94.37056791590213
+        },
+        {
+          "time": 1704049200,
+          "price": 91.01763768123526
+        }
+      ]
+    }
+  ],
+  "engine": "pyodide",
+  "source": "",
+  "barsPath": ""
+}

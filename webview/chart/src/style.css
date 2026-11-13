@@ -36,6 +36,7 @@ body {
 .chart-toolbar {
   flex: 0 0 auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--axis-gap-xs, 4px);
   min-height: var(--axis-toolbar-h, 36px);
@@ -52,6 +53,11 @@ body {
   display: block;
   color: var(--axis-dim, var(--vscode-descriptionForeground, #cccccc));
   pointer-events: none;
+}
+
+/* Author `display` must not defeat the hidden attribute (UA style loses the cascade). */
+.chart-toolbar__btn[hidden] {
+  display: none;
 }
 
 .chart-toolbar__btn {

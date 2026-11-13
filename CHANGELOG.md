@@ -6,6 +6,11 @@ extracted from the AXIS monorepo with its commit history preserved.
 
 ## [Unreleased]
 
+- HOOX AXIS color theme (dark and light) with Pine Script / PYNE token colors and chart up/down colors.
+- Local run subset: `input.*`, simple assignments, and `strategy.entry` so the walkthrough study plots and shows its inputs when Pyodide cannot start. Pyodide load/wheel failures, including a 45s boot timeout, fall back to that subset (`uploaded=0`). Apply Inputs is forwarded on the Pyodide path.
+- Bar debug opens the script file. Editor line breakpoints are unverified instead of stopping on every bar.
+- Chart candles, trade markers, and the equity line use the HOOX AXIS palette.
+- Toolbar buttons with the `hidden` attribute stay hidden (a `display` rule had been showing Strategy and Live-safe on every chart). A later indicator run clears a previous strategy report. A keyed chart paint no longer lands on a chart that has not finished its handshake.
 - **Pyodide 0.29.5 ships in the VSIX.** `bun run vendor:pyodide` (run by `vscode:prepublish`) fills `vendor/pyodide/0.29.5/` with the pinned boot files (`pyodide.mjs`, `pyodide.js`, `pyodide-lock.json`, `pyodide.asm.js`, `pyodide.asm.wasm`, `python_stdlib.zip`; size + SHA-256 pinned in `scripts/pyodide-assets.json`). The host boots from that read-only copy — no first-run download — and only falls back to jsDelivr → `globalStorage` when the bundle is missing. Micropip wheels still come from the CDN and cache in `globalStorage`, never in the install dir. Chart worker `data-axis-pyodide-index` now points at the bundled webview copy, so `connect-src` also allows `${webview.cspSource}`.
 - **Pyodide boot fix:** `indexURL` handed to `loadPyodide` is always a **local directory**. Node's Pyodide loader runs it through `path.resolve`, so a remote index URL became `<cwd>/https:/…/pyodide.asm.js` (`Cannot find module …`).
 - Strategy report: metric cards, round trips, equity sparkline, and trade filters under the chart.

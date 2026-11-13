@@ -1,0 +1,14 @@
+{
+  "schema": "axis.chart.v1",
+  "symbol": "ETHUSDT",
+  "exchange": "binance",
+  "market": "spot",
+  "interval": "15m",
+  "historyBars": 80,
+  "chartType": "candles",
+  "theme": "void",
+  "panes": [{ "id": "price", "kind": "price" }],
+  "scripts": [{ "id": "strategy", "uri": "./strategy.pine", "inputs": {} }],
+  "drawings": [],
+  "engine": "pyodide"
+}

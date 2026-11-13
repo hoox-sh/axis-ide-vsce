@@ -4,7 +4,8 @@
 # AXIS IDE — Bun unit + coverage BASELINE gate, @vscode/test-electron
 # (xvfb on Linux), and VSIX packaging for both the IDE and the extension pack.
 #
-# Package job uploads axis-ide-*.vsix / axis-pack-*.vsix on main, tags, and dispatch.
+# Package job uploads axis-ide-*.vsix / axis-pack-*.vsix on pull requests,
+# main, tags, and dispatch.
 # Electron needs hoox-sh.pyne; CI downloads a pinned Open VSX build into
 # AXIS_IDE_PYNE_VSIX (runTest.ts hard-fails in CI without it).
 
@@ -83,6 +84,7 @@ jobs:
     name: Package VSIX
     needs: [test]
     if: >
+      github.event_name == 'pull_request' ||
       github.event_name == 'workflow_dispatch' ||
       github.ref == 'refs/heads/main' ||
       startsWith(github.ref, 'refs/tags/')

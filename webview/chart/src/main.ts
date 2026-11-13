@@ -982,13 +982,16 @@ function renderStrategy(): void {
   const equityHost = document.getElementById('chart-strategy-equity');
   const strat = state.strategy;
   const has = Boolean(strat && (strat.trades.length > 0 || strat.equity));
-  toggle.hidden = !has;
   if (!has || !strat) {
+    toggle.hidden = true;
     panel.hidden = true;
     toggle.setAttribute('aria-pressed', 'false');
     clearStrategyReport(stats, table, metrics, trips, equityHost);
     return;
   }
+  const reveal = toggle.hidden;
+  toggle.hidden = false;
+  if (reveal) panel.hidden = false;
   toggle.setAttribute('aria-pressed', panel.hidden ? 'false' : 'true');
   const report = buildStrategyReport({
     trades: strat.trades,

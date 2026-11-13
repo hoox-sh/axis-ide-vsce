@@ -926,7 +926,11 @@ export function applyChartHostMessage(
         next.engineDrawings = normalizeEngineDrawings(payload.drawings);
       }
       if ('inputs' in payload) next.inputs = normalizeInputs(payload.inputs);
-      if ('strategy' in payload) next.strategy = normalizeStrategy(payload.strategy);
+      // A run paint (plots/series/strategy) replaces the strategy report.
+      // Bars-only history paints omit those keys and must not clear it.
+      if ('plots' in payload || 'series' in payload || 'strategy' in payload) {
+        next.strategy = 'strategy' in payload ? normalizeStrategy(payload.strategy) : undefined;
+      }
       if ('times' in payload && Array.isArray(payload.times)) {
         next.times = payload.times
           .map((t) => num(t))

@@ -103,7 +103,7 @@ export class AxisBarDebugSession {
   private bars: AxisBarOhlcv[] = [];
   private series: Record<string, (number | null)[]> = {};
   private barBreakpoints = new Set<number>();
-  private lineBreakpoints: number[] = [];
+  private program: string | undefined;
   private readonly onCursor: AxisBarCursorListener | undefined;
 
   constructor(onCursor?: AxisBarCursorListener) {
@@ -258,6 +258,8 @@ export class AxisBarDebugSession {
     const bars = Array.isArray(args.bars) ? (args.bars as AxisBarOhlcv[]) : [];
     this.bars = bars.filter((b) => b && typeof b === 'object');
     this.series = isPlainObject(args.series) ? (args.series as Record<string, (number | null)[]>) : {};
+    const program = typeof args.program === 'string' ? args.program.trim() : '';
+    this.program = program && !/[\r\n]/.test(program) ? program : undefined;
     this.barIndex = 0;
     const stopOnEntry = args.stopOnEntry !== false;
     const hint =
@@ -272,16 +274,25 @@ export class AxisBarDebugSession {
   private setBreakpoints(req: DapRequest): DapMessage[] {
     const args = isPlainObject(req.arguments) ? req.arguments : {};
     const raw = Array.isArray(args.breakpoints) ? args.breakpoints : [];
-    const verified: Array<{ line: number; verified: boolean }> = [];
-    this.lineBreakpoints = [];
+    const verified: Array<{ line: number; verified: boolean; message?: string }> = [];
     for (const bp of raw) {
       if (!isPlainObject(bp)) continue;
       const line = finiteInt(bp.line);
       if (line === undefined || line < 1) continue;
-      this.lineBreakpoints.push(line);
-      verified.push({ line, verified: true });
+      verified.push({
+        line,
+        verified: false,
+        message: 'AXIS steps bars, not source lines. Use AXIS: Toggle Bar Breakpoint.',
+      });
     }
     return this.ok(req, { breakpoints: verified });
+  }
+
+  private stackSource(): { name: string; path?: string; presentationHint?: 'deemphasize' } {
+    const program = this.program;
+    if (!program) return { name: 'bars', presentationHint: 'deemphasize' };
+    const name = program.split(/[/\\]/).pop() || 'script';
+    return { name, path: program };
   }
 
   private stackTrace(req: DapRequest): DapMessage[] {
@@ -292,7 +303,7 @@ export class AxisBarDebugSession {
           name: this.barCaption(),
           line: 1,
           column: 1,
-          source: { name: 'bars', presentationHint: 'deemphasize' },
+          source: this.stackSource(),
         },
       ],
       totalFrames: 1,
@@ -361,7 +372,6 @@ export class AxisBarDebugSession {
   }
 
   private shouldBreak(index: number): boolean {
-    if (this.barBreakpoints.has(index)) return true;
-    return this.lineBreakpoints.length > 0;
+    return this.barBreakpoints.has(index);
   }
 }
