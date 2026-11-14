@@ -29,8 +29,8 @@ import {
 
 describe('resolvePyodideAssets', () => {
   test('pyodideWheelBannerName strips wheel suffix', () => {
-    expect(pyodideWheelBannerName()).toBe('hoox_pyne-0.6.29');
-    expect(pyodideWheelBannerName('/tmp/hoox_pyne-0.6.29-py3-none-any.whl')).toBe('hoox_pyne-0.6.29');
+    expect(pyodideWheelBannerName()).toBe('hoox_pyne-0.7.0');
+    expect(pyodideWheelBannerName('/tmp/hoox_pyne-0.7.0-py3-none-any.whl')).toBe('hoox_pyne-0.7.0');
   });
 
   test('missing wheel lists searched paths', () => {

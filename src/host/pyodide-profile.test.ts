@@ -53,8 +53,8 @@ describe('pyodide calculator profile', () => {
   });
 
   test('formatPyodideRunBanner is uploaded=0', () => {
-    expect(formatPyodideRunBanner('hoox_pyne-0.6.29')).toBe(
-      'engine=pyodide wheel=hoox_pyne-0.6.29 uploaded=0',
+    expect(formatPyodideRunBanner('hoox_pyne-0.7.0')).toBe(
+      'engine=pyodide wheel=hoox_pyne-0.7.0 uploaded=0',
     );
     expect(formatPyodideRunBanner('')).toContain('uploaded=0');
   });
