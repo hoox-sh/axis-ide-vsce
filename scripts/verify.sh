@@ -147,7 +147,7 @@ run_step lint "Lint" "$LINT_CMD"
 run_step typecheck "Typecheck" "$TYPECHECK_CMD"
 run_step okf "OKF" "$OKF_CMD"
 
-if [ "$MODE" = "all" ] || [ "$MODE" = "pre-push" ]; then
+if [ "$MODE" = "all" ]; then
   run_step test "Tests" "$TEST_CMD"
 fi
 
