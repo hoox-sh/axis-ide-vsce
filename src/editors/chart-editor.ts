@@ -51,6 +51,7 @@ import { fetchCcxtHistorical } from '../host/ccxt-client';
 import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
+import { type Profiler } from '../run/profiler';
 import { recordChartViewport } from '../run/run-context';
 import {
   type AxisChartDocV1,
@@ -432,6 +433,7 @@ async function paintHistoryAfterHandshake(
   seriesKey: string,
   signal: AbortSignal,
   isDisposed: () => boolean,
+  profiler?: Profiler,
 ): Promise<void> {
   const settings = readChartHostSettings();
   const doc = document.documentData;
@@ -473,12 +475,14 @@ async function paintHistoryAfterHandshake(
       return;
     }
     try {
-      void webview.postMessage(
-        encode(HOST_TO_VIEW.ChartFull, {
-          bars: csv.bars,
-          seq: CHART_HISTORY_SEQ,
-        }),
-      );
+      const postCsv = () =>
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.ChartFull, {
+            bars: csv.bars,
+            seq: CHART_HISTORY_SEQ,
+          }),
+        );
+      if (profiler) profiler.timePaint(postCsv); else postCsv();
       if (!isDisposed()) replayLastRunFull(webview, seriesKey);
     } catch {
       // disposing
@@ -508,12 +512,14 @@ async function paintHistoryAfterHandshake(
       return;
     }
     try {
-      void webview.postMessage(
-        encode(HOST_TO_VIEW.ChartFull, {
-          bars: venue.bars,
-          seq: CHART_HISTORY_SEQ,
-        }),
-      );
+      const postVenue = () =>
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.ChartFull, {
+            bars: venue.bars,
+            seq: CHART_HISTORY_SEQ,
+          }),
+        );
+      if (profiler) profiler.timePaint(postVenue); else postVenue();
       // Replay run paint only after history so a lower history seq cannot clobber it.
       if (!isDisposed()) replayLastRunFull(webview, seriesKey);
     } catch {
@@ -544,12 +550,14 @@ async function paintHistoryAfterHandshake(
     return;
   }
   try {
-    void webview.postMessage(
-      encode(HOST_TO_VIEW.ChartFull, {
-        bars: history.bars,
-        seq: CHART_HISTORY_SEQ,
-      }),
-    );
+    const postHistory = () =>
+      void webview.postMessage(
+        encode(HOST_TO_VIEW.ChartFull, {
+          bars: history.bars,
+          seq: CHART_HISTORY_SEQ,
+        }),
+      );
+    if (profiler) profiler.timePaint(postHistory); else postHistory();
     // Replay run paint only after history so a lower history seq cannot clobber it.
     if (!isDisposed()) replayLastRunFull(webview, seriesKey);
   } catch {
@@ -564,13 +572,17 @@ function postHandshake(
     document?: AxisChartDocument;
     signal?: AbortSignal;
     isDisposed?: () => boolean;
+    profiler?: Profiler;
   },
 ): void {
   try {
     // live doc removed in lightweight core; no publish
     void webview.postMessage(encode(HOST_TO_VIEW.ChartInit, session.init));
     if (session.full) {
-      void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
+      const postFull = () =>
+        void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
+      const p = opts?.profiler;
+      if (p) p.timePaint(postFull); else postFull();
     }
     if (session.useMockBars) {
       replayLastRunFull(webview, session.seriesKey);
@@ -584,6 +596,7 @@ function postHandshake(
         session.seriesKey,
         opts.signal,
         opts.isDisposed,
+        opts?.profiler,
       );
     }
   } catch {
@@ -615,6 +628,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     | undefined;
   private readonly onBarBreakpoint: ((barIndex: number) => void) | undefined;
   private readonly onSelectTrade: ((barIndex: number) => void) | undefined;
+  private readonly profiler: Profiler | undefined;
 
   constructor(
     private readonly context: ExtensionContext,
@@ -624,6 +638,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     this.onApplyInputs = opts?.onApplyInputs;
     this.onBarBreakpoint = opts?.onBarBreakpoint;
     this.onSelectTrade = opts?.onSelectTrade;
+    this.profiler = opts?.profiler;
     this.busSub = subscribeChartNotify((message) => {
       for (const [panel, meta] of [...this.openPanels]) {
         try {
@@ -633,12 +648,16 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
             continue;
           }
           if (message.type === 'chart.full') {
-            void panel.webview.postMessage(
-              encode(HOST_TO_VIEW.ChartFull, message.payload),
+            this.trackPaint(() =>
+              void panel.webview.postMessage(
+                encode(HOST_TO_VIEW.ChartFull, message.payload),
+              ),
             );
           } else if (message.type === 'chart.delta') {
-            void panel.webview.postMessage(
-              encode(HOST_TO_VIEW.ChartDelta, message.payload),
+            this.trackDelta(() =>
+              void panel.webview.postMessage(
+                encode(HOST_TO_VIEW.ChartDelta, message.payload),
+              ),
             );
           } else if (message.type === 'host.run.status') {
             void panel.webview.postMessage(
@@ -656,6 +675,16 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     });
   }
 
+  /** Run `fn`, timing it as chart paint when a profiler is wired; always runs `fn`. */
+  private trackPaint(fn: () => void): void {
+    if (this.profiler) this.profiler.timePaint(fn); else fn();
+  }
+
+  /** Run `fn`, timing it as a chart delta apply when a profiler is wired; always runs `fn`. */
+  private trackDelta(fn: () => void): void {
+    if (this.profiler) this.profiler.timeDelta(fn); else fn();
+  }
+
   private rebuildOpenCharts(): void {
     for (const [panel, meta] of [...this.openPanels]) {
       const document = meta.document;
@@ -666,6 +695,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         document,
         signal,
         isDisposed: () => !this.openPanels.has(panel),
+        profiler: this.profiler,
       });
     }
   }
@@ -739,6 +769,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         document,
         signal,
         isDisposed: () => !this.openPanels.has(panel),
+        profiler: this.profiler,
       });
     }
   }
@@ -877,7 +908,9 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           // live doc publish removed (lightweight)
           void webviewPanel.webview.postMessage(result.envelope);
           if (result.full && !disposed) {
-            void webviewPanel.webview.postMessage(result.full);
+            this.trackPaint(() =>
+              void webviewPanel.webview.postMessage(result.full),
+            );
           }
           if (disposed) return;
           const key =
@@ -892,6 +925,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
               key,
               signal,
               () => disposed || !this.openPanels.has(webviewPanel),
+              this.profiler,
             );
           }
         } catch {
@@ -966,6 +1000,8 @@ export type ChartEditorProviderOptions = {
   onBarBreakpoint?: (barIndex: number) => void;
   /** Strategy table row → seek DAP to that bar (click the lying trade). */
   onSelectTrade?: (barIndex: number) => void;
+  /** Shared run profiler for timing chart paint / delta posts. */
+  profiler?: Profiler;
 };
 
 export function registerChartEditorProvider(

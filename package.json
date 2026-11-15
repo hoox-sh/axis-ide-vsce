@@ -80,6 +80,8 @@
     "onCommand:axis.engine.status",
     "onCommand:axis.engine.setup",
     "onCommand:axis.engine.menu",
+    "onCommand:axis.profiler.show",
+    "onCommand:axis.profiler.toggle",
     "onDebug:axis-bar",
     "workspaceContains:**/*.axis.json"
   ],
@@ -208,6 +210,16 @@
       {
         "command": "axis.engine.menu",
         "title": "Local Engine Menu",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.profiler.show",
+        "title": "Show Last Run Profile",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.profiler.toggle",
+        "title": "Toggle Run Profiler",
         "category": "AXIS"
       }
     ],
@@ -489,6 +501,11 @@
             "type": "boolean",
             "default": true,
             "markdownDescription": "Show the AXIS IDE statusbar item (HOOX logo) with a click popup of AXIS commands. Turn off to hide the item."
+          },
+          "axis.profiler.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Time run stages (engine, paint, delta, step) and show in the AXIS statusbar popup."
           },
           "axis.debug.adapter": {
             "type": "string",

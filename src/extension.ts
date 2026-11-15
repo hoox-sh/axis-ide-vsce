@@ -125,6 +125,7 @@ import {
   type RunDeps,
   type RunMode,
 } from './run';
+import { Profiler } from './run/profiler';
 
 import {
   AxisStatusbar,
@@ -152,6 +153,8 @@ export const COMMANDS = {
   engineStatus: 'axis.engine.status',
   engineSetup: 'axis.engine.setup',
   engineMenu: 'axis.engine.menu',
+  profilerShow: 'axis.profiler.show',
+  profilerToggle: 'axis.profiler.toggle',
 } as const;
 
 const PYNE_EXT_ID = 'hoox-sh.pyne';
@@ -174,6 +177,8 @@ let runGeneration = 0;
 let deactivated = false;
 /** HOOX statusbar item (created on demand, disposed on deactivate). */
 let statusbar: AxisStatusbar | undefined;
+/** Shared inline run profiler (one instance for run, paint, step, statusbar). */
+let profiler: Profiler | undefined;
 
 function setRunRunning(running: boolean): void {
   try {
@@ -286,6 +291,15 @@ function readEngineSettings(): {
     localPackage,
     localAllowDownload,
   };
+}
+
+/** Read `axis.profiler.enabled` (default true; never throws). */
+function readProfilerEnabled(): boolean {
+  try {
+    return workspace.getConfiguration('axis.profiler').get<boolean>('enabled', true) === true;
+  } catch {
+    return true;
+  }
 }
 
 /** True when the extension-owned venv console script exists. */
@@ -651,6 +665,24 @@ function showRunOutputCommand(): string {
   return RUN_OUTPUT_CHANNEL_NAME;
 }
 
+async function profilerShowCommand(): Promise<void> {
+  const profile = profiler?.getLast();
+  if (!profile) {
+    void window.showInformationMessage('AXIS: No run profile yet.');
+    return;
+  }
+  void window.showInformationMessage(
+    `AXIS profile run=${profile.runId} epoch=${profile.epoch} engine=${Math.round(profile.engineMs)}ms paint=${Math.round(profile.paintMs)}ms delta=${Math.round(profile.deltaMs)}ms step=${Math.round(profile.stepMs)}ms total=${Math.round(profile.totalMs)}ms`,
+  );
+}
+
+async function profilerToggleCommand(): Promise<void> {
+  await profiler?.toggle();
+  void window.showInformationMessage(
+    `AXIS profiler ${profiler?.enabled ? 'on' : 'off'}`,
+  );
+}
+
 async function readSiblingChartJson(pineFsPath: string): Promise<string | null> {
   try {
     const sibling = siblingAxisJsonPath(pineFsPath);
@@ -846,6 +878,7 @@ async function runScriptCore(opts: {
           // diagnostics stripped in lightweight core (errors still logged to output)
         },
       },
+      profiler,
     };
 
     const outcome = await runOrch.run(
@@ -1307,6 +1340,7 @@ export function activate(context: ExtensionContext): void {
 
   secrets = new AxisSecretStorage(context.secrets);
   orchestrator = new RunOrchestrator();
+  profiler = new Profiler(readProfilerEnabled);
   const cacheDir = context.globalStorageUri
     ? Uri.joinPath(context.globalStorageUri, 'pyodide', LOCAL_PYODIDE_VERSION).fsPath
     : '';
@@ -1404,9 +1438,10 @@ export function activate(context: ExtensionContext): void {
       onSelectTrade: (barIndex) => {
         void barDebug?.seekToBar(barIndex);
       },
+      profiler,
     }),
   );
-  barDebug = registerAxisBarDebugger(context);
+  barDebug = registerAxisBarDebugger(context, { profiler });
   context.subscriptions.push({ dispose: () => barDebug?.dispose() });
 
   context.subscriptions.push(
@@ -1450,6 +1485,8 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.engineStatus, () => engineStatusCommand()),
     commands.registerCommand(COMMANDS.engineSetup, () => engineSetupCommand(context)),
     commands.registerCommand(COMMANDS.engineMenu, () => engineMenuCommand()),
+    commands.registerCommand(COMMANDS.profilerShow, () => void profilerShowCommand()),
+    commands.registerCommand(COMMANDS.profilerToggle, () => void profilerToggleCommand()),
   );
 
   // AXIS IDE statusbar item (HOOX logo) with a click popup.
@@ -1501,6 +1538,7 @@ export function deactivate(): void {
   engineStatusBar = undefined;
   extensionContext = undefined;
   barDebug = undefined;
+  profiler = undefined;
   statusbar?.dispose();
   statusbar = undefined;
 }

@@ -38,6 +38,7 @@ import { formatPyodideRunBanner } from '../host/pyodide-profile';
 import { declarePineInputs, evaluateMinimalSubset } from './pyodide-subset';
 import { chartFullFromRunResult, withLookahead } from './run-envelope';
 import { scrubSecrets } from './scrub';
+import { type Profiler } from './profiler';
 
 export type { RunMode };
 
@@ -134,6 +135,8 @@ export interface RunDeps {
   };
   output: RunOutput;
   diagnostics: RunDiagnostics;
+  /** Optional shared profiler; when absent timing is a no-op passthrough. */
+  profiler?: Profiler;
 }
 
 export type RunOutcome =
@@ -267,6 +270,9 @@ export class RunOrchestrator {
 
     const my = ++this.epoch;
     const started = Date.now();
+    const runId = `run-${my}`;
+    const profiler = deps.profiler;
+    profiler?.startRun(my, runId);
     try {
       safeLog(
         deps.output,
@@ -380,21 +386,23 @@ export class RunOrchestrator {
       const apiKey = workerKey || proKey || undefined;
 
       const endpoint = String(deps.endpoint ?? '').trim() || DEFAULT_ENGINE_ENDPOINT;
-      const result = await postEngineRun({
-        endpoint,
-        script: req.script,
-        bars: req.bars,
-        mode: req.mode || 'auto',
-        symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
-        apiKey,
-        allowRemote: deps.allowRemote,
-        signal,
-        fetchImpl: deps.fetchImpl,
-        inputs: req.inputs,
-        timeframe: req.timeframe,
-        fromBar: req.fromBar,
-        toBar: req.toBar,
-      });
+      const post = () =>
+        postEngineRun({
+          endpoint,
+          script: req.script,
+          bars: req.bars,
+          mode: req.mode || 'auto',
+          symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
+          apiKey,
+          allowRemote: deps.allowRemote,
+          signal,
+          fetchImpl: deps.fetchImpl,
+          inputs: req.inputs,
+          timeframe: req.timeframe,
+          fromBar: req.fromBar,
+          toBar: req.toBar,
+        });
+      const result = await (profiler ? profiler.timeEngine(post) : post());
       dumpEngineLogs(deps.output, result.logs);
       return this.finishRun(req, deps, my, started, result, signal);
     } catch (e) {
@@ -412,6 +420,7 @@ export class RunOrchestrator {
       // release promptly instead of lingering until the next run / deactivate.
       // `AbortController.abort()` is specified to never throw.
       localAbort.abort();
+      profiler?.endRun();
     }
   }
 

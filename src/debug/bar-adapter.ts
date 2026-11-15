@@ -21,6 +21,8 @@
  * Bar-step + chart-bar breakpoints + series/na variables. VS Code-free.
  */
 
+import { type Profiler } from '../run/profiler';
+
 export const AXIS_BAR_DAP_TYPE = 'axis-bar';
 
 export const AXIS_BAR_THREAD_ID = 1;
@@ -105,9 +107,11 @@ export class AxisBarDebugSession {
   private barBreakpoints = new Set<number>();
   private program: string | undefined;
   private readonly onCursor: AxisBarCursorListener | undefined;
+  private readonly profiler: Profiler | undefined;
 
-  constructor(onCursor?: AxisBarCursorListener) {
+  constructor(onCursor?: AxisBarCursorListener, profiler?: Profiler) {
     this.onCursor = onCursor;
+    this.profiler = profiler;
   }
 
   get currentBar(): number {
@@ -349,21 +353,32 @@ export class AxisBarDebugSession {
   private step(req: DapRequest, delta: number): DapMessage[] {
     const count = this.bars.length;
     if (count <= 0) return [...this.ok(req, {}), this.stopped('entry')];
-    this.barIndex = clampBar(this.barIndex + delta, count);
+    const run = (): void => {
+      this.barIndex = clampBar(this.barIndex + delta, count);
+    };
+    if (this.profiler) this.profiler.timeStep(run); else run();
     return [...this.ok(req, {}), this.stopped('step')];
   }
 
   private continueRun(req: DapRequest): DapMessage[] {
     const count = this.bars.length;
     if (count <= 0) return [...this.ok(req, {}), this.stopped('entry')];
-    const start = this.barIndex + 1;
-    for (let i = start; i < count; i++) {
-      if (this.shouldBreak(i)) {
-        this.barIndex = i;
-        return [...this.ok(req, { allThreadsContinued: true }), this.stopped('breakpoint')];
+    let brokeAt: number | undefined;
+    const run = (): void => {
+      const start = this.barIndex + 1;
+      for (let i = start; i < count; i++) {
+        if (this.shouldBreak(i)) {
+          this.barIndex = i;
+          brokeAt = i;
+          return;
+        }
       }
+      this.barIndex = count - 1;
+    };
+    if (this.profiler) this.profiler.timeStep(run); else run();
+    if (brokeAt !== undefined) {
+      return [...this.ok(req, { allThreadsContinued: true }), this.stopped('breakpoint')];
     }
-    this.barIndex = count - 1;
     return [...this.ok(req, { allThreadsContinued: true }), this.stopped('end')];
   }
 

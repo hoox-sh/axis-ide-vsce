@@ -32,6 +32,7 @@ import {
   workspace,
 } from 'vscode';
 import { notifyChart } from '../run/chart-bus';
+import { type Profiler } from '../run/profiler';
 import { AxisBarDebugSession, AXIS_BAR_DAP_TYPE, type DapRequest } from './bar-adapter';
 import { lastBarDebugLaunch } from './snapshot';
 
@@ -93,15 +94,22 @@ function noteIfNoBars(): void {
 }
 
 /** Register the `axis-bar` DAP descriptor + keep one live session for commands. */
-export function registerAxisBarDebugger(context: ExtensionContext): AxisBarDebugHandle {
+export function registerAxisBarDebugger(
+  context: ExtensionContext,
+  opts?: { profiler?: Profiler },
+): AxisBarDebugHandle {
   let live: AxisBarDebugSession | undefined;
   const adapterMode = readDebugAdapter();
+  const profiler = opts?.profiler;
 
   function ensureLive(): AxisBarDebugSession {
     if (!live) {
-      live = new AxisBarDebugSession((barIndex) => {
-        notifyChart({ type: 'chart.debugCursor', payload: { barIndex } });
-      });
+      live = new AxisBarDebugSession(
+        (barIndex) => {
+          notifyChart({ type: 'chart.debugCursor', payload: { barIndex } });
+        },
+        profiler,
+      );
     }
     return live;
   }

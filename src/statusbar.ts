@@ -54,6 +54,7 @@ export const POPUP_ITEMS = [
   { label: 'Step Bar', command: 'axis.debug.stepBar' },
   { label: 'Toggle Bar Breakpoint', command: 'axis.debug.toggleBarBreakpoint' },
   { label: 'Open Walkthrough Example', command: 'axis.openWalkthroughFixture' },
+  { label: 'Last Run Profile', command: 'axis.profiler.show' },
 ] as const satisfies readonly {
   readonly label: string;
   readonly command: string;

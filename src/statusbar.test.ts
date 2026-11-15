@@ -195,6 +195,7 @@ describe('AxisStatusbar', () => {
       { label: 'Step Bar', command: 'axis.debug.stepBar' },
       { label: 'Toggle Bar Breakpoint', command: 'axis.debug.toggleBarBreakpoint' },
       { label: 'Open Walkthrough Example', command: 'axis.openWalkthroughFixture' },
+      { label: 'Last Run Profile', command: 'axis.profiler.show' },
     ]);
     for (const item of POPUP_ITEMS) {
       expect(typeof item.command).toBe('string');

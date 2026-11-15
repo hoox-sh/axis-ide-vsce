@@ -78,6 +78,8 @@ const EXPECTED_COMMANDS = [
   'axis.debug.stepBar',
   'axis.debug.toggleBarBreakpoint',
   'axis.openWalkthroughFixture',
+  'axis.profiler.show',
+  'axis.profiler.toggle',
   'axis.statusbar.toggle',
   'axis.statusbar.showPopup',
   'axis.engine.start',
@@ -104,6 +106,7 @@ const EXPECTED_SETTINGS = [
   'axis.datafeed.url',
   'axis.datafeed.source',
   'axis.debug.adapter',
+  'axis.profiler.enabled',
   'axis.statusbar.enabled',
 ] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
