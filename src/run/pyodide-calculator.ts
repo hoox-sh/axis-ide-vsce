@@ -40,6 +40,7 @@ import { pyodideWheelBannerName } from './pyodide-wheel';
 /** Narrow runtime surface used after `loadPyodide`. */
 export type PyodideRuntime = PyodideBridgeRuntime;
 
+/** `load` receives the CDN base used only when the bundled Pyodide copy is missing. */
 export type PyodideLoadFn = (indexURL: string) => Promise<PyodideRuntime>;
 
 export type PyodideInstallFn = (py: PyodideRuntime) => Promise<void>;

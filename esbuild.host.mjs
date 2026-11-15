@@ -19,34 +19,58 @@
 
 /**
  * Bundle the extension host so packaging with --no-dependencies works.
+ *
+ * Two outputs:
+ *   - `out/extension.js`        extension host (external: `vscode`)
+ *   - `out/debug/adapter.js`    out-of-process `axis-bar` DAP adapter executable
+ *                                 (launched via `DebugAdapterExecutable`, node).
  */
+
 import * as esbuild from 'esbuild';
 import { mkdirSync } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 
 mkdirSync('out', { recursive: true });
+mkdirSync('out/debug', { recursive: true });
 
-const opts = {
-  entryPoints: ['src/extension.ts'],
+const common = {
   bundle: true,
-  outfile: 'out/extension.js',
-  external: ['vscode'],
   format: 'cjs',
   platform: 'node',
   target: 'node18',
   sourcemap: true,
   sourcesContent: false,
-  minify: false,
   logLevel: 'info',
   keepNames: true,
 };
 
+const extOpts = {
+  ...common,
+  entryPoints: ['src/extension.ts'],
+  outfile: 'out/extension.js',
+  external: ['vscode', 'ccxt'],
+};
+
+const adapterOpts = {
+  ...common,
+  entryPoints: ['src/debug/adapter.ts'],
+  outfile: 'out/debug/adapter.js',
+};
+
+async function runBuild() {
+  await esbuild.build(extOpts);
+  await esbuild.build(adapterOpts);
+  console.log('[esbuild] bundled out/extension.js + out/debug/adapter.js');
+}
+
 if (watch) {
-  const ctx = await esbuild.context(opts);
-  await ctx.watch();
+  const [extCtx, adapterCtx] = await Promise.all([
+    esbuild.context(extOpts),
+    esbuild.context(adapterOpts),
+  ]);
+  await Promise.all([extCtx.watch(), adapterCtx.watch()]);
   console.log('[esbuild] watching…');
 } else {
-  await esbuild.build(opts);
-  console.log('[esbuild] bundled out/extension.js');
+  await runBuild();
 }

@@ -52,6 +52,24 @@ TradingView Charting Library / Advanced Charts (separate commercial license).
 - Author: TradingView contributors (smakarov@tradingview.com)
 - Bundled transitively with Lightweight Charts into the chart webview asset.
 
+### Pyodide
+
+- Package: pyodide (runtime `0.29.5`, vendored under `vendor/pyodide/0.29.5/`)
+- License: Mozilla Public License 2.0 (SPDX: MPL-2.0)
+- Copyright: Pyodide contributors (https://github.com/pyodide/pyodide)
+- Homepage: https://pyodide.org/
+- Source: https://github.com/pyodide/pyodide
+
+The vendored files (`pyodide.mjs`, `pyodide.js`, `pyodide-lock.json`,
+`pyodide.asm.js`, `pyodide.asm.wasm`, `python_stdlib.zip`) are unmodified
+upstream release artifacts fetched from
+`https://cdn.jsdelivr.net/pyodide/v0.29.5/full/` and pinned by size + SHA-256 in
+`scripts/pyodide-assets.json` (`bun run vendor:pyodide`). `pyodide.asm.wasm`
+embeds CPython and Pyodide's C extension modules; the bundled Python standard
+library (`python_stdlib.zip`) is covered by the Python Software Foundation
+License (SPDX: PSF-2.0). MPL-2.0 obligations attach to those upstream files, not
+to AXIS IDE source; AXIS IDE remains AGPL-3.0-only.
+
 First-party builtins
 --------------------
 Offline builtin catalog under media/builtins/ is original first-party Pine

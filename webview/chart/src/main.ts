@@ -32,7 +32,7 @@ import {
   type DrawingOverlay,
 } from './drawings';
 import { createChartPainter, type ChartCrosshairSample, type ChartPainter } from './paint';
-import { bootPyodideCdnWorker } from './pyodide-boot';
+import { bootPyodideWorker } from './pyodide-boot';
 import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
 import {
   applyChartHostMessage,
@@ -992,7 +992,9 @@ function renderStrategy(): void {
   const reveal = toggle.hidden;
   toggle.hidden = false;
   if (reveal) panel.hidden = false;
-  toggle.setAttribute('aria-pressed', panel.hidden ? 'false' : 'true');
+  const pressed = !panel.hidden;
+  toggle.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+  toggle.classList.toggle('is-active', pressed);
   const report = buildStrategyReport({
     trades: strat.trades,
     equity: strat.equity,
@@ -1232,7 +1234,9 @@ function onToolbarClick(event: Event): void {
       const panel = document.getElementById('chart-inputs');
       if (panel) {
         panel.hidden = !panel.hidden;
-        chromeBtn.setAttribute('aria-pressed', panel.hidden ? 'false' : 'true');
+        const pressed = !panel.hidden;
+        chromeBtn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+        chromeBtn.classList.toggle('is-active', pressed);
       }
       return;
     }
@@ -1240,7 +1244,9 @@ function onToolbarClick(event: Event): void {
       const panel = document.getElementById('chart-strategy');
       if (panel) {
         panel.hidden = !panel.hidden;
-        chromeBtn.setAttribute('aria-pressed', panel.hidden ? 'false' : 'true');
+        const pressed = !panel.hidden;
+        chromeBtn.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+        chromeBtn.classList.toggle('is-active', pressed);
       }
       return;
     }
@@ -1253,7 +1259,9 @@ function onToolbarClick(event: Event): void {
   const next = placer.tool === TOOL_TRENDLINE ? null : TOOL_TRENDLINE;
   placer.setTool(next);
   syncToolButton();
-  postSetTool(apiRef, next ?? 'cursor');
+  // drawing.setTool for trendline/cursor is local-only UI state (placer + data-axis-tool).
+  // The host only acts on drawing.setTool for OPEN_CHART_SOURCE_TOOL ('open-source');
+  // trendline/cursor posts are intentionally NOT sent to avoid a silent no-op.
   redrawOverlay();
 }
 
@@ -1433,7 +1441,7 @@ function main(): void {
   ensureOverlay();
   syncToolButton();
   refreshChrome();
-  bootPyodideCdnWorker();
+  bootPyodideWorker();
   postReady(api);
 }
 

@@ -15,7 +15,8 @@
       "!coverage",
       "!.vscode-test",
       "!pack/node_modules",
-      "!media"
+      "!media",
+      "!vendor"
     ]
   },
   "formatter": {

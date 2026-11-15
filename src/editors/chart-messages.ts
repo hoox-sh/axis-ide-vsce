@@ -70,13 +70,12 @@ export function defaultChartCssVars(): Record<string, string> {
   return out;
 }
 
-const PLUGIN_HUD_KEYS = ['source', 'stream', 'engine', 'storage'] as const;
+const _PLUGIN_HUD_KEYS = ['source', 'stream', 'engine', 'storage'] as const;
 
 /** Copy known plugin id strings stub (plugins removed in lightweight core). */
 export function copyChartPlugins(
   _raw: ChartInitPayload['plugins'] | undefined,
-): any {
-  return undefined;
+): void {
 }
 
 /**

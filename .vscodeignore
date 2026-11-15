@@ -32,9 +32,17 @@ examples/**
 # Ship walkthrough fixtures (not test-fixtures).
 !fixtures/
 !fixtures/**
-!media/walkthrough-first-plot.md
+!media/walkthrough-*.md
 !media/pyodide/
 !media/pyodide/**
+# Vendored hoox-pyne-backend wheel for AXIS: Install Local Engine.
+!media/engine/
+!media/engine/**
+# Pyodide 0.29.5 boot files, vendored at package time by
+# scripts/vendor-pyodide.mjs (pinned size + sha256). Never committed.
+!vendor/
+!vendor/pyodide/
+!vendor/pyodide/**
 coverage/**
 scripts/**
 

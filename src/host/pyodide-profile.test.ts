@@ -21,11 +21,14 @@ import {
   ALLOW_PYODIDE_DEFAULT,
   ALLOW_PYODIDE_SETTING,
   LOCAL_PYODIDE_VERSION,
+  PYODIDE_BOOT_FILES,
+  PYODIDE_BUNDLE_PARTS,
   PYODIDE_CALCULATOR_PROFILE,
   PYODIDE_CDN_INDEX,
   PYODIDE_PINE_WHEEL_NEXT,
   formatPyodideRunBanner,
   isPyodideAllowed,
+  isPyodideBundleComplete,
   pyodideRuntimeStatus,
 } from './pyodide-profile';
 
@@ -40,6 +43,37 @@ describe('pyodide calculator profile', () => {
     expect(PYODIDE_CALCULATOR_PROFILE.kind).toBe('calculator');
     expect(PYODIDE_CALCULATOR_PROFILE.barsIn).toBe(true);
     expect(PYODIDE_CALCULATOR_PROFILE.streamOwning).toBe(false);
+  });
+
+  test('bundle location and boot file list are pinned', () => {
+    expect(PYODIDE_BUNDLE_PARTS).toEqual(['vendor', 'pyodide', '0.29.5']);
+    expect(PYODIDE_BOOT_FILES.map((f) => f.name)).toEqual([
+      'pyodide.mjs',
+      'pyodide.js',
+      'pyodide-lock.json',
+      'pyodide.asm.js',
+      'pyodide.asm.wasm',
+      'python_stdlib.zip',
+    ]);
+    expect(PYODIDE_BOOT_FILES.every((f) => f.minBytes > 0)).toBe(true);
+  });
+
+  test('isPyodideBundleComplete needs every boot file', () => {
+    const present = new Set(PYODIDE_BOOT_FILES.map((f) => `dir/${f.name}`));
+    const join = (...parts: string[]) => parts.join('/');
+    expect(isPyodideBundleComplete('dir', (p) => present.has(p), join)).toBe(true);
+    expect(isPyodideBundleComplete('', (p) => present.has(p), join)).toBe(false);
+    expect(isPyodideBundleComplete('   ', (p) => present.has(p), join)).toBe(false);
+    expect(isPyodideBundleComplete('dir', (p) => !p.endsWith('pyodide.asm.wasm'), join)).toBe(false);
+    expect(
+      isPyodideBundleComplete(
+        'dir',
+        () => {
+          throw new Error('stat failed');
+        },
+        join,
+      ),
+    ).toBe(false);
   });
 
   test('isPyodideAllowed is only explicit true; product default is true', () => {

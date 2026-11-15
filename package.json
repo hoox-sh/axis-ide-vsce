@@ -2,7 +2,7 @@
   "name": "axis-ide",
   "displayName": "AXIS IDE",
   "description": "AXIS charts for Pine Script and PYNE: run a script beside the editor, paint plots and strategy results, and step bars. Part of the HOOX stack. Depends on PYNE. Unofficial — not affiliated with TradingView, Inc.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "packageManager": "bun@1.4.4",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
@@ -73,6 +73,15 @@
     "onCommand:axis.debug.stepBar",
     "onCommand:axis.debug.toggleBarBreakpoint",
     "onCommand:axis.openWalkthroughFixture",
+    "onCommand:axis.statusbar.toggle",
+    "onCommand:axis.statusbar.showPopup",
+    "onCommand:axis.engine.start",
+    "onCommand:axis.engine.stop",
+    "onCommand:axis.engine.status",
+    "onCommand:axis.engine.setup",
+    "onCommand:axis.engine.menu",
+    "onCommand:axis.profiler.show",
+    "onCommand:axis.profiler.toggle",
     "onDebug:axis-bar",
     "workspaceContains:**/*.axis.json"
   ],
@@ -167,6 +176,51 @@
         "title": "Open Walkthrough Example",
         "category": "AXIS",
         "icon": "$(book)"
+      },
+      {
+        "command": "axis.statusbar.toggle",
+        "title": "Toggle Statusbar",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.statusbar.showPopup",
+        "title": "Show AXIS Menu",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.engine.start",
+        "title": "Start Local Engine",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.engine.stop",
+        "title": "Stop Local Engine",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.engine.status",
+        "title": "Local Engine Status",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.engine.setup",
+        "title": "Install Local Engine",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.engine.menu",
+        "title": "Local Engine Menu",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.profiler.show",
+        "title": "Show Last Run Profile",
+        "category": "AXIS"
+      },
+      {
+        "command": "axis.profiler.toggle",
+        "title": "Toggle Run Profiler",
+        "category": "AXIS"
       }
     ],
     "breakpoints": [
@@ -284,6 +338,21 @@
         },
         {
           "command": "axis.debug.toggleBarBreakpoint"
+        },
+        {
+          "command": "axis.engine.start"
+        },
+        {
+          "command": "axis.engine.stop"
+        },
+        {
+          "command": "axis.engine.status"
+        },
+        {
+          "command": "axis.engine.setup"
+        },
+        {
+          "command": "axis.engine.menu"
         }
       ]
     },
@@ -291,7 +360,7 @@
       {
         "id": "axis.firstPlot",
         "title": "AXIS: first plot",
-        "description": "Open the example study and run it locally. Source stays on this machine (uploaded=0).",
+        "description": "Open the example study, run it locally, and optionally install the full engine. Source stays on this machine (uploaded=0).",
         "steps": [
           {
             "id": "axis.firstPlot.open",
@@ -308,6 +377,18 @@
             "media": {
               "markdown": "media/walkthrough-first-plot.md"
             }
+          },
+          {
+            "id": "axis.firstPlot.local",
+            "title": "Optional: full local engine",
+            "description": "Pyodide is a bars-in calculator. For Numba `compile`, sessions, and `optimize`, install the managed local backend. It ships its own wheel and can download a pinned Python 3.12 when needed.\n[Install Local Engine](command:axis.engine.setup)",
+            "media": {
+              "markdown": "media/walkthrough-local-engine.md"
+            },
+            "completionEvents": [
+              "onCommand:axis.engine.setup",
+              "onSettingChanged:axis.engine.mode"
+            ]
           }
         ]
       }
@@ -333,10 +414,49 @@
             "default": true,
             "description": "Keep product telemetry off by default in IDE."
           },
+          "axis.engine.mode": {
+            "type": "string",
+            "enum": ["auto", "server", "local", "pyodide"],
+            "default": "auto",
+            "markdownDescription": "Engine selection. `auto` prefers the managed local engine when it is provisioned (or `axis.engine.local.command` is customised), else Pyodide when enabled, else remote `/run`. `local` starts the managed `pyne-backend` sidecar on loopback. `server` uses `#axis.engine.endpoint#`. `pyodide` forces the Wasm calculator."
+          },
           "axis.engine.endpoint": {
             "type": "string",
             "default": "http://127.0.0.1:5002",
             "markdownDescription": "PYNE Pro / engine base URL (no `/run` suffix). Defaults to loopback. Remote URLs require `#axis.engine.allowRemoteEndpoint#`."
+          },
+          "axis.engine.local.command": {
+            "type": "string",
+            "default": "pyne-backend",
+            "markdownDescription": "Command for the managed local engine. Defaults to the `pyne-backend` console script from the `hoox-pyne-backend` wheel. For a checkout, use `python3` with args `-m backend`."
+          },
+          "axis.engine.local.args": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "markdownDescription": "Arguments passed to `#axis.engine.local.command#`. Example for a checkout: `[\"-m\", \"backend\"]`."
+          },
+          "axis.engine.local.cwd": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "Working directory for the local engine (repo checkout). Empty runs from the extension host cwd."
+          },
+          "axis.engine.local.python": {
+            "type": "string",
+            "default": "python3",
+            "markdownDescription": "Python 3.10–3.13 executable used by **AXIS: Install Local Engine** to create the extension-owned venv under `globalStorage/pyne-engine`. Ignored once `axis.engine.local.command` points at an installed backend."
+          },
+          "axis.engine.local.package": {
+            "type": "string",
+            "default": "hoox-pyne-backend",
+            "markdownDescription": "pip package spec installed by **AXIS: Install Local Engine**. Use a local path, wheel, or private-index spec when `hoox-pyne-backend` is not on the default index (for example `/path/to/pynescript/packages/backend`)."
+          },
+          "axis.engine.local.allowDownload": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "When the default `python3` is missing or outside 3.10–3.13, **AXIS: Install Local Engine** downloads a pinned standalone CPython 3.12 build (~50 MB, SHA-256 verified) from python-build-standalone into `globalStorage/pyne-runtime`. Disable for air-gapped machines and set `#axis.engine.local.python#` instead."
           },
           "axis.engine.allowRemoteEndpoint": {
             "type": "boolean",
@@ -347,7 +467,7 @@
           "axis.engine.allowPyodide": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "Local Pyodide 0.29.5 bars-in calculator (Wave 1 default **on**). Host loads Wasm from jsDelivr into `globalStorage` (not the VSIX). `ready` after a 1+1 smoke plus pynescript Runtime smoke (trusted hoox-pyne wheel). Source is **not** uploaded (`uploaded=0`). Numba/R2/cron are not available in Wasm. Set false to force remote `/run` only."
+            "markdownDescription": "Local Pyodide 0.29.5 bars-in calculator (Wave 1 default **on**). Pyodide ships in the VSIX (`vendor/pyodide/0.29.5`); the host falls back to jsDelivr into `globalStorage` only when the bundle is missing. `ready` after a 1+1 smoke plus pynescript Runtime smoke (trusted hoox-pyne wheel). Source is **not** uploaded (`uploaded=0`). Numba/R2/cron are not available in Wasm. Set false to force remote `/run` only."
           },
           "axis.engine.pyodideWheelUrl": {
             "type": "string",
@@ -370,6 +490,28 @@
             "type": "string",
             "default": "http://127.0.0.1:5003",
             "markdownDescription": "Base URL for the local `@hoox-sh/axis-datafeed` sidecar (`GET /datafeed/ohlcv`). Defaults to loopback `:5003`. Remote URLs require `#axis.engine.allowRemoteEndpoint#`."
+          },
+          "axis.datafeed.source": {
+            "type": "string",
+            "enum": ["sidecar", "venue"],
+            "default": "venue",
+            "markdownDescription": "OHLCV history source. 'sidecar' (default) fetches from the local axis-datafeed sidecar at `axis.datafeed.url`. 'venue' fetches live/historical OHLCV directly from a venue via ccxt (default binance) without the sidecar. Venue fetching requires `ccxt` (`bun add ccxt`) to be installed; without it the chart reports `ccxt not available` and leaves the canvas empty."
+          },
+          "axis.statusbar.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Show the AXIS IDE statusbar item (HOOX logo) with a click popup of AXIS commands. Turn off to hide the item."
+          },
+          "axis.profiler.enabled": {
+            "type": "boolean",
+            "default": true,
+            "markdownDescription": "Time run stages (engine, paint, delta, step) and show in the AXIS statusbar popup."
+          },
+          "axis.debug.adapter": {
+            "type": "string",
+            "enum": ["inline", "executable"],
+            "default": "executable",
+            "markdownDescription": "Bar debug adapter. 'executable' (default) runs the real out-of-process axis-bar DAP adapter (`out/debug/adapter.js`) over stdio. 'inline' keeps the in-process adapter for the extension host process. DAP type stays `axis-bar` (never `pyne`)."
           }
         }
       }
@@ -377,7 +519,10 @@
   },
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run vendor:pyodide && npm run compile",
+    "vendor:pyodide": "node scripts/vendor-pyodide.mjs",
+    "vendor:pyodide:check": "node scripts/vendor-pyodide.mjs --check",
+    "verify": "npm run check && npm run test:coverage:gate",
     "compile:webview:chart": "vite build --config webview/chart/vite.config.ts",
     "compile:webview": "npm run compile:webview:chart",
     "compile": "node esbuild.host.mjs && npm run compile:webview",
@@ -396,6 +541,7 @@
     "lint:fix": "biome check --write --unsafe ."
   },
   "dependencies": {
+    "ccxt": "^4.5.92",
     "lightweight-charts": "^5.2.0"
   },
   "devDependencies": {

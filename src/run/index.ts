@@ -49,9 +49,11 @@ export {
   type RunMode,
 } from './engine-http';
 export {
+  LOCAL_ENGINE_DISABLED_ERROR,
   PYODIDE_DISABLED_ERROR,
   UNSUPPORTED_ENGINE_ERROR,
   RunOrchestrator,
+  type LocalRunRequest,
   type RunDeps,
   type RunDiagnostic,
   type RunDiagnostics,
@@ -82,7 +84,11 @@ export {
   type StrategyReport,
   type StrategyTrade,
 } from './run-envelope';
-export { loadPyodideFromCdn, type PyodideCdnLoaderDeps } from './pyodide-cdn-loader';
+export {
+  loadPyodideRuntime,
+  type PyodideBootOptions,
+  type PyodideLoadDeps,
+} from './pyodide-cdn-loader';
 export {
   createPyodideCalculator,
   type PyodideCalculator,
@@ -103,3 +109,50 @@ export {
   resolvePyodideAssets,
 } from './pyodide-wheel';
 export { scrubSecrets } from './scrub';
+export {
+  LOCAL_ENGINE_DEFAULT_COMMAND,
+  LOCAL_ENGINE_HEALTH_PATH,
+  LOCAL_ENGINE_HOST,
+  LOCAL_ENGINE_POLL_INTERVAL_MS,
+  LOCAL_ENGINE_READY_TIMEOUT_MS,
+  LocalEngine,
+  type LocalEngineOptions,
+  type LocalEngineProcess,
+  type LocalEngineSpawnFn,
+  type LocalEngineSpawnOptions,
+  type LocalEngineStatus,
+} from './local-engine';
+export {
+  ENGINE_WHEEL_PARTS,
+  VENDORED_ENGINE_WHEEL,
+  resolveLocalEnginePackage,
+  type EnginePackageResult,
+  type EnginePackageSource,
+  type ResolveEnginePackageOptions,
+} from './engine-package';
+export {
+  PYTHON_STANDALONE_RELEASE,
+  PYTHON_STANDALONE_VERSION,
+  RUNTIME_ASSETS,
+  ensureStandalonePython,
+  resolveRuntimeTarget,
+  type RuntimeArch,
+  type RuntimeAsset,
+  type RuntimeDownloadDeps,
+  type RuntimeDownloadResult,
+  type RuntimeDownloadStep,
+  type RuntimePlatform,
+  type RuntimeTarget,
+} from './runtime-download';
+export {
+  LOCAL_ENGINE_PACKAGE,
+  LOCAL_ENGINE_VENV_DIR,
+  provisionLocalEngine,
+  venvConsoleScript,
+  venvPip,
+  type ProvisionCommandResult,
+  type ProvisionOptions,
+  type ProvisionResult,
+  type ProvisionRun,
+  type ProvisionStep,
+} from './provision';

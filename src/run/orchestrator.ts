@@ -38,6 +38,7 @@ import { formatPyodideRunBanner } from '../host/pyodide-profile';
 import { declarePineInputs, evaluateMinimalSubset } from './pyodide-subset';
 import { chartFullFromRunResult, withLookahead } from './run-envelope';
 import { scrubSecrets } from './scrub';
+import { type Profiler } from './profiler';
 
 export type { RunMode };
 
@@ -65,10 +66,26 @@ export interface RunRequest {
 }
 
 export const UNSUPPORTED_ENGINE_ERROR =
-  'AXIS Run supports engine id "server" or "pyodide" (when axis.engine.allowPyodide) in this release (pyne-worker lands later).';
+  'AXIS Run supports engine id "server", "local", or "pyodide" (when axis.engine.allowPyodide) in this release (pyne-worker lands later).';
 
 export const PYODIDE_DISABLED_ERROR =
   'AXIS Pyodide calculator is off. Set axis.engine.allowPyodide to true (Wasm loads from jsDelivr, not the VSIX).';
+
+export const LOCAL_ENGINE_DISABLED_ERROR =
+  'AXIS local engine is not ready. Install the hoox-pyne backend (pyne-backend) or set axis.engine.mode to server/pyodide.';
+
+/** Inputs forwarded to the managed local sidecar (same shape as Pro `/run`). */
+export type LocalRunRequest = {
+  script: string;
+  bars: OhlcvBar[];
+  mode: RunMode;
+  symbol: string;
+  inputs?: Record<string, unknown>;
+  timeframe?: string;
+  fromBar?: number;
+  toBar?: number;
+  signal?: AbortSignal;
+};
 
 export interface RunSecrets {
   /** Resolve Pro (`pyn_…`) key. Never-throw. */
@@ -111,11 +128,15 @@ export interface RunDeps {
     signal?: AbortSignal;
     inputs?: Record<string, unknown>;
   }) => Promise<EngineRunResult>;
+  /** When `engineId === 'local'`, managed `pyne-backend` sidecar. */
+  runLocal?: (req: LocalRunRequest) => Promise<EngineRunResult>;
   bus: {
     notifyChart(message: ChartNotifyMessage): void;
   };
   output: RunOutput;
   diagnostics: RunDiagnostics;
+  /** Optional shared profiler; when absent timing is a no-op passthrough. */
+  profiler?: Profiler;
 }
 
 export type RunOutcome =
@@ -249,6 +270,9 @@ export class RunOrchestrator {
 
     const my = ++this.epoch;
     const started = Date.now();
+    const runId = `run-${my}`;
+    const profiler = deps.profiler;
+    profiler?.startRun(my, runId);
     try {
       safeLog(
         deps.output,
@@ -288,6 +312,32 @@ export class RunOrchestrator {
             result = mapped;
           }
         }
+        dumpEngineLogs(deps.output, result.logs);
+        return this.finishRun(req, deps, my, started, result, signal);
+      }
+
+      if (req.engineId === 'local') {
+        if (typeof deps.runLocal !== 'function') {
+          const error = LOCAL_ENGINE_DISABLED_ERROR;
+          this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
+          safeLog(deps.output, `run error epoch=${my}: ${error}`);
+          return { ok: false, epoch: my, reason: 'error', error };
+        }
+        if (signal?.aborted) {
+          safeLog(deps.output, `run aborted epoch=${my}`);
+          return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted' };
+        }
+        const result = await deps.runLocal({
+          script: req.script,
+          bars: req.bars,
+          mode: req.mode || 'auto',
+          symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
+          inputs: req.inputs,
+          timeframe: req.timeframe,
+          fromBar: req.fromBar,
+          toBar: req.toBar,
+          signal,
+        });
         dumpEngineLogs(deps.output, result.logs);
         return this.finishRun(req, deps, my, started, result, signal);
       }
@@ -336,21 +386,23 @@ export class RunOrchestrator {
       const apiKey = workerKey || proKey || undefined;
 
       const endpoint = String(deps.endpoint ?? '').trim() || DEFAULT_ENGINE_ENDPOINT;
-      const result = await postEngineRun({
-        endpoint,
-        script: req.script,
-        bars: req.bars,
-        mode: req.mode || 'auto',
-        symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
-        apiKey,
-        allowRemote: deps.allowRemote,
-        signal,
-        fetchImpl: deps.fetchImpl,
-        inputs: req.inputs,
-        timeframe: req.timeframe,
-        fromBar: req.fromBar,
-        toBar: req.toBar,
-      });
+      const post = () =>
+        postEngineRun({
+          endpoint,
+          script: req.script,
+          bars: req.bars,
+          mode: req.mode || 'auto',
+          symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
+          apiKey,
+          allowRemote: deps.allowRemote,
+          signal,
+          fetchImpl: deps.fetchImpl,
+          inputs: req.inputs,
+          timeframe: req.timeframe,
+          fromBar: req.fromBar,
+          toBar: req.toBar,
+        });
+      const result = await (profiler ? profiler.timeEngine(post) : post());
       dumpEngineLogs(deps.output, result.logs);
       return this.finishRun(req, deps, my, started, result, signal);
     } catch (e) {
@@ -368,6 +420,7 @@ export class RunOrchestrator {
       // release promptly instead of lingering until the next run / deactivate.
       // `AbortController.abort()` is specified to never throw.
       localAbort.abort();
+      profiler?.endRun();
     }
   }
 

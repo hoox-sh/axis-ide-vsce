@@ -19,6 +19,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { OhlcvBar } from '../host/mock-bars';
 import {
+  LOCAL_ENGINE_DISABLED_ERROR,
   PYODIDE_DISABLED_ERROR,
   RunOrchestrator,
   UNSUPPORTED_ENGINE_ERROR,
@@ -978,5 +979,65 @@ describe('RunOrchestrator', () => {
     expect(called).toBe(false);
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) expect(outcome.error).toBe(PYODIDE_DISABLED_ERROR);
+  });
+
+  test('local engine runs the sidecar and paints chart.full', async () => {
+    let called = false;
+    const orch = new RunOrchestrator();
+    const { deps, charts, lines } = makeDeps({
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, text: async () => '{}' };
+      },
+    });
+    let seen: unknown;
+    deps.runLocal = async (req) => {
+      seen = req;
+      return mapEngineResponse({
+        status: 'success',
+        plots: { close: [100] },
+        series: { close: [100] },
+      });
+    };
+    const outcome = await orch.run(
+      baseReq({ engineId: 'local', inputs: { Length: 9 }, timeframe: '1h' }),
+      deps,
+    );
+    expect(called).toBe(false);
+    expect(outcome.ok).toBe(true);
+    expect(charts.some((m) => m.type === 'chart.full')).toBe(true);
+    expect(lines.some((l) => l.includes('engine=local'))).toBe(true);
+    expect(seen).toMatchObject({ mode: 'auto', timeframe: '1h', inputs: { Length: 9 } });
+  });
+
+  test('local engine without a runner is disabled without fetch', async () => {
+    let called = false;
+    const orch = new RunOrchestrator();
+    const { deps } = makeDeps({
+      fetchImpl: async () => {
+        called = true;
+        return { ok: true, status: 200, text: async () => '{}' };
+      },
+    });
+    const outcome = await orch.run(baseReq({ engineId: 'local' }), deps);
+    expect(called).toBe(false);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.error).toBe(LOCAL_ENGINE_DISABLED_ERROR);
+  });
+
+  test('local engine respects abort before the sidecar call', async () => {
+    let called = false;
+    const orch = new RunOrchestrator();
+    const ac = new AbortController();
+    ac.abort();
+    const { deps } = makeDeps();
+    deps.runLocal = async () => {
+      called = true;
+      return mapEngineResponse({ status: 'success', plots: [] });
+    };
+    const outcome = await orch.run(baseReq({ engineId: 'local', signal: ac.signal }), deps);
+    expect(called).toBe(false);
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toBe('aborted');
   });
 });

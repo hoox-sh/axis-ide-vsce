@@ -17,7 +17,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 import { existsSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join as joinPath } from 'node:path';
 import {
   type CancellationToken,
   CancellationError,
@@ -47,9 +47,11 @@ import {
   DEFAULT_DATAFEED_URL,
   fetchHistorical,
 } from '../host/history-client';
+import { fetchCcxtHistorical } from '../host/ccxt-client';
 import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
+import { type Profiler } from '../run/profiler';
 import { recordChartViewport } from '../run/run-context';
 import {
   type AxisChartDocV1,
@@ -63,7 +65,13 @@ import {
   loadOhlcvCsvFile,
   resolveBarsFilePath,
 } from '../host/csv-bars';
-import { ALLOW_PYODIDE_DEFAULT, isPyodideAllowed } from '../host/pyodide-profile';
+import {
+  ALLOW_PYODIDE_DEFAULT,
+  isPyodideAllowed,
+  isPyodideBundleComplete,
+  PYODIDE_BUNDLE_PARTS,
+  PYODIDE_CDN_INDEX,
+} from '../host/pyodide-profile';
 import { buildChartWebviewHtml } from './chart-html';
 import { handleChartWebviewMessage } from './chart-messages';
 import {
@@ -324,13 +332,29 @@ function getChartHtml(webview: Webview, extensionUri: Uri): string {
   assertChartAssets(extensionUri);
   const script = webview.asWebviewUri(chartAssetPath(extensionUri, 'main.js'));
   const style = webview.asWebviewUri(chartAssetPath(extensionUri, 'main.css'));
+  const allowPyodide = readAllowPyodide();
   return buildChartWebviewHtml({
     cspSource: webview.cspSource,
     scriptUri: script.toString(),
     styleUri: style.toString(),
     bodyClass: themeBodyClass(window.activeColorTheme.kind),
-    allowPyodide: readAllowPyodide(),
+    allowPyodide,
+    pyodideIndex: allowPyodide ? bundledPyodideIndex(webview, extensionUri) : undefined,
   });
+}
+
+/**
+ * Webview URL for the Pyodide copy shipped in the VSIX. Falls back to the
+ * jsDelivr index only when the vendor dir is absent (dev tree without
+ * `bun run vendor:pyodide`).
+ */
+function bundledPyodideIndex(webview: Webview, extensionUri: Uri): string {
+  const dir = UriClass.joinPath(extensionUri, ...PYODIDE_BUNDLE_PARTS);
+  if (!isPyodideBundleComplete(dir.fsPath, existsSync, joinPath)) {
+    return PYODIDE_CDN_INDEX;
+  }
+  const base = webview.asWebviewUri(dir).toString();
+  return base.endsWith('/') ? base : `${base}/`;
 }
 
 interface ChartHostSettings {
@@ -338,6 +362,8 @@ interface ChartHostSettings {
   historyBarsSetting?: number;
   datafeedUrl: string;
   allowRemote: boolean;
+  /** 'sidecar' (default) = axis.datafeed sidecar; 'venue' = ccxt venue fetch. */
+  datafeedSource: 'sidecar' | 'venue';
 }
 
 /** Read chart + datafeed settings (never throws). */
@@ -346,6 +372,7 @@ function readChartHostSettings(): ChartHostSettings {
   let historyBarsSetting: number | undefined;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
   let allowRemote = false;
+  let datafeedSource: 'sidecar' | 'venue' = 'sidecar';
   try {
     const cfg = workspace.getConfiguration('axis.chart');
     // Mock bars are opt-in; HistoryClient is the dogfood default.
@@ -359,6 +386,8 @@ function readChartHostSettings(): ChartHostSettings {
     const df = workspace.getConfiguration('axis.datafeed');
     const url = df.get<string>('url');
     if (typeof url === 'string' && url.trim()) datafeedUrl = url.trim();
+    const src = df.get<string>('source');
+    if (src === 'sidecar' || src === 'venue') datafeedSource = src;
   } catch {
     // keep default
   }
@@ -369,7 +398,7 @@ function readChartHostSettings(): ChartHostSettings {
   } catch {
     allowRemote = false;
   }
-  return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote };
+  return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote, datafeedSource };
 }
 
 /** Read chart settings + document into a fresh session (no stale init closure). */
@@ -404,6 +433,7 @@ async function paintHistoryAfterHandshake(
   seriesKey: string,
   signal: AbortSignal,
   isDisposed: () => boolean,
+  profiler?: Profiler,
 ): Promise<void> {
   const settings = readChartHostSettings();
   const doc = document.documentData;
@@ -445,12 +475,14 @@ async function paintHistoryAfterHandshake(
       return;
     }
     try {
-      void webview.postMessage(
-        encode(HOST_TO_VIEW.ChartFull, {
-          bars: csv.bars,
-          seq: CHART_HISTORY_SEQ,
-        }),
-      );
+      const postCsv = () =>
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.ChartFull, {
+            bars: csv.bars,
+            seq: CHART_HISTORY_SEQ,
+          }),
+        );
+      if (profiler) profiler.timePaint(postCsv); else postCsv();
       if (!isDisposed()) replayLastRunFull(webview, seriesKey);
     } catch {
       // disposing
@@ -459,6 +491,42 @@ async function paintHistoryAfterHandshake(
   }
   if (settings.useMockBars) return;
   const limit = resolveMockBarCount(doc.historyBars, settings.historyBarsSetting);
+  if (settings.datafeedSource === 'venue') {
+    const venue = await fetchCcxtHistorical({
+      exchange: doc.exchange || 'binance',
+      symbol: doc.symbol,
+      timeframe: doc.interval || '1m',
+      limit,
+      signal,
+    });
+    if (isDisposed() || signal.aborted) return;
+    if (!venue.ok) {
+      logError(venue.error);
+      try {
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: venue.error }),
+        );
+      } catch {
+        // disposing
+      }
+      return;
+    }
+    try {
+      const postVenue = () =>
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.ChartFull, {
+            bars: venue.bars,
+            seq: CHART_HISTORY_SEQ,
+          }),
+        );
+      if (profiler) profiler.timePaint(postVenue); else postVenue();
+      // Replay run paint only after history so a lower history seq cannot clobber it.
+      if (!isDisposed()) replayLastRunFull(webview, seriesKey);
+    } catch {
+      // panel may be disposing
+    }
+    return;
+  }
   const history = await fetchHistorical({
     exchange: doc.exchange || 'binance',
     symbol: doc.symbol,
@@ -482,12 +550,14 @@ async function paintHistoryAfterHandshake(
     return;
   }
   try {
-    void webview.postMessage(
-      encode(HOST_TO_VIEW.ChartFull, {
-        bars: history.bars,
-        seq: CHART_HISTORY_SEQ,
-      }),
-    );
+    const postHistory = () =>
+      void webview.postMessage(
+        encode(HOST_TO_VIEW.ChartFull, {
+          bars: history.bars,
+          seq: CHART_HISTORY_SEQ,
+        }),
+      );
+    if (profiler) profiler.timePaint(postHistory); else postHistory();
     // Replay run paint only after history so a lower history seq cannot clobber it.
     if (!isDisposed()) replayLastRunFull(webview, seriesKey);
   } catch {
@@ -502,13 +572,17 @@ function postHandshake(
     document?: AxisChartDocument;
     signal?: AbortSignal;
     isDisposed?: () => boolean;
+    profiler?: Profiler;
   },
 ): void {
   try {
     // live doc removed in lightweight core; no publish
     void webview.postMessage(encode(HOST_TO_VIEW.ChartInit, session.init));
     if (session.full) {
-      void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
+      const postFull = () =>
+        void webview.postMessage(encode(HOST_TO_VIEW.ChartFull, session.full));
+      const p = opts?.profiler;
+      if (p) p.timePaint(postFull); else postFull();
     }
     if (session.useMockBars) {
       replayLastRunFull(webview, session.seriesKey);
@@ -522,6 +596,7 @@ function postHandshake(
         session.seriesKey,
         opts.signal,
         opts.isDisposed,
+        opts?.profiler,
       );
     }
   } catch {
@@ -553,6 +628,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     | undefined;
   private readonly onBarBreakpoint: ((barIndex: number) => void) | undefined;
   private readonly onSelectTrade: ((barIndex: number) => void) | undefined;
+  private readonly profiler: Profiler | undefined;
 
   constructor(
     private readonly context: ExtensionContext,
@@ -562,6 +638,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     this.onApplyInputs = opts?.onApplyInputs;
     this.onBarBreakpoint = opts?.onBarBreakpoint;
     this.onSelectTrade = opts?.onSelectTrade;
+    this.profiler = opts?.profiler;
     this.busSub = subscribeChartNotify((message) => {
       for (const [panel, meta] of [...this.openPanels]) {
         try {
@@ -571,12 +648,16 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
             continue;
           }
           if (message.type === 'chart.full') {
-            void panel.webview.postMessage(
-              encode(HOST_TO_VIEW.ChartFull, message.payload),
+            this.trackPaint(() =>
+              void panel.webview.postMessage(
+                encode(HOST_TO_VIEW.ChartFull, message.payload),
+              ),
             );
           } else if (message.type === 'chart.delta') {
-            void panel.webview.postMessage(
-              encode(HOST_TO_VIEW.ChartDelta, message.payload),
+            this.trackDelta(() =>
+              void panel.webview.postMessage(
+                encode(HOST_TO_VIEW.ChartDelta, message.payload),
+              ),
             );
           } else if (message.type === 'host.run.status') {
             void panel.webview.postMessage(
@@ -594,6 +675,16 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
     });
   }
 
+  /** Run `fn`, timing it as chart paint when a profiler is wired; always runs `fn`. */
+  private trackPaint(fn: () => void): void {
+    if (this.profiler) this.profiler.timePaint(fn); else fn();
+  }
+
+  /** Run `fn`, timing it as a chart delta apply when a profiler is wired; always runs `fn`. */
+  private trackDelta(fn: () => void): void {
+    if (this.profiler) this.profiler.timeDelta(fn); else fn();
+  }
+
   private rebuildOpenCharts(): void {
     for (const [panel, meta] of [...this.openPanels]) {
       const document = meta.document;
@@ -604,6 +695,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         document,
         signal,
         isDisposed: () => !this.openPanels.has(panel),
+        profiler: this.profiler,
       });
     }
   }
@@ -677,6 +769,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
         document,
         signal,
         isDisposed: () => !this.openPanels.has(panel),
+        profiler: this.profiler,
       });
     }
   }
@@ -712,6 +805,8 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
       localResourceRoots: [
         UriClass.joinPath(this.context.extensionUri, 'dist', 'webview', 'chart'),
         UriClass.joinPath(this.context.extensionUri, 'media'),
+        // Bundled Pyodide boot files (chart worker reads pyodide.js + Wasm).
+        UriClass.joinPath(this.context.extensionUri, ...PYODIDE_BUNDLE_PARTS),
       ],
     };
 
@@ -813,7 +908,9 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
           // live doc publish removed (lightweight)
           void webviewPanel.webview.postMessage(result.envelope);
           if (result.full && !disposed) {
-            void webviewPanel.webview.postMessage(result.full);
+            this.trackPaint(() =>
+              void webviewPanel.webview.postMessage(result.full),
+            );
           }
           if (disposed) return;
           const key =
@@ -828,6 +925,7 @@ class AxisChartEditorProvider implements CustomEditorProvider<AxisChartDocument>
               key,
               signal,
               () => disposed || !this.openPanels.has(webviewPanel),
+              this.profiler,
             );
           }
         } catch {
@@ -902,6 +1000,8 @@ export type ChartEditorProviderOptions = {
   onBarBreakpoint?: (barIndex: number) => void;
   /** Strategy table row → seek DAP to that bar (click the lying trade). */
   onSelectTrade?: (barIndex: number) => void;
+  /** Shared run profiler for timing chart paint / delta posts. */
+  profiler?: Profiler;
 };
 
 export function registerChartEditorProvider(

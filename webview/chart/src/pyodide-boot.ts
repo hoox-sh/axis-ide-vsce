@@ -17,8 +17,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Blob worker that fetches Pyodide 0.29.5 from jsDelivr when the chart HTML
- * carries `data-axis-pyodide-cdn`. Paint stays in main.ts; this only loads Wasm.
+ * Blob worker that loads Pyodide 0.29.5 from the index URL the chart HTML
+ * carries (`data-axis-pyodide-index`) — the bundled VSIX copy, or the jsDelivr
+ * fallback. Paint stays in main.ts; this only loads Wasm.
  */
 
 export function pyodideWorkerSource(indexUrl: string): string {
@@ -38,11 +39,11 @@ export function pyodideWorkerSource(indexUrl: string): string {
 };`;
 }
 
-/** Spawn a blob worker and send `load`. No-op when the CDN attr is missing. */
-export function bootPyodideCdnWorker(
+/** Spawn a blob worker and send `load`. No-op when the index attr is missing. */
+export function bootPyodideWorker(
   doc: Pick<Document, 'body'> = document,
 ): Worker | undefined {
-  const indexUrl = doc.body?.getAttribute('data-axis-pyodide-cdn') ?? '';
+  const indexUrl = doc.body?.getAttribute('data-axis-pyodide-index') ?? '';
   if (!indexUrl || typeof Worker === 'undefined' || typeof Blob === 'undefined') {
     return undefined;
   }
