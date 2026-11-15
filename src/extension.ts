@@ -28,6 +28,9 @@ import {
   type ExtensionContext,
   type OutputChannel,
   type TextDocument,
+  ProgressLocation,
+  StatusBarAlignment,
+  type StatusBarItem,
   Uri,
   ViewColumn,
   commands,
@@ -77,6 +80,8 @@ import {
   validateWorkerKey,
   workerKeyPromptCopy,
 } from './secrets';
+import { chooseEngine, type EngineMode } from './host/engine-choice';
+import { engineStatusView } from './host/engine-status';
 import { DEFAULT_DATAFEED_URL } from './host/history-client';
 import { logInfo, setLogSink } from './host/logger';
 import {
@@ -85,26 +90,48 @@ import {
   LOCAL_PYODIDE_VERSION,
   PYODIDE_BUNDLE_PARTS,
 } from './host/pyodide-profile';
+import { spawn as spawnProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join as joinPath } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { registerAxisBarDebugger, type AxisBarDebugHandle } from './debug/register';
 import { lastBarDebugLaunch, launchFromRun, rememberBarDebugLaunch } from './debug/snapshot';
 import {
   DEFAULT_ENGINE_ENDPOINT,
+  LOCAL_ENGINE_DEFAULT_COMMAND,
+  LOCAL_ENGINE_HOST,
+  LOCAL_ENGINE_PACKAGE,
+  LOCAL_ENGINE_VENV_DIR,
+  LocalEngine,
   RunOrchestrator,
   checkEngineEndpoint,
   createPyodideCalculator,
+  ensureStandalonePython,
   installPynescriptRuntime,
   loadPyodideRuntime,
   notifyChart,
+  postEngineRun,
+  provisionLocalEngine,
+  resolveLocalEnginePackage,
   resolvePyodideAssets,
   resolveRunContext,
+  resolveRuntimeTarget,
   scrubSecrets,
+  venvConsoleScript,
+  type ProvisionCommandResult,
+  type ProvisionResult,
   type PyodideCalculator,
   type RunDeps,
   type RunMode,
 } from './run';
+
+import {
+  AxisStatusbar,
+  STATUSBAR_COMMAND_POPUP,
+  STATUSBAR_COMMAND_TOGGLE,
+  type StatusbarHost,
+} from './statusbar';
 
 export const COMMANDS = {
   openChart: 'axis.openChart',
@@ -120,6 +147,11 @@ export const COMMANDS = {
   debugStepBar: 'axis.debug.stepBar',
   debugToggleBarBreakpoint: 'axis.debug.toggleBarBreakpoint',
   openWalkthroughFixture: 'axis.openWalkthroughFixture',
+  engineStart: 'axis.engine.start',
+  engineStop: 'axis.engine.stop',
+  engineStatus: 'axis.engine.status',
+  engineSetup: 'axis.engine.setup',
+  engineMenu: 'axis.engine.menu',
 } as const;
 
 const PYNE_EXT_ID = 'hoox-sh.pyne';
@@ -128,6 +160,11 @@ let runOutput: OutputChannel | undefined;
 let secrets: AxisSecretStorage | undefined;
 let orchestrator: RunOrchestrator | undefined;
 let pyodideCalc: PyodideCalculator | undefined;
+let localEngine: LocalEngine | undefined;
+/** Command/args/cwd tuple the live `localEngine` was built from. */
+let localEngineKey = '';
+let engineStatusBar: StatusBarItem | undefined;
+let extensionContext: ExtensionContext | undefined;
 let barDebug: AxisBarDebugHandle | undefined;
 /** Aborts the previous command-level run when a new one starts. */
 let commandAbort: AbortController | undefined;
@@ -135,6 +172,8 @@ let commandAbort: AbortController | undefined;
 let runGeneration = 0;
 /** Set in deactivate so any late work skips after shutdown. */
 let deactivated = false;
+/** HOOX statusbar item (created on demand, disposed on deactivate). */
+let statusbar: AxisStatusbar | undefined;
 
 function setRunRunning(running: boolean): void {
   try {
@@ -166,6 +205,13 @@ function readEngineSettings(): {
   historyBarsSetting?: number;
   useMockBars: boolean;
   datafeedUrl: string;
+  engineMode: EngineMode;
+  localCommand: string;
+  localArgs: string[];
+  localCwd?: string;
+  localPython: string;
+  localPackage: string;
+  localAllowDownload: boolean;
 } {
   let endpoint = DEFAULT_ENGINE_ENDPOINT;
   let allowRemote = false;
@@ -174,6 +220,13 @@ function readEngineSettings(): {
   let historyBarsSetting: number | undefined;
   let useMockBars = false;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
+  let engineMode: EngineMode = 'auto';
+  let localCommand = LOCAL_ENGINE_DEFAULT_COMMAND;
+  let localArgs: string[] = [];
+  let localCwd: string | undefined;
+  let localPython = 'python3';
+  let localPackage = LOCAL_ENGINE_PACKAGE;
+  let localAllowDownload = true;
   try {
     const engineCfg = workspace.getConfiguration('axis.engine');
     const ep = engineCfg.get<string>('endpoint');
@@ -184,6 +237,21 @@ function readEngineSettings(): {
     );
     const wheel = engineCfg.get<string>('pyodideWheelUrl');
     if (typeof wheel === 'string' && wheel.trim()) pyodideWheelUrl = wheel.trim();
+    const mode = engineCfg.get<string>('mode');
+    if (mode === 'auto' || mode === 'server' || mode === 'local' || mode === 'pyodide') {
+      engineMode = mode;
+    }
+    const cmd = engineCfg.get<string>('local.command');
+    if (typeof cmd === 'string' && cmd.trim()) localCommand = cmd.trim();
+    const args = engineCfg.get<string[]>('local.args');
+    if (Array.isArray(args)) localArgs = args.filter((a) => typeof a === 'string');
+    const cwd = engineCfg.get<string>('local.cwd');
+    if (typeof cwd === 'string' && cwd.trim()) localCwd = cwd.trim();
+    const py = engineCfg.get<string>('local.python');
+    if (typeof py === 'string' && py.trim()) localPython = py.trim();
+    const pkg = engineCfg.get<string>('local.package');
+    if (typeof pkg === 'string' && pkg.trim()) localPackage = pkg.trim();
+    localAllowDownload = engineCfg.get<boolean>('local.allowDownload', true) === true;
   } catch {
     // keep defaults
   }
@@ -210,7 +278,347 @@ function readEngineSettings(): {
     historyBarsSetting,
     useMockBars,
     datafeedUrl,
+    engineMode,
+    localCommand,
+    localArgs,
+    localCwd,
+    localPython,
+    localPackage,
+    localAllowDownload,
   };
+}
+
+/** True when the extension-owned venv console script exists. */
+function localEngineProvisioned(): boolean {
+  const root = extensionContext?.globalStorageUri;
+  if (!root) return false;
+  const bin = venvConsoleScript(
+    Uri.joinPath(root, LOCAL_ENGINE_VENV_DIR).fsPath,
+    process.platform,
+    joinPath,
+  );
+  try {
+    return existsSync(bin);
+  } catch {
+    return false;
+  }
+}
+
+/** Selected engine id; `auto` prefers a provisioned local engine. */
+function selectedEngineId(
+  settings: ReturnType<typeof readEngineSettings>,
+): Exclude<EngineMode, 'auto'> {
+  return chooseEngine({
+    mode: settings.engineMode,
+    allowPyodide: settings.allowPyodide,
+    localCommand: settings.localCommand,
+    localProvisioned: localEngineProvisioned(),
+  });
+}
+
+/** Push the current engine state into the status bar. */
+function refreshEngineStatusBar(): void {
+  if (!engineStatusBar) return;
+  const view = engineStatusView(localEngine?.status(), readEngineSettings().engineMode);
+  if (!view.show) {
+    engineStatusBar.hide();
+    return;
+  }
+  engineStatusBar.text = view.text;
+  engineStatusBar.tooltip = `${view.tooltip} — click for Start / Stop / Install`;
+  engineStatusBar.show();
+}
+
+/** Bind a loopback port, read it, close, then hand it to the sidecar. */
+function findFreeLoopbackPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, LOCAL_ENGINE_HOST, () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      server.close(() => {
+        if (port > 0) resolve(port);
+        else reject(new Error('could not allocate a loopback port'));
+      });
+    });
+  });
+}
+
+/** Build (or rebuild) the sidecar manager from current settings. */
+function ensureLocalEngine(): LocalEngine {
+  const settings = readEngineSettings();
+  const key = `${settings.localCommand}\u0000${settings.localArgs.join('\u0000')}\u0000${settings.localCwd ?? ''}`;
+  if (localEngine && localEngineKey === key) return localEngine;
+  localEngine?.stop();
+  localEngine = new LocalEngine({
+    command: settings.localCommand,
+    args: settings.localArgs,
+    ...(settings.localCwd ? { cwd: settings.localCwd } : {}),
+    findFreePort: findFreeLoopbackPort,
+    spawn: (command, args, options) => {
+      const child = spawnProcess(command, args, {
+        ...(options.cwd ? { cwd: options.cwd } : {}),
+        env: { ...process.env, ...options.env },
+        stdio: ['ignore', 'pipe', 'pipe'],
+        windowsHide: true,
+      });
+      child.stdout?.on('data', (chunk) => {
+        const line = String(chunk).trimEnd();
+        if (line) runOutput?.appendLine(scrubSecrets(line));
+      });
+      child.stderr?.on('data', (chunk) => {
+        const line = String(chunk).trimEnd();
+        if (line) runOutput?.appendLine(scrubSecrets(line));
+      });
+      return child;
+    },
+    log: (line) => runOutput?.appendLine(scrubSecrets(line)),
+    onStateChange: () => refreshEngineStatusBar(),
+  });
+  localEngineKey = key;
+  return localEngine;
+}
+
+type LocalEngineStartResult =
+  | { ok: true; endpoint: string }
+  | { ok: false; error: string };
+
+async function startLocalEngine(): Promise<LocalEngineStartResult> {
+  const engine = ensureLocalEngine();
+  const status = await engine.start();
+  refreshEngineStatusBar();
+  if (status.state === 'ready') return { ok: true, endpoint: status.endpoint };
+  if (status.state === 'error') return { ok: false, error: status.error };
+  return { ok: false, error: 'AXIS local engine did not start.' };
+}
+
+async function engineStartCommand(): Promise<void> {
+  const result = await startLocalEngine();
+  if (!result.ok) {
+    void window
+      .showErrorMessage(scrubSecrets(result.error), 'Install Local Engine')
+      .then((choice) => {
+        if (choice) void commands.executeCommand(COMMANDS.engineSetup);
+      });
+    return;
+  }
+  void window.showInformationMessage(`AXIS local engine ready at ${result.endpoint}`);
+}
+
+function engineStopCommand(): void {
+  localEngine?.stop();
+  refreshEngineStatusBar();
+  runOutput?.appendLine('local engine stopped');
+}
+
+function engineStatusCommand(): void {
+  refreshEngineStatusBar();
+  const status = localEngine?.status() ?? { state: 'stopped' as const };
+  const message =
+    status.state === 'ready'
+      ? `AXIS local engine ready at ${status.endpoint}`
+      : status.state === 'error'
+        ? `AXIS local engine error: ${status.error}`
+        : `AXIS local engine ${status.state}`;
+  void window.showInformationMessage(scrubSecrets(message));
+}
+
+type EngineMenuItem = {
+  label: string;
+  description?: string;
+  command: string;
+};
+
+/** QuickPick actions for the `PYNE local` status item. */
+async function engineMenuCommand(): Promise<void> {
+  refreshEngineStatusBar();
+  const status = localEngine?.status() ?? { state: 'stopped' as const };
+  const view = engineStatusView(status, 'local');
+  const items: EngineMenuItem[] = [];
+
+  if (status.state !== 'ready') {
+    items.push({ label: '$(play) Start Local Engine', command: COMMANDS.engineStart });
+  }
+  if (status.state === 'ready' || status.state === 'starting') {
+    items.push({ label: '$(debug-stop) Stop Local Engine', command: COMMANDS.engineStop });
+  }
+  items.push({
+    label: '$(cloud-download) Install Local Engine',
+    command: COMMANDS.engineSetup,
+  });
+  items.push({ label: '$(output) Show AXIS Run Output', command: COMMANDS.showRunOutput });
+  items.push({
+    label: '$(info) Local Engine Status',
+    description: view.tooltip,
+    command: COMMANDS.engineStatus,
+  });
+
+  const pick = await window.showQuickPick(items, {
+    title: 'AXIS local engine',
+    placeHolder: view.tooltip,
+  });
+  if (pick) await commands.executeCommand(pick.command);
+}
+
+/** Stream one provisioning command into the AXIS Run channel. */
+function runProvisionCommand(
+  command: string,
+  args: string[],
+): Promise<ProvisionCommandResult> {
+  return new Promise((resolve) => {
+    const child = spawnProcess(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+      windowsHide: true,
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (chunk) => {
+      const text = String(chunk);
+      stdout += text;
+      runOutput?.appendLine(scrubSecrets(text.trimEnd()));
+    });
+    child.stderr?.on('data', (chunk) => {
+      const text = String(chunk);
+      stderr += text;
+      runOutput?.appendLine(scrubSecrets(text.trimEnd()));
+    });
+    child.once('error', (err) => resolve({ code: -1, stderr: err.message }));
+    child.once('close', (code) => resolve({ code: code ?? -1, stdout, stderr }));
+  });
+}
+
+/** Download a pinned runtime archive into `dest`. */
+async function downloadToFile(url: string, dest: string): Promise<void> {
+  const res = await fetch(url, { redirect: 'follow' });
+  if (!res.ok) throw new Error(`HTTP ${res.status} downloading ${url}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  const fs = await import('node:fs/promises');
+  const path = await import('node:path');
+  await fs.mkdir(path.dirname(dest), { recursive: true });
+  await fs.writeFile(dest, bytes);
+}
+
+async function sha256File(file: string): Promise<string> {
+  const { createHash } = await import('node:crypto');
+  const fs = await import('node:fs/promises');
+  return createHash('sha256').update(await fs.readFile(file)).digest('hex');
+}
+
+/** Extract a `.tar.gz` with the platform `tar` (bsdtar on Win10+). */
+async function extractTarGz(archive: string, destDir: string): Promise<void> {
+  const fs = await import('node:fs/promises');
+  await fs.mkdir(destDir, { recursive: true });
+  await new Promise<void>((resolve, reject) => {
+    const child = spawnProcess('tar', ['-xzf', archive, '-C', destDir], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+    let stderr = '';
+    child.stderr?.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+    child.once('error', reject);
+    child.once('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`tar exited with code ${code}: ${stderr.trim()}`));
+        return;
+      }
+      // The extracted tree is enough; drop the ~68 MB archive.
+      void fs.rm(archive, { force: true }).then(
+        () => resolve(),
+        () => resolve(),
+      );
+    });
+  });
+}
+
+/** Create the extension-owned venv, install the backend, select local mode. */
+async function engineSetupCommand(context: ExtensionContext): Promise<void> {
+  const settings = readEngineSettings();
+  const venvDir = Uri.joinPath(context.globalStorageUri, LOCAL_ENGINE_VENV_DIR).fsPath;
+  const pkg = await resolveLocalEnginePackage({
+    extensionRoot: context.extensionPath,
+    exists: (path) => existsSync(path),
+    joinPath,
+    configured: settings.localPackage,
+  });
+  runOutput?.appendLine(`local engine package: ${pkg.source} ${pkg.spec}`);
+  const runtimeDir = Uri.joinPath(context.globalStorageUri, 'pyne-runtime').fsPath;
+  const result = await window.withProgress(
+    {
+      location: ProgressLocation.Notification,
+      title: 'AXIS: installing local engine',
+      cancellable: false,
+    },
+    async (progress): Promise<ProvisionResult> => {
+      const provision = (python: string) =>
+        provisionLocalEngine({
+          python,
+          venvDir,
+          packageSpec: pkg.spec,
+          run: runProvisionCommand,
+          exists: async (path) => existsSync(path),
+          joinPath,
+          platform: process.platform,
+          log: (line) => runOutput?.appendLine(scrubSecrets(line)),
+        });
+
+      const first = await provision(settings.localPython);
+      const canDownload =
+        settings.localAllowDownload && settings.localPython === 'python3';
+      if (first.ok || first.step !== 'python' || !canDownload) return first;
+
+      const target = resolveRuntimeTarget(process.platform, process.arch);
+      if (!target) {
+        return {
+          ok: false,
+          step: 'python',
+          error: `no standalone Python build for ${process.platform}/${process.arch}; set axis.engine.local.python.`,
+        };
+      }
+
+      progress.report({ message: 'downloading standalone Python…' });
+      const runtime = await ensureStandalonePython({
+        target,
+        cacheDir: joinPath(runtimeDir, target.key),
+        download: downloadToFile,
+        sha256: sha256File,
+        extract: extractTarGz,
+        exists: (path) => existsSync(path),
+        joinPath,
+        log: (line) => runOutput?.appendLine(scrubSecrets(line)),
+      });
+      if (!runtime.ok) {
+        return {
+          ok: false,
+          step: 'python',
+          error: `standalone Python ${runtime.step} failed: ${runtime.error}`,
+        };
+      }
+
+      progress.report({ message: 'installing backend…' });
+      return provision(runtime.python);
+    },
+  );
+  if (!result.ok) {
+    const hint =
+      pkg.source === 'pypi'
+        ? ' The vendored wheel is missing from this build; set axis.engine.local.package to a wheel or repo path.'
+        : '';
+    void window.showErrorMessage(
+      `AXIS local engine setup failed (${result.step}): ${scrubSecrets(result.error)}${hint}`,
+    );
+    return;
+  }
+  const cfg = workspace.getConfiguration('axis.engine');
+  await cfg.update('local.command', result.command, ConfigurationTarget.Global);
+  await cfg.update('mode', 'local', ConfigurationTarget.Global);
+  refreshEngineStatusBar();
+  void window.showInformationMessage(
+    'AXIS local engine installed. Run a script with Ctrl+Enter (Cmd+Enter on macOS).',
+  );
 }
 
 function beginCommandAbort(): AbortSignal {
@@ -316,10 +724,11 @@ async function runScriptCore(opts: {
     }
 
     const settings = readEngineSettings();
+    const engineId = selectedEngineId(settings);
     const endpointCheck = checkEngineEndpoint(settings.endpoint, {
       allowRemote: settings.allowRemote,
     });
-    if (!endpointCheck.ok && !settings.allowPyodide) {
+    if (engineId === 'server' && !endpointCheck.ok) {
       const err = scrubSecrets(endpointCheck.error);
       output.appendLine(err);
       if (showErrors) void window.showErrorMessage(err);
@@ -344,7 +753,7 @@ async function runScriptCore(opts: {
 
     const resolved = await resolveRunContext(chartJson, {
       historyBarsSetting: settings.historyBarsSetting,
-      engineId: settings.allowPyodide ? 'pyodide' : 'server',
+      engineId,
       activeEngineId: undefined,
       endpoint,
       useMockBars: settings.useMockBars,
@@ -371,6 +780,27 @@ async function runScriptCore(opts: {
     const ctx = resolved.ctx;
     const runMode: RunMode = mode || ctx.mode || 'auto';
 
+    let sidecarEndpoint: string | undefined;
+    if (engineId === 'local') {
+      const started = await startLocalEngine();
+      if (!started.ok) {
+        const err = scrubSecrets(started.error);
+        output.appendLine(err);
+        if (showErrors) {
+          void window.showErrorMessage(err, 'Install Local Engine').then((choice) => {
+            if (choice) void commands.executeCommand(COMMANDS.engineSetup);
+          });
+        }
+        publishRunChrome('error', myGen);
+        return { ok: false, mode, focus, error: err };
+      }
+      sidecarEndpoint = started.endpoint;
+    }
+    if (signal.aborted) {
+      publishRunChrome('stopped', myGen);
+      return { ok: false, mode, focus, reason: 'aborted', error: 'aborted' };
+    }
+
     const deps: RunDeps = {
       secrets: {
         getProKey: async () => {
@@ -387,6 +817,23 @@ async function runScriptCore(opts: {
       pyodideAllowed: settings.allowPyodide,
       runPyodide: settings.allowPyodide && pyodideCalc
         ? (req) => pyodideCalc!.run(true, req)
+        : undefined,
+      runLocal: sidecarEndpoint
+        ? (req) =>
+            postEngineRun({
+              endpoint: sidecarEndpoint,
+              script: req.script,
+              bars: req.bars,
+              mode: req.mode,
+              symbol: req.symbol,
+              inputs: req.inputs,
+              timeframe: req.timeframe,
+              fromBar: req.fromBar,
+              toBar: req.toBar,
+              allowRemote: false,
+              signal: req.signal,
+              timeoutMs: 120_000,
+            })
         : undefined,
       bus: { notifyChart },
       output: {
@@ -829,8 +1276,34 @@ async function pickDataCommand(): Promise<string | undefined> {
   }
 }
 
+/**
+ * VS Code-backed `StatusbarHost` for `AxisStatusbar`. Lives in the host so
+ * `src/statusbar.ts` stays free of runtime `vscode` imports (unit-testable).
+ */
+function makeStatusbarHost(): StatusbarHost {
+  return {
+    readEnabled: () =>
+      workspace
+        .getConfiguration('axis')
+        .get<boolean>('statusbar.enabled', true) === true,
+    writeEnabled: async (enabled: boolean) =>
+      workspace
+        .getConfiguration('axis')
+        .update('statusbar.enabled', enabled, ConfigurationTarget.Global),
+    createItem: (alignment: unknown, priority: number) =>
+      window.createStatusBarItem(alignment as StatusBarAlignment, priority),
+    registerCommand: (id: string, fn: () => unknown) =>
+      commands.registerCommand(id, fn),
+    runCommand: async (id: string, ...args: unknown[]) =>
+      commands.executeCommand(id, ...args),
+    pick: async (items, options) =>
+      window.showQuickPick(items, { title: options.title }),
+  };
+}
+
 export function activate(context: ExtensionContext): void {
   deactivated = false;
+  extensionContext = context;
 
   secrets = new AxisSecretStorage(context.secrets);
   orchestrator = new RunOrchestrator();
@@ -895,6 +1368,16 @@ export function activate(context: ExtensionContext): void {
 
   runOutput = window.createOutputChannel(RUN_OUTPUT_CHANNEL_NAME);
   context.subscriptions.push(runOutput);
+
+  engineStatusBar = window.createStatusBarItem(StatusBarAlignment.Right, 90);
+  engineStatusBar.command = COMMANDS.engineMenu;
+  context.subscriptions.push(engineStatusBar);
+  refreshEngineStatusBar();
+  context.subscriptions.push(
+    workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration('axis.engine')) refreshEngineStatusBar();
+    }),
+  );
   setLogSink((level, message) => {
     const line = `[${level}] ${message}`;
     try {
@@ -955,18 +1438,37 @@ export function activate(context: ExtensionContext): void {
     commands.registerCommand(COMMANDS.debugToggleBarBreakpoint, () => {
       const session = barDebug?.session();
       if (!session) return false;
-      return session.toggleBarBreakpoint(session.currentBar);
+      // Route through the handle so executable adapter mode shows the info
+      // message instead of toggling the orphaned in-process session.
+      return barDebug?.toggleBarBreakpoint(session.currentBar) ?? false;
     }),
     commands.registerCommand(COMMANDS.openWalkthroughFixture, () =>
       openWalkthroughFixture(context.extensionPath),
     ),
+    commands.registerCommand(COMMANDS.engineStart, () => engineStartCommand()),
+    commands.registerCommand(COMMANDS.engineStop, () => engineStopCommand()),
+    commands.registerCommand(COMMANDS.engineStatus, () => engineStatusCommand()),
+    commands.registerCommand(COMMANDS.engineSetup, () => engineSetupCommand(context)),
+    commands.registerCommand(COMMANDS.engineMenu, () => engineMenuCommand()),
   );
+
+  // AXIS IDE statusbar item (HOOX logo) with a click popup.
+  const sbHost = makeStatusbarHost();
+  statusbar = new AxisStatusbar(
+    sbHost,
+    Uri.file(context.asAbsolutePath('media/icon.png')),
+  );
+  context.subscriptions.push({ dispose: () => statusbar?.dispose() });
+  const sb = statusbar;
+  context.subscriptions.push(
+    commands.registerCommand(STATUSBAR_COMMAND_TOGGLE, () => void sb?.toggle()),
+    commands.registerCommand(STATUSBAR_COMMAND_POPUP, () => void sb?.showPopup()),
+  );
+  sb?.showIfEnabled();
 
   warnIfPyneBelowRecommended();
   const ver = String(context.extension.packageJSON?.version ?? '');
   runOutput.appendLine(ver ? `AXIS IDE activated (lightweight core ${ver}).` : 'AXIS IDE activated (lightweight).');
-
-  // no statusBar in lightweight core
 }
 
 export function deactivate(): void {
@@ -988,5 +1490,17 @@ export function deactivate(): void {
     pyodideCalc?.reset();
   } catch {}
   pyodideCalc = undefined;
+  try {
+    localEngine?.stop();
+  } catch {}
+  localEngine = undefined;
+  localEngineKey = '';
+  try {
+    engineStatusBar?.dispose();
+  } catch {}
+  engineStatusBar = undefined;
+  extensionContext = undefined;
   barDebug = undefined;
+  statusbar?.dispose();
+  statusbar = undefined;
 }

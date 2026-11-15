@@ -21,6 +21,7 @@
  */
 
 import {
+  DebugAdapterExecutable,
   DebugAdapterInlineImplementation,
   type DebugAdapter,
   type DebugProtocolMessage,
@@ -28,10 +29,24 @@ import {
   debug,
   EventEmitter,
   window,
+  workspace,
 } from 'vscode';
 import { notifyChart } from '../run/chart-bus';
 import { AxisBarDebugSession, AXIS_BAR_DAP_TYPE, type DapRequest } from './bar-adapter';
 import { lastBarDebugLaunch } from './snapshot';
+
+export type AxisBarDebugAdapter = 'inline' | 'executable';
+
+const DEFAULT_ADAPTER: AxisBarDebugAdapter = 'executable';
+
+function readDebugAdapter(): AxisBarDebugAdapter {
+  try {
+    const raw = workspace.getConfiguration('axis.debug').get('adapter', DEFAULT_ADAPTER);
+    return raw === 'inline' ? 'inline' : 'executable';
+  } catch {
+    return DEFAULT_ADAPTER;
+  }
+}
 
 export type AxisBarDebugHandle = {
   session: () => AxisBarDebugSession | undefined;
@@ -77,15 +92,29 @@ function noteIfNoBars(): void {
   );
 }
 
-/** Register inline DAP factory + keep one live session for commands. */
+/** Register the `axis-bar` DAP descriptor + keep one live session for commands. */
 export function registerAxisBarDebugger(context: ExtensionContext): AxisBarDebugHandle {
   let live: AxisBarDebugSession | undefined;
-  const factory = debug.registerDebugAdapterDescriptorFactory(AXIS_BAR_DAP_TYPE, {
-    createDebugAdapterDescriptor() {
+  const adapterMode = readDebugAdapter();
+
+  function ensureLive(): AxisBarDebugSession {
+    if (!live) {
       live = new AxisBarDebugSession((barIndex) => {
         notifyChart({ type: 'chart.debugCursor', payload: { barIndex } });
       });
-      return new DebugAdapterInlineImplementation(new InlineAxisBarAdapter(live));
+    }
+    return live;
+  }
+
+  const factory = debug.registerDebugAdapterDescriptorFactory(AXIS_BAR_DAP_TYPE, {
+    createDebugAdapterDescriptor() {
+      if (adapterMode === 'executable') {
+        // Real DAP: VS Code spawns the out-of-process adapter executable.
+        const adapterPath = context.asAbsolutePath('out/debug/adapter.js');
+        return new DebugAdapterExecutable(process.execPath, [adapterPath]);
+      }
+      // Inline fallback: DAP runs in the extension host process.
+      return new DebugAdapterInlineImplementation(new InlineAxisBarAdapter(ensureLive()));
     },
   });
   context.subscriptions.push(factory);
@@ -101,17 +130,52 @@ export function registerAxisBarDebugger(context: ExtensionContext): AxisBarDebug
       });
     },
     stepBar: () => {
-      if (!live) {
+      if (adapterMode === 'executable') {
+        const running =
+          debug.activeDebugSession?.type === AXIS_BAR_DAP_TYPE;
+        if (!running) {
+          void debug.startDebugging(undefined, {
+            type: AXIS_BAR_DAP_TYPE,
+            name: BAR_DEBUG_NAME,
+            request: 'launch',
+            stopOnEntry: true,
+          });
+        }
         void window.showInformationMessage(
-          'AXIS: Start parks on the first bar. Step moves one bar after that.',
+          'AXIS: Use the VS Code debug toolbar (step over) to step bars. Command-palette stepping requires inline adapter mode.',
         );
         return;
       }
-      live.handle({ seq: Date.now(), type: 'request', command: 'next' });
+      ensureLive().handle({ seq: Date.now(), type: 'request', command: 'next' });
     },
-    toggleBarBreakpoint: (index: number) => live?.toggleBarBreakpoint(index) ?? false,
+    toggleBarBreakpoint: (index: number) => {
+      if (adapterMode === 'executable') {
+        void window.showInformationMessage(
+          'AXIS: Bar breakpoints require inline adapter mode. Set axis.debug.adapter to inline.',
+        );
+        return false;
+      }
+      return ensureLive().toggleBarBreakpoint(index);
+    },
     seekToBar: async (index: number) => {
-      if (!live) {
+      if (adapterMode === 'executable') {
+        const running =
+          debug.activeDebugSession?.type === AXIS_BAR_DAP_TYPE;
+        if (!running) {
+          await debug.startDebugging(undefined, {
+            type: AXIS_BAR_DAP_TYPE,
+            name: BAR_DEBUG_NAME,
+            request: 'launch',
+            stopOnEntry: false,
+          });
+        }
+        void window.showInformationMessage(
+          'AXIS: Use the VS Code debug UI to step/seek bars. Command-palette seeking requires inline adapter mode.',
+        );
+        return;
+      }
+      const sess = ensureLive();
+      if (sess.barCount <= 0) {
         noteIfNoBars();
         await debug.startDebugging(undefined, {
           type: AXIS_BAR_DAP_TYPE,
@@ -120,7 +184,7 @@ export function registerAxisBarDebugger(context: ExtensionContext): AxisBarDebug
           stopOnEntry: false,
         });
       }
-      live?.seekToBar(index, 'trade');
+      sess.seekToBar(index, 'trade');
     },
     dispose: () => {
       factory.dispose();

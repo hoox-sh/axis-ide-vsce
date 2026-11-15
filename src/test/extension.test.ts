@@ -78,16 +78,33 @@ const EXPECTED_COMMANDS = [
   'axis.debug.stepBar',
   'axis.debug.toggleBarBreakpoint',
   'axis.openWalkthroughFixture',
+  'axis.statusbar.toggle',
+  'axis.statusbar.showPopup',
+  'axis.engine.start',
+  'axis.engine.stop',
+  'axis.engine.status',
+  'axis.engine.setup',
+  'axis.engine.menu',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
+  'axis.engine.mode',
   'axis.engine.endpoint',
   'axis.engine.allowRemoteEndpoint',
   'axis.engine.allowPyodide',
   'axis.engine.pyodideWheelUrl',
+  'axis.engine.local.command',
+  'axis.engine.local.args',
+  'axis.engine.local.cwd',
+  'axis.engine.local.python',
+  'axis.engine.local.package',
+  'axis.engine.local.allowDownload',
   'axis.chart.historyBars',
   'axis.chart.useMockBars',
   'axis.datafeed.url',
+  'axis.datafeed.source',
+  'axis.debug.adapter',
+  'axis.statusbar.enabled',
 ] as const;
 /** Must never appear as contributes.configuration — SecretStorage only (KD-8). */
 const FORBIDDEN_SETTINGS = ['axis.worker.apiKey', 'axis.pro.apiKey'] as const;
@@ -443,10 +460,12 @@ suite('AXIS IDE Extension Activation', () => {
     assert.ok(first, 'missing walkthrough axis.firstPlot');
     assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.open'));
     assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.run'));
+    assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.local'));
     const root = path.resolve(__dirname, '../../');
     assert.ok(fs.existsSync(path.join(root, 'fixtures', 'orb.pine')));
     assert.ok(fs.existsSync(path.join(root, 'fixtures', 'orb.axis.json')));
     assert.ok(fs.existsSync(path.join(root, 'media', 'walkthrough-first-plot.md')));
+    assert.ok(fs.existsSync(path.join(root, 'media', 'walkthrough-local-engine.md')));
   });
 
   test('default axis.telemetry.offline is true', () => {

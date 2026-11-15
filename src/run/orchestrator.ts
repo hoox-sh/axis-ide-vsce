@@ -65,10 +65,26 @@ export interface RunRequest {
 }
 
 export const UNSUPPORTED_ENGINE_ERROR =
-  'AXIS Run supports engine id "server" or "pyodide" (when axis.engine.allowPyodide) in this release (pyne-worker lands later).';
+  'AXIS Run supports engine id "server", "local", or "pyodide" (when axis.engine.allowPyodide) in this release (pyne-worker lands later).';
 
 export const PYODIDE_DISABLED_ERROR =
   'AXIS Pyodide calculator is off. Set axis.engine.allowPyodide to true (Wasm loads from jsDelivr, not the VSIX).';
+
+export const LOCAL_ENGINE_DISABLED_ERROR =
+  'AXIS local engine is not ready. Install the hoox-pyne backend (pyne-backend) or set axis.engine.mode to server/pyodide.';
+
+/** Inputs forwarded to the managed local sidecar (same shape as Pro `/run`). */
+export type LocalRunRequest = {
+  script: string;
+  bars: OhlcvBar[];
+  mode: RunMode;
+  symbol: string;
+  inputs?: Record<string, unknown>;
+  timeframe?: string;
+  fromBar?: number;
+  toBar?: number;
+  signal?: AbortSignal;
+};
 
 export interface RunSecrets {
   /** Resolve Pro (`pyn_…`) key. Never-throw. */
@@ -111,6 +127,8 @@ export interface RunDeps {
     signal?: AbortSignal;
     inputs?: Record<string, unknown>;
   }) => Promise<EngineRunResult>;
+  /** When `engineId === 'local'`, managed `pyne-backend` sidecar. */
+  runLocal?: (req: LocalRunRequest) => Promise<EngineRunResult>;
   bus: {
     notifyChart(message: ChartNotifyMessage): void;
   };
@@ -288,6 +306,32 @@ export class RunOrchestrator {
             result = mapped;
           }
         }
+        dumpEngineLogs(deps.output, result.logs);
+        return this.finishRun(req, deps, my, started, result, signal);
+      }
+
+      if (req.engineId === 'local') {
+        if (typeof deps.runLocal !== 'function') {
+          const error = LOCAL_ENGINE_DISABLED_ERROR;
+          this.setDiags(deps, req.uri, [{ message: error, severity: 'error' }]);
+          safeLog(deps.output, `run error epoch=${my}: ${error}`);
+          return { ok: false, epoch: my, reason: 'error', error };
+        }
+        if (signal?.aborted) {
+          safeLog(deps.output, `run aborted epoch=${my}`);
+          return { ok: false, epoch: my, reason: 'aborted', error: 'Aborted' };
+        }
+        const result = await deps.runLocal({
+          script: req.script,
+          bars: req.bars,
+          mode: req.mode || 'auto',
+          symbol: req.symbol || symbolFromSeriesKey(req.seriesKey),
+          inputs: req.inputs,
+          timeframe: req.timeframe,
+          fromBar: req.fromBar,
+          toBar: req.toBar,
+          signal,
+        });
         dumpEngineLogs(deps.output, result.logs);
         return this.finishRun(req, deps, my, started, result, signal);
       }

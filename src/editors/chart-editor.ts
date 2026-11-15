@@ -47,6 +47,7 @@ import {
   DEFAULT_DATAFEED_URL,
   fetchHistorical,
 } from '../host/history-client';
+import { fetchCcxtHistorical } from '../host/ccxt-client';
 import { logError, logProtocolReject, logWarn } from '../host/logger';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
@@ -360,6 +361,8 @@ interface ChartHostSettings {
   historyBarsSetting?: number;
   datafeedUrl: string;
   allowRemote: boolean;
+  /** 'sidecar' (default) = axis.datafeed sidecar; 'venue' = ccxt venue fetch. */
+  datafeedSource: 'sidecar' | 'venue';
 }
 
 /** Read chart + datafeed settings (never throws). */
@@ -368,6 +371,7 @@ function readChartHostSettings(): ChartHostSettings {
   let historyBarsSetting: number | undefined;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
   let allowRemote = false;
+  let datafeedSource: 'sidecar' | 'venue' = 'sidecar';
   try {
     const cfg = workspace.getConfiguration('axis.chart');
     // Mock bars are opt-in; HistoryClient is the dogfood default.
@@ -381,6 +385,8 @@ function readChartHostSettings(): ChartHostSettings {
     const df = workspace.getConfiguration('axis.datafeed');
     const url = df.get<string>('url');
     if (typeof url === 'string' && url.trim()) datafeedUrl = url.trim();
+    const src = df.get<string>('source');
+    if (src === 'sidecar' || src === 'venue') datafeedSource = src;
   } catch {
     // keep default
   }
@@ -391,7 +397,7 @@ function readChartHostSettings(): ChartHostSettings {
   } catch {
     allowRemote = false;
   }
-  return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote };
+  return { useMockBars, historyBarsSetting, datafeedUrl, allowRemote, datafeedSource };
 }
 
 /** Read chart settings + document into a fresh session (no stale init closure). */
@@ -481,6 +487,40 @@ async function paintHistoryAfterHandshake(
   }
   if (settings.useMockBars) return;
   const limit = resolveMockBarCount(doc.historyBars, settings.historyBarsSetting);
+  if (settings.datafeedSource === 'venue') {
+    const venue = await fetchCcxtHistorical({
+      exchange: doc.exchange || 'binance',
+      symbol: doc.symbol,
+      timeframe: doc.interval || '1m',
+      limit,
+      signal,
+    });
+    if (isDisposed() || signal.aborted) return;
+    if (!venue.ok) {
+      logError(venue.error);
+      try {
+        void webview.postMessage(
+          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: venue.error }),
+        );
+      } catch {
+        // disposing
+      }
+      return;
+    }
+    try {
+      void webview.postMessage(
+        encode(HOST_TO_VIEW.ChartFull, {
+          bars: venue.bars,
+          seq: CHART_HISTORY_SEQ,
+        }),
+      );
+      // Replay run paint only after history so a lower history seq cannot clobber it.
+      if (!isDisposed()) replayLastRunFull(webview, seriesKey);
+    } catch {
+      // panel may be disposing
+    }
+    return;
+  }
   const history = await fetchHistorical({
     exchange: doc.exchange || 'binance',
     symbol: doc.symbol,
