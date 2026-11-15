@@ -2,7 +2,7 @@
   "name": "axis-ide",
   "displayName": "AXIS IDE",
   "description": "AXIS charts for Pine Script and PYNE: run a script beside the editor, paint plots and strategy results, and step bars. Part of the HOOX stack. Depends on PYNE. Unofficial — not affiliated with TradingView, Inc.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "packageManager": "bun@1.4.4",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
