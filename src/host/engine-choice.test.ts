@@ -20,7 +20,6 @@ import { describe, expect, test } from 'bun:test';
 import { chooseEngine } from './engine-choice';
 
 const base = {
-  allowPyodide: true,
   localCommand: 'pyne-backend',
   localProvisioned: false,
 };
@@ -42,18 +41,14 @@ describe('chooseEngine', () => {
     ).toBe('local');
   });
 
-  test('auto falls back to pyodide when local is not provisioned', () => {
-    expect(chooseEngine({ ...base, mode: 'auto' })).toBe('pyodide');
-  });
-
-  test('auto falls back to server when pyodide is disabled', () => {
-    expect(chooseEngine({ ...base, mode: 'auto', allowPyodide: false })).toBe('server');
+  test('auto falls back to the hosted server when local is not provisioned', () => {
+    expect(chooseEngine({ ...base, mode: 'auto' })).toBe('server');
   });
 
   test('blank commands are treated as the default', () => {
-    expect(chooseEngine({ ...base, mode: 'auto', localCommand: '   ' })).toBe('pyodide');
+    expect(chooseEngine({ ...base, mode: 'auto', localCommand: '   ' })).toBe('server');
     expect(
       chooseEngine({ ...base, mode: 'auto', localCommand: undefined as unknown as string }),
-    ).toBe('pyodide');
+    ).toBe('server');
   });
 });

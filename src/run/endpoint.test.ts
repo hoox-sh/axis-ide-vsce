@@ -25,10 +25,16 @@ import {
 } from './endpoint';
 
 describe('checkEngineEndpoint', () => {
-  test('defaults empty to loopback Pro URL', () => {
+  test('defaults empty to the hosted Pro URL', () => {
     const r = checkEngineEndpoint('');
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.endpoint).toBe('http://127.0.0.1:5002');
+    if (r.ok) expect(r.endpoint).toBe('https://pynescript.online');
+  });
+
+  test('allows the official host without the remote opt-in', () => {
+    const r = checkEngineEndpoint('https://pynescript.online');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.endpoint).toBe('https://pynescript.online');
   });
 
   test('allows localhost / ::1', () => {

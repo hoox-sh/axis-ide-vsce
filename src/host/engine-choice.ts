@@ -17,8 +17,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
 /**
- * Pick the engine for a run. `auto` keeps the old Pyodide/server default until
- * a local engine is actually available (provisioned venv or a custom command).
+ * Pick the engine for a run. `auto` prefers a provisioned local engine, then
+ * the hosted `server` endpoint. Pyodide is explicit via `mode: "pyodide"`.
  */
 
 import { LOCAL_ENGINE_DEFAULT_COMMAND } from '../run/local-engine';
@@ -27,7 +27,6 @@ export type EngineMode = 'auto' | 'server' | 'local' | 'pyodide';
 
 export type EngineChoiceInput = {
   mode: EngineMode;
-  allowPyodide: boolean;
   /** `axis.engine.local.command` (default `pyne-backend`). */
   localCommand: string;
   /** True when the extension-owned venv console script exists. */
@@ -42,5 +41,5 @@ export function chooseEngine(input: EngineChoiceInput): Exclude<EngineMode, 'aut
   if (input.localProvisioned || command !== LOCAL_ENGINE_DEFAULT_COMMAND) {
     return 'local';
   }
-  return input.allowPyodide ? 'pyodide' : 'server';
+  return 'server';
 }

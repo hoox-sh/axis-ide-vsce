@@ -2,7 +2,7 @@
   "name": "axis-ide",
   "displayName": "AXIS IDE",
   "description": "AXIS charts for Pine Script and PYNE: run a script beside the editor, paint plots and strategy results, and step bars. Part of the HOOX stack. Depends on PYNE. Unofficial — not affiliated with TradingView, Inc.",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "packageManager": "bun@1.4.4",
   "publisher": "hoox-sh",
   "license": "AGPL-3.0-only",
@@ -209,7 +209,7 @@
       },
       {
         "command": "axis.engine.menu",
-        "title": "Local Engine Menu",
+        "title": "Engine Menu",
         "category": "AXIS"
       },
       {
@@ -417,13 +417,13 @@
           "axis.engine.mode": {
             "type": "string",
             "enum": ["auto", "server", "local", "pyodide"],
-            "default": "auto",
-            "markdownDescription": "Engine selection. `auto` prefers the managed local engine when it is provisioned (or `axis.engine.local.command` is customised), else Pyodide when enabled, else remote `/run`. `local` starts the managed `pyne-backend` sidecar on loopback. `server` uses `#axis.engine.endpoint#`. `pyodide` forces the Wasm calculator."
+            "default": "server",
+            "markdownDescription": "Engine selection. `server` (default) posts to `#axis.engine.endpoint#` — the hosted `pynescript.online` endpoint, keyless. `local` starts the managed `pyne-backend` sidecar on loopback. `pyodide` forces the Wasm calculator. `auto` prefers local when provisioned, else `server`."
           },
           "axis.engine.endpoint": {
             "type": "string",
-            "default": "http://127.0.0.1:5002",
-            "markdownDescription": "PYNE Pro / engine base URL (no `/run` suffix). Defaults to loopback. Remote URLs require `#axis.engine.allowRemoteEndpoint#`."
+            "default": "https://pynescript.online",
+            "markdownDescription": "PYNE Pro / engine base URL (no `/run` suffix). Defaults to the hosted `pynescript.online` endpoint, which is keyless (`X-AXIS-Client: ide`). The official host is always allowed; other remote URLs require `#axis.engine.allowRemoteEndpoint#`."
           },
           "axis.engine.local.command": {
             "type": "string",
@@ -462,12 +462,12 @@
             "type": "boolean",
             "default": false,
             "scope": "application",
-            "markdownDescription": "When false (default), `axis.engine.endpoint` must be loopback (`127.0.0.1` / `localhost` / `::1`) so the Pro Bearer key is not sent off-machine. **Application (user) scope only** — workspace settings cannot enable remote endpoints. Opt in only for trusted remote Pro hosts."
+            "markdownDescription": "When false (default), non-official remote endpoints are rejected so a Pro Bearer key is not sent off-machine. The official `pynescript.online` host is always allowed. **Application (user) scope only** — workspace settings cannot enable remote endpoints. Opt in only for trusted remote Pro hosts."
           },
           "axis.engine.allowPyodide": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "Local Pyodide 0.29.5 bars-in calculator (Wave 1 default **on**). Pyodide ships in the VSIX (`vendor/pyodide/0.29.5`); the host falls back to jsDelivr into `globalStorage` only when the bundle is missing. `ready` after a 1+1 smoke plus pynescript Runtime smoke (trusted hoox-pyne wheel). Source is **not** uploaded (`uploaded=0`). Numba/R2/cron are not available in Wasm. Set false to force remote `/run` only."
+            "markdownDescription": "Gate for the explicit `pyodide` engine mode. Pyodide 0.29.5 ships in the VSIX (`vendor/pyodide/0.29.5`); the host falls back to jsDelivr into `globalStorage` only when the bundle is missing. `ready` after a 1+1 smoke plus pynescript Runtime smoke (trusted hoox-pyne wheel). Source is **not** uploaded (`uploaded=0`). Numba/R2/cron are not available in Wasm. `server` and `local` are unaffected; set false to disable the Wasm calculator entirely."
           },
           "axis.engine.pyodideWheelUrl": {
             "type": "string",

@@ -225,7 +225,7 @@ function readEngineSettings(): {
   let historyBarsSetting: number | undefined;
   let useMockBars = false;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
-  let engineMode: EngineMode = 'auto';
+  let engineMode: EngineMode = 'server';
   let localCommand = LOCAL_ENGINE_DEFAULT_COMMAND;
   let localArgs: string[] = [];
   let localCwd: string | undefined;
@@ -324,7 +324,6 @@ function selectedEngineId(
 ): Exclude<EngineMode, 'auto'> {
   return chooseEngine({
     mode: settings.engineMode,
-    allowPyodide: settings.allowPyodide,
     localCommand: settings.localCommand,
     localProvisioned: localEngineProvisioned(),
   });

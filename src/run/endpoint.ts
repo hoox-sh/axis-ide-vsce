@@ -16,10 +16,10 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
-import { DEFAULT_ENGINE_ENDPOINT } from './engine-http';
+import { DEFAULT_ENGINE_ENDPOINT, OFFICIAL_ENGINE_HOST } from './engine-http';
 
 export const REMOTE_ENDPOINT_DENIED =
-  'AXIS engine endpoint must be loopback (127.0.0.1 / localhost / ::1) unless axis.engine.allowRemoteEndpoint is enabled.';
+  'AXIS engine endpoint must be loopback (127.0.0.1 / localhost / ::1) or the official pynescript.online host unless axis.engine.allowRemoteEndpoint is enabled.';
 
 export const BAD_ENDPOINT_SCHEME =
   'AXIS engine endpoint must use http: or https:.';
@@ -32,6 +32,8 @@ export type EndpointCheck =
 
 export type HttpBaseUrlOptions = {
   allowRemote?: boolean;
+  /** Allow the official hosted engine host without `allowRemote`. */
+  allowOfficialHost?: boolean;
   /** Used when `raw` is empty (engine / datafeed defaults). */
   defaultUrl: string;
   /** Short label for error strings (`engine`, `datafeed`, …). */
@@ -69,7 +71,8 @@ export function checkHttpBaseUrl(
     }
     const host = (url.hostname || '').toLowerCase();
     const loopback = LOOPBACK_HOSTS.has(host);
-    if (!loopback && opts.allowRemote !== true) {
+    const official = opts.allowOfficialHost === true && host === OFFICIAL_ENGINE_HOST;
+    if (!loopback && !official && opts.allowRemote !== true) {
       return {
         ok: false,
         error:
@@ -95,6 +98,7 @@ export function checkEngineEndpoint(
 ): EndpointCheck {
   return checkHttpBaseUrl(raw, {
     allowRemote: opts?.allowRemote,
+    allowOfficialHost: true,
     defaultUrl: DEFAULT_ENGINE_ENDPOINT,
     label: 'engine',
   });
