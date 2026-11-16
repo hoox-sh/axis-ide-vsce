@@ -70,7 +70,7 @@ describe('resolveRunContext', () => {
     if (!result.ok) return;
     expect(result.ctx.bars.length).toBe(1500);
     expect(result.ctx.engineId).toBe('server');
-    expect(result.ctx.endpoint).toContain('127.0.0.1');
+    expect(result.ctx.endpoint).toBe('https://pynescript.online');
     expect(result.ctx.seriesKey).toContain('|');
     expect(result.ctx.seq).toBe(1);
     expect(result.ctx.useMockBars).toBe(true);

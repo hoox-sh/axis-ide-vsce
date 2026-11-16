@@ -407,7 +407,7 @@ suite('AXIS IDE Extension Activation', () => {
 
   test('default axis.engine.endpoint / allowRemoteEndpoint', () => {
     const config = vscode.workspace.getConfiguration('axis.engine');
-    assert.strictEqual(config.get('endpoint'), 'http://127.0.0.1:5002');
+    assert.strictEqual(config.get('endpoint'), 'https://pynescript.online');
     assert.strictEqual(config.get('allowRemoteEndpoint'), false);
   });
 

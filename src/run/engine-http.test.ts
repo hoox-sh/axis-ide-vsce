@@ -260,7 +260,7 @@ describe('postEngineRun', () => {
       fetchImpl,
     });
 
-    expect(seenUrl).toBe('http://127.0.0.1:5002/run');
+    expect(seenUrl).toBe(`${DEFAULT_ENGINE_ENDPOINT}/run`);
     expect(seenAuth).toBe('Bearer pyn_abcdefghijklmnopqrstuvwxyz0123456789');
     expect(seenBody.mode).toBe('auto');
     expect(seenBody.timeframe).toBeUndefined();

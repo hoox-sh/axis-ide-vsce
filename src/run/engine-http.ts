@@ -135,7 +135,7 @@ export interface EngineRunResult {
 }
 
 export const MISSING_ENDPOINT_ERROR =
-  'AXIS engine endpoint is empty. Set axis.engine.endpoint (e.g. http://127.0.0.1:5002).';
+  'AXIS engine endpoint is empty. Set axis.engine.endpoint (e.g. https://pynescript.online).';
 
 /**
  * Retained for callers that still gate on Pro auth. `postEngineRun` itself no
@@ -144,11 +144,15 @@ export const MISSING_ENDPOINT_ERROR =
 export const MISSING_API_KEY_ERROR =
   'AXIS Pro API key required for POST /run (SecretStorage pyn_…).';
 
-export const DEFAULT_ENGINE_ENDPOINT = 'http://127.0.0.1:5002';
+/** Hosted PYNE Pro endpoint used by default (keyless, `X-AXIS-Client: ide`). */
+export const DEFAULT_ENGINE_ENDPOINT = 'https://pynescript.online';
+
+/** The official hosted host is always allowed; other remotes need opt-in. */
+export const OFFICIAL_ENGINE_HOST = 'pynescript.online';
 
 /** Kept in sync with `REMOTE_ENDPOINT_DENIED` in `./endpoint` (no import → avoid cycle). */
 export const ENGINE_REMOTE_DENIED =
-  'AXIS engine endpoint must be loopback (127.0.0.1 / localhost / ::1) unless axis.engine.allowRemoteEndpoint is enabled.';
+  'AXIS engine endpoint must be loopback (127.0.0.1 / localhost / ::1) or the official pynescript.online host unless axis.engine.allowRemoteEndpoint is enabled.';
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
@@ -240,6 +244,16 @@ function isLoopbackEndpoint(endpoint: string): boolean {
   try {
     const u = new URL(endpoint.includes('://') ? endpoint : `http://${endpoint}`);
     return LOOPBACK_HOSTS.has(u.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/** True for the official hosted endpoint (always allowed, keyless). */
+function isOfficialEndpoint(endpoint: string): boolean {
+  try {
+    const u = new URL(endpoint.includes('://') ? endpoint : `http://${endpoint}`);
+    return u.hostname.toLowerCase() === OFFICIAL_ENGINE_HOST;
   } catch {
     return false;
   }
@@ -474,7 +488,7 @@ export async function postEngineRun(req: EngineHttpRequest): Promise<EngineRunRe
 
     // Transport-level loopback gate (fail-closed): never send the Bearer key
     // to a remote host unless the caller explicitly opts in.
-    if (req.allowRemote !== true && !isLoopbackEndpoint(endpoint)) {
+    if (req.allowRemote !== true && !isLoopbackEndpoint(endpoint) && !isOfficialEndpoint(endpoint)) {
       return {
         status: 'error',
         plots: [],

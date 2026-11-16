@@ -500,7 +500,7 @@ describe('RunOrchestrator', () => {
     const ac = new AbortController();
     const outcome = await orch.run(baseReq({ signal: ac.signal }), deps);
     expect(outcome.ok).toBe(true);
-    expect(seen).toBe('http://127.0.0.1:5002/run');
+    expect(seen).toBe('https://pynescript.online/run');
     expect(orch.currentSeq).toBeGreaterThan(0);
     expect(orch.currentEpoch).toBeGreaterThan(0);
   });
