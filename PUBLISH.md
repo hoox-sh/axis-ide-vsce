@@ -19,7 +19,8 @@ Hard dependency **`hoox-sh.pyne`** must already be listed on both marketplaces
 
 | Registry | CLI | Secret / env | Notes |
 | --- | --- | --- | --- |
-| VS Marketplace | `npx @vscode/vsce` | `VSCE_PAT` | Azure DevOps PAT with **Marketplace → Manage** for publisher `hoox-sh` |
+| VS Marketplace (CI) | `npx @vscode/vsce@4.1.1 publish --oidc` | GitHub OIDC (`id-token: write`) | Trusted Publishing policy on publisher `hoox-sh`. No PAT. |
+| VS Marketplace (laptop) | `npx @vscode/vsce` | `VSCE_PAT` | Azure DevOps PAT with **Marketplace → Manage**. Global PATs retire on 1 December 2026. |
 | Open VSX | `npx ovsx` | `OVSX_PAT` | Eclipse Open VSX PAT; namespace **`hoox-sh`** must exist (same as PYNE) |
 
 Verify tokens without uploading:
@@ -115,19 +116,42 @@ the VSIX on the GitHub Release.
 [`.github/workflows/release.yml`](./.github/workflows/release.yml) runs on
 `v*` tags and `workflow_dispatch`:
 
-1. Builds both VSIX files.
-2. Attaches them to the GitHub Release for the tag.
-3. Publishes the IDE, then the pack, to Marketplace and Open VSX **only when**
-   `VSCE_PAT` and `OVSX_PAT` repository secrets are set.
+1. Builds both VSIX files. A manual `workflow_dispatch` that is not a tag
+   still builds both files and does not call `vsce publish` or `ovsx publish`.
+2. On a `v*` tag, attaches them to the GitHub Release.
+3. On a `v*` tag only, publishes the IDE, then the pack, to the Marketplace
+   with `vsce publish --oidc` (`@vscode/vsce@4.1.1`).
+4. On a `v*` tag only, publishes the same files to Open VSX when `OVSX_PAT`
+   is set.
 
-Add the secrets under **Settings → Secrets and variables → Actions**:
+Marketplace and Open VSX publish only on `v*` tags.
+
+Marketplace auth is a Trusted Publishing policy, not `VSCE_PAT`. Create it
+once before the next tag:
+
+1. Open the [publisher management page](https://marketplace.visualstudio.com/manage) for `hoox-sh`.
+2. Select **Trusted Publishing**, then **Create**.
+3. Policy name: `Release workflow`.
+4. Repository owner: `hoox-sh`.
+5. Repository: `axis-ide-vsce`.
+6. Workflow: `release.yml`.
+7. Environment: leave empty. The job does not set a GitHub environment.
+
+The workflow grants `id-token: write`. Each `vsce publish --oidc` requests its
+own GitHub token, exchanges it once, and receives a Marketplace credential that
+lasts 15 minutes. If that exchange fails, vsce does not fall back to a PAT.
+The IDE publish and the pack publish are two exchanges in the same job.
+
+`VSCE_PAT` is only for a laptop publish until global Azure DevOps PATs retire
+on 1 December 2026. Open VSX still needs `OVSX_PAT`.
 
 | Secret | Purpose |
 | --- | --- |
-| `VSCE_PAT` | Marketplace publish |
 | `OVSX_PAT` | Open VSX publish |
 
-Without the secrets the workflow still produces downloadable VSIX assets.
+Without `OVSX_PAT` a `v*` tag still produces the GitHub Release VSIX files
+and still attempts the Marketplace publish. Open VSX is skipped. A
+`workflow_dispatch` that is not a tag only builds.
 
 ## `PUBLISH.md` and the VSIX
 

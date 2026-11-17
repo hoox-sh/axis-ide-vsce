@@ -74,7 +74,7 @@ export function dataSourceChoices(opts?: {
   const feed: DataSourceChoice = {
     id: 'feed',
     label: 'Local feed',
-    description: 'Candles from a data feed on this machine',
+    description: 'Candles from the local axis-datafeed sidecar on this machine',
   };
   if (url) feed.detail = url;
   return [

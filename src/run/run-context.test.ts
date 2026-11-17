@@ -182,6 +182,21 @@ describe('resolveRunContext', () => {
     expect(result.ctx.bars.length).toBe(60);
   });
 
+  test('settings engineId beats stale doc.engine; doc.engine is fallback only', async () => {
+    const json = JSON.stringify({
+      schema: 'axis.chart.v1',
+      engine: 'pyodide',
+      historyBars: 40,
+    });
+    const settingsWin = await resolveRunContext(json, { engineId: 'server' });
+    expect(settingsWin.ok).toBe(true);
+    if (settingsWin.ok) expect(settingsWin.ctx.engineId).toBe('server');
+
+    const docFallback = await resolveRunContext(json);
+    expect(docFallback.ok).toBe(true);
+    if (docFallback.ok) expect(docFallback.ctx.engineId).toBe('pyodide');
+  });
+
   test('catch path returns mock defaults on hostile settings when mock on', async () => {
     const settings = {};
     Object.defineProperty(settings, 'historyBarsSetting', {
@@ -347,5 +362,131 @@ describe('resolveRunContext', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/barsPath|\.\./);
+  });
+
+  test('default-like settings (mock on / source omitted) yield Sample bars without fetch', async () => {
+    let fetched = false;
+    const fetchImpl: HistoryFetchLike = async () => {
+      fetched = true;
+      return { ok: true, status: 200, text: async () => '[]' };
+    };
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'BTC/USDT',
+        exchange: 'binance',
+        interval: '1h',
+        historyBars: 40,
+      }),
+      { useMockBars: true, datafeedSource: 'venue', fetchImpl },
+    );
+    expect(fetched).toBe(false);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.useMockBars).toBe(true);
+    expect(result.ctx.bars.length).toBe(40);
+  });
+
+  test('venue + missing ccxt falls back to Sample bars (packaged VSIX path)', async () => {
+    const { CCXT_NOT_AVAILABLE } = await import('../host/ccxt-client');
+    let venueCalls = 0;
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'BTC/USDT',
+        exchange: 'binance',
+        interval: '1h',
+        historyBars: 25,
+      }),
+      {
+        useMockBars: false,
+        datafeedSource: 'venue',
+        fetchCcxt: async () => {
+          venueCalls += 1;
+          return { ok: false, error: CCXT_NOT_AVAILABLE };
+        },
+      },
+    );
+    expect(venueCalls).toBe(1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.useMockBars).toBe(true);
+    expect(result.ctx.bars.length).toBe(25);
+  });
+
+  test('venue source uses fetchCcxt when mock is off and ccxt works', async () => {
+    const bar = {
+      time: 1_700_000_000,
+      open: 1,
+      high: 2,
+      low: 0.5,
+      close: 1.5,
+      volume: 9,
+    };
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'ETH/USDT',
+        exchange: 'binance',
+        interval: '5m',
+        historyBars: 10,
+      }),
+      {
+        useMockBars: false,
+        datafeedSource: 'venue',
+        fetchCcxt: async () => ({
+          ok: true,
+          bars: [bar],
+          endpoint: 'ccxt:binance',
+        }),
+      },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.ctx.useMockBars).toBe(false);
+    expect(result.ctx.bars).toEqual([bar]);
+    expect(result.ctx.seq).toBe(CHART_HISTORY_SEQ);
+  });
+
+  test('venue source fails on non-ccxt errors (no silent mock)', async () => {
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'ETH/USDT',
+        exchange: 'binance',
+        interval: '1m',
+      }),
+      {
+        useMockBars: false,
+        datafeedSource: 'venue',
+        fetchCcxt: async () => ({ ok: false, error: 'AXIS venue: network down' }),
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/network down/);
+  });
+
+  test('venue source fails when ccxt returns empty bars', async () => {
+    const result = await resolveRunContext(
+      JSON.stringify({
+        schema: 'axis.chart.v1',
+        symbol: 'ETH/USDT',
+        exchange: 'binance',
+        interval: '1m',
+      }),
+      {
+        useMockBars: false,
+        datafeedSource: 'venue',
+        fetchCcxt: async () => ({
+          ok: true,
+          bars: [],
+          endpoint: 'ccxt:binance',
+        }),
+      },
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/venue returned no bars/i);
   });
 });

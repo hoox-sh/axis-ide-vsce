@@ -41,6 +41,10 @@ export type PineInputDecl = {
   type: string;
   value: unknown;
   defval: unknown;
+  options?: string[];
+  min?: number;
+  max?: number;
+  step?: number;
 };
 
 export type MinimalCalcResult = {
@@ -184,6 +188,7 @@ function splitArgs(inner: string): string[] {
   const args: string[] = [];
   let cur = '';
   let depth = 0;
+  let bracket = 0;
   let quote: string | null = null;
   for (let i = 0; i < inner.length; i++) {
     const c = inner[i];
@@ -207,7 +212,17 @@ function splitArgs(inner: string): string[] {
       cur += c;
       continue;
     }
-    if (c === ',' && depth === 0) {
+    if (c === '[') {
+      bracket += 1;
+      cur += c;
+      continue;
+    }
+    if (c === ']') {
+      bracket = Math.max(0, bracket - 1);
+      cur += c;
+      continue;
+    }
+    if (c === ',' && depth === 0 && bracket === 0) {
       args.push(cur.trim());
       cur = '';
       continue;
@@ -229,21 +244,48 @@ function parseLiteral(kind: string, raw: string): Scalar {
     const n = Number(text);
     return Number.isFinite(n) ? n : 0;
   }
+  if (kind === 'color' || kind === 'colour') {
+    if (/^#[0-9a-fA-F]{3,8}$/.test(text)) return text;
+    const named = /^color\.([A-Za-z_]\w*)$/.exec(text);
+    if (named?.[1] && PINE_COLORS[named[1].toLowerCase()]) return PINE_COLORS[named[1].toLowerCase()];
+    return unquote(text);
+  }
   if (kind === 'source') return unquote(text);
   return unquote(text);
 }
 
+function parseNumberBound(raw: string): number | undefined {
+  const n = Number(raw.trim());
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** `options=["SMA", "EMA"]` or `options=[sma, ema]`. */
+function parseOptionsList(raw: string): string[] | undefined {
+  const list = /^\[([\s\S]*)\]$/.exec(raw.trim());
+  if (!list) return undefined;
+  const out: string[] = [];
+  for (const part of splitArgs(list[1] ?? '')) {
+    const text = unquote(part.trim());
+    if (text) out.push(text);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 function parseInputCall(text: string): { input: InputBinding; end: number } | null {
-  const head = /^input\.(int|float|bool|boolean|string|source)\s*\(/.exec(text);
+  const head = /^input\.(int|float|bool|boolean|string|source|enum|color|colour)\s*\(/.exec(text);
   if (!head) return null;
   const open = head[0].length - 1;
   const close = matchingParen(text, open);
   if (close < 0) return null;
-  const kind = head[1] === 'boolean' ? 'bool' : head[1];
+  const kind = head[1] === 'boolean' ? 'bool' : head[1] === 'colour' ? 'color' : head[1];
   const args = splitArgs(text.slice(open + 1, close));
   let title: string | undefined;
   let defval: Scalar | undefined;
   let sourceToken: string | undefined;
+  let options: string[] | undefined;
+  let min: number | undefined;
+  let max: number | undefined;
+  let step: number | undefined;
   for (const arg of args) {
     const named = /^([A-Za-z_]\w*)\s*=\s*(.+)$/.exec(arg);
     if (named) {
@@ -251,23 +293,29 @@ function parseInputCall(text: string): { input: InputBinding; end: number } | nu
       const val = named[2].trim();
       if (key === 'title') title = unquote(val);
       else if (key === 'defval' || key === 'value') defval = parseLiteral(kind, val);
+      else if (key === 'options') options = parseOptionsList(val);
+      else if (key === 'minval' || key === 'min') min = parseNumberBound(val);
+      else if (key === 'maxval' || key === 'max') max = parseNumberBound(val);
+      else if (key === 'step') step = parseNumberBound(val);
       continue;
     }
     if (kind === 'source' && !sourceToken && /^[A-Za-z_]\w*$/.test(arg)) {
       sourceToken = arg;
       continue;
     }
-    if (!title && isQuoted(arg)) {
-      title = unquote(arg);
+    // Pine positional order is defval, then title. A quoted defval must not be taken as the title.
+    if (defval === undefined && kind !== 'source') {
+      defval = parseLiteral(kind, arg);
       continue;
     }
-    if (defval === undefined && kind !== 'source') defval = parseLiteral(kind, arg);
+    if (!title && isQuoted(arg)) title = unquote(arg);
   }
   if (kind === 'source' && !sourceToken) sourceToken = 'close';
   if (defval === undefined) {
     if (kind === 'int' || kind === 'float') defval = 0;
     else if (kind === 'bool') defval = false;
     else if (kind === 'source') defval = sourceToken ?? 'close';
+    else if (options && options.length > 0) defval = options[0];
     else defval = '';
   }
   const input: InputBinding = {
@@ -277,6 +325,10 @@ function parseInputCall(text: string): { input: InputBinding; end: number } | nu
     defval: kind === 'source' ? (sourceToken ?? 'close') : defval,
     sourceToken,
   };
+  if (options && options.length > 0) input.options = options;
+  if (min !== undefined) input.min = min;
+  if (max !== undefined) input.max = max;
+  if (step !== undefined && step > 0) input.step = step;
   return { input, end: close + 1 };
 }
 
@@ -443,6 +495,24 @@ function parseScript(body: string): ParsedScript {
 }
 
 function coerceOverride(decl: InputBinding, value: unknown): Scalar | undefined {
+  if (decl.options && decl.options.length > 0) {
+    const text =
+      typeof value === 'string'
+        ? value
+        : typeof value === 'number' || typeof value === 'boolean'
+          ? String(value)
+          : undefined;
+    if (text === undefined || !decl.options.includes(text)) return undefined;
+    if (decl.type === 'int') {
+      const n = Number(text);
+      return Number.isFinite(n) ? Math.trunc(n) : undefined;
+    }
+    if (decl.type === 'float') {
+      const n = Number(text);
+      return Number.isFinite(n) ? n : undefined;
+    }
+    return text;
+  }
   if (decl.type === 'bool') {
     if (typeof value === 'boolean') return value;
     if (value === 'true' || value === 'false') return value === 'true';
@@ -493,12 +563,19 @@ function evalExpr(
 }
 
 function toPublicInputs(inputs: InputBinding[]): PineInputDecl[] {
-  return inputs.map((input) => ({
-    title: input.title,
-    type: input.type,
-    value: input.value,
-    defval: input.defval,
-  }));
+  return inputs.map((input) => {
+    const pub: PineInputDecl = {
+      title: input.title,
+      type: input.type,
+      value: input.value,
+      defval: input.defval,
+    };
+    if (input.options && input.options.length > 0) pub.options = input.options;
+    if (typeof input.min === 'number') pub.min = input.min;
+    if (typeof input.max === 'number') pub.max = input.max;
+    if (typeof input.step === 'number') pub.step = input.step;
+    return pub;
+  });
 }
 
 /** Input declarations for the chart form. Empty when the script has none. */
@@ -541,7 +618,7 @@ export function evaluateMinimalSubset(
       plots: {},
       series: {},
       plot_meta: {},
-      error: `Local subset cannot evaluate this script. Supported: plot(close|open|high|low|volume), plot(ta.sma(...)), input.int/float/bool/string/source, and simple assignments. ${PYODIDE_PINE_WHEEL_NEXT}`,
+      error: `Local subset cannot evaluate this script. Supported: plot(close|open|high|low|volume), plot(ta.sma(...)), input.int/float/bool/string/source/enum/color, and simple assignments. ${PYODIDE_PINE_WHEEL_NEXT}`,
       error_kind: 'unsupported',
     };
   }

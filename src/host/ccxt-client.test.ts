@@ -21,6 +21,7 @@ import {
   CCXT_NOT_AVAILABLE,
   DEFAULT_CCXT_EXCHANGE,
   fetchCcxtHistorical,
+  isCcxtUnavailable,
 } from './ccxt-client';
 
 type Call = { symbol: string; timeframe: string; since: number | undefined; limit: number | undefined };
@@ -51,6 +52,12 @@ describe('ccxt-client (venue OHLCV, no network)', () => {
 
   test('default exchange is binance', () => {
     expect(DEFAULT_CCXT_EXCHANGE).toBe('binance');
+  });
+
+  test('isCcxtUnavailable matches the packaged-VSIX missing-module error', () => {
+    expect(isCcxtUnavailable(CCXT_NOT_AVAILABLE)).toBe(true);
+    expect(isCcxtUnavailable('network down')).toBe(false);
+    expect(isCcxtUnavailable(undefined)).toBe(false);
   });
 
   test('pair-forms load-form symbol and passes timeframe through', async () => {

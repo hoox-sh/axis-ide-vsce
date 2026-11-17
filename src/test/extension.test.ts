@@ -87,6 +87,7 @@ const EXPECTED_COMMANDS = [
   'axis.engine.status',
   'axis.engine.setup',
   'axis.engine.menu',
+  'axis.start',
 ] as const;
 const EXPECTED_SETTINGS = [
   'axis.telemetry.offline',
@@ -116,6 +117,8 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'commands',
   'configuration',
   'customEditors',
+  'viewsContainers',
+  'views',
   'menus',
   'keybindings',
   'debuggers',
@@ -123,6 +126,22 @@ const ALLOWED_CONTRIBUTE_KEYS = new Set([
   'walkthroughs',
   'themes',
 ]);
+/** Old studio ids. One charting desk replaces them. */
+const FORBIDDEN_VIEWS = [
+  'axis.watchlist',
+  'axis.alerts',
+  'axis.library',
+  'axis.layers',
+  'axis.indicators',
+  'axis.plugins',
+  'axis.workers',
+  'axis.results',
+  'axis.strategy',
+  'axis.profiler',
+  'axis.scripts',
+  'axis.runOutput',
+  'axis.toolbox',
+] as const;
 const EXPECTED_KEYBINDINGS = [
   {
     command: 'axis.runScript',
@@ -196,6 +215,7 @@ suite('AXIS IDE Extension Structure', () => {
         ...EXPECTED_COMMANDS.map((id) => `onCommand:${id}`),
         `onCustomEditor:${CHART_VIEW_TYPE}`,
         'onDebug:axis-bar',
+        'onView:axis.desk',
         ...EXPECTED_WORKSPACE_CONTAINS,
       ].sort(),
       'activationEvents inventory drifted',
@@ -220,9 +240,34 @@ suite('AXIS IDE Extension Structure', () => {
     }
   });
 
-  test('no viewsContainers / views / MCP / LM tools in lightweight core', () => {
-    assert.strictEqual(pkg.contributes?.viewsContainers, undefined);
-    assert.strictEqual(pkg.contributes?.views, undefined);
+  test('one AXIS activity-bar desk, no studio views, no MCP / LM tools', () => {
+    const containers = pkg.contributes?.viewsContainers;
+    assert.strictEqual(containers?.panel, undefined);
+    assert.deepStrictEqual(
+      (containers?.activitybar ?? []).map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        icon: entry.icon,
+      })),
+      [{ id: 'axis', title: 'AXIS', icon: 'media/axis-activity.svg' }],
+    );
+    assert.ok(
+      fs.existsSync(path.resolve(__dirname, '../../media/axis-activity.svg')),
+      'activity bar icon missing',
+    );
+    const views = pkg.contributes?.views?.axis ?? [];
+    assert.deepStrictEqual(
+      views.map((view) => view.id),
+      ['axis.desk'],
+    );
+    assert.strictEqual(views[0]?.type, 'webview');
+    assert.strictEqual(views[0]?.name, 'Chart');
+    const ids = Object.values(pkg.contributes?.views ?? {})
+      .flat()
+      .map((view) => view.id);
+    for (const forbidden of FORBIDDEN_VIEWS) {
+      assert.ok(!ids.includes(forbidden), `studio view must stay out: ${forbidden}`);
+    }
     const asRecord = pkg.contributes as Record<string, unknown> | undefined;
     assert.strictEqual(asRecord?.mcpServerDefinitionProviders, undefined);
     assert.strictEqual(asRecord?.languageModelTools, undefined);
@@ -329,7 +374,7 @@ suite('AXIS IDE Extension Structure', () => {
     assert.ok(stop?.when?.includes('axis.run.running'));
   });
 
-  test('context menus cover editor and explorer only (no view menus)', () => {
+  test('context menus cover editor, explorer, and the AXIS desk title', () => {
     const menus = (
       pkg.contributes as {
         menus?: Record<string, Array<{ command: string; when?: string }>>;
@@ -353,7 +398,23 @@ suite('AXIS IDE Extension Structure', () => {
       ),
       'explorer/context openChart',
     );
-    assert.strictEqual(menus?.['view/title'], undefined);
+    const viewTitle = menus?.['view/title'] ?? [];
+    assert.ok(
+      viewTitle.some(
+        (entry) => entry.command === 'axis.runScript' && entry.when?.includes('view == axis.desk'),
+      ),
+      'view/title runScript for the AXIS desk',
+    );
+    assert.ok(
+      viewTitle.some(
+        (entry) => entry.command === 'axis.stopRun' && entry.when?.includes('axis.run.running'),
+      ),
+      'view/title stopRun while a run is going',
+    );
+    assert.ok(
+      viewTitle.every((entry) => entry.when?.includes('view == axis.desk')),
+      'view/title entries stay on the AXIS desk',
+    );
     assert.strictEqual(menus?.['view/item/context'], undefined);
     assert.strictEqual(menus?.['webview/context'], undefined);
   });
@@ -395,9 +456,14 @@ suite('AXIS IDE Extension Activation', () => {
     assert.strictEqual(result, RUN_NO_PINE_MESSAGE);
   });
 
-  test('default axis.chart.useMockBars is false (HistoryClient dogfood)', () => {
+  test('default axis.chart.useMockBars is true (Sample candles for Marketplace)', () => {
     const config = vscode.workspace.getConfiguration('axis.chart');
-    assert.strictEqual(config.get('useMockBars'), false);
+    assert.strictEqual(config.get('useMockBars'), true);
+  });
+
+  test('default axis.datafeed.source is sidecar (venue opt-in)', () => {
+    const config = vscode.workspace.getConfiguration('axis.datafeed');
+    assert.strictEqual(config.get('source'), 'sidecar');
   });
 
   test('default axis.datafeed.url is loopback :5003', () => {
@@ -456,7 +522,11 @@ suite('AXIS IDE Extension Activation', () => {
   test('walkthrough axis.firstPlot ships fixtures', () => {
     const walks = (
       pkg.contributes as {
-        walkthroughs?: Array<{ id: string; steps?: Array<{ id: string }> }>;
+        walkthroughs?: Array<{
+          id: string;
+          description?: string;
+          steps?: Array<{ id: string; description?: string }>;
+        }>;
       }
     )?.walkthroughs ?? [];
     const first = walks.find((w) => w.id === 'axis.firstPlot');
@@ -464,11 +534,41 @@ suite('AXIS IDE Extension Activation', () => {
     assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.open'));
     assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.run'));
     assert.ok(first?.steps?.some((s) => s.id === 'axis.firstPlot.local'));
+    assert.match(String(first?.description ?? ''), /Sample|CSV|bars/i);
+    const openStep = first?.steps?.find((s) => s.id === 'axis.firstPlot.open');
+    assert.match(String(openStep?.description ?? ''), /Pick Data|Sample|CSV/i);
     const root = path.resolve(__dirname, '../../');
     assert.ok(fs.existsSync(path.join(root, 'fixtures', 'orb.pine')));
     assert.ok(fs.existsSync(path.join(root, 'fixtures', 'orb.axis.json')));
+    assert.ok(fs.existsSync(path.join(root, 'fixtures', 'sample-bars.csv')));
     assert.ok(fs.existsSync(path.join(root, 'media', 'walkthrough-first-plot.md')));
     assert.ok(fs.existsSync(path.join(root, 'media', 'walkthrough-local-engine.md')));
+    const walkMd = fs.readFileSync(path.join(root, 'media', 'walkthrough-first-plot.md'), 'utf8');
+    assert.match(walkMd, /Sample candles/i);
+    assert.match(walkMd, /Pick Data/i);
+    const orb = JSON.parse(
+      fs.readFileSync(path.join(root, 'fixtures', 'orb.axis.json'), 'utf8'),
+    ) as { barsPath?: string };
+    assert.strictEqual(orb.barsPath, 'sample-bars.csv');
+  });
+
+  test('walkthrough/examples *.axis.json engine matches hosted default (server)', () => {
+    const root = path.resolve(__dirname, '../../');
+    const paths = [
+      path.join(root, 'fixtures', 'orb.axis.json'),
+      path.join(root, 'fixtures', 'sample.axis.json'),
+      path.join(root, 'examples', 'sma.axis.json'),
+      path.join(root, 'examples', 'strategy.axis.json'),
+    ];
+    for (const p of paths) {
+      assert.ok(fs.existsSync(p), `missing ${p}`);
+      const doc = JSON.parse(fs.readFileSync(p, 'utf8')) as { engine?: string };
+      assert.strictEqual(
+        doc.engine,
+        'server',
+        `${path.relative(root, p)} engine must be hosted default "server" (got ${JSON.stringify(doc.engine)})`,
+      );
+    }
   });
 
   test('default axis.telemetry.offline is true', () => {

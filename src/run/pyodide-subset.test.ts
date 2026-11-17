@@ -183,4 +183,54 @@ describe('pyodide minimal subset', () => {
     };
     expect(declarePineInputs(hostile as unknown as string)).toEqual([]);
   });
+
+  test('enum and string options become a closed list; bounds ride along', () => {
+    const script = [
+      'mode = input.string("sma", "Mode", options=["sma", "ema"])',
+      'kind = input.enum("slow", "Kind", options=[slow, fast])',
+      'bare = input.enum(title="Bare", options=["a"])',
+      'openList = input.string("x", "Open", options=nope)',
+      'empty = input.string("x", "Empty", options=[])',
+      'len = input.int(14, "Length", minval=1, maxval=100, step=1)',
+      'badBound = input.int(2, "Bad", minval=nope, step=0)',
+      'ink = input.color(#abc, "Ink")',
+      'ink2 = input.colour(color.blue, "Ink2")',
+      'ink3 = input.color(color.nope, "Ink3")',
+    ].join('\n');
+    const declared = declarePineInputs(script);
+    expect(declared.find((d) => d.title === 'Mode')).toMatchObject({
+      type: 'string',
+      value: 'sma',
+      options: ['sma', 'ema'],
+    });
+    expect(declared.find((d) => d.title === 'Kind')).toMatchObject({
+      type: 'enum',
+      value: 'slow',
+      options: ['slow', 'fast'],
+    });
+    expect(declared.find((d) => d.title === 'Bare')).toMatchObject({ type: 'enum', value: 'a', options: ['a'] });
+    expect(declared.find((d) => d.title === 'Open')?.options).toBeUndefined();
+    expect(declared.find((d) => d.title === 'Empty')?.options).toBeUndefined();
+    expect(declared.find((d) => d.title === 'Length')).toMatchObject({ min: 1, max: 100, step: 1 });
+    expect(declared.find((d) => d.title === 'Bad')?.min).toBeUndefined();
+    expect(declared.find((d) => d.title === 'Bad')?.step).toBeUndefined();
+    expect(declared.find((d) => d.title === 'Ink')?.value).toBe('#abc');
+    expect(declared.find((d) => d.title === 'Ink2')?.value).toBe('#8b9cff');
+    expect(declared.find((d) => d.title === 'Ink3')?.value).toBe('color.nope');
+
+    expect(declarePineInputs(script, { Mode: 'ema' }).find((d) => d.title === 'Mode')?.value).toBe('ema');
+    expect(declarePineInputs(script, { Mode: 'wma' }).find((d) => d.title === 'Mode')?.value).toBe('sma');
+    expect(declarePineInputs(script, { Mode: 1 }).find((d) => d.title === 'Mode')?.value).toBe('sma');
+    const sized = [
+      'n = input.int(1, "N", options=[1, 2])',
+    ].join('\n');
+    expect(declarePineInputs(sized, { N: '2' }).find((d) => d.title === 'N')?.value).toBe(2);
+    expect(declarePineInputs(sized, { N: '9' }).find((d) => d.title === 'N')?.value).toBe(1);
+    expect(declarePineInputs(sized, { N: { bad: true } }).find((d) => d.title === 'N')?.value).toBe(1);
+    const words = 'n = input.int(1, "Word", options=[1, fast])';
+    expect(declarePineInputs(words, { Word: 'fast' }).find((d) => d.title === 'Word')?.value).toBe(1);
+    const floats = 'f = input.float(1.5, "F", options=[1.5, nope])';
+    expect(declarePineInputs(floats, { F: '1.5' }).find((d) => d.title === 'F')?.value).toBe(1.5);
+    expect(declarePineInputs(floats, { F: 'nope' }).find((d) => d.title === 'F')?.value).toBe(1.5);
+  });
 });

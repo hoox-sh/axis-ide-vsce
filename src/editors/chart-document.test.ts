@@ -142,6 +142,22 @@ describe('chart document helpers', () => {
     }
   });
 
+  test('walkthrough/examples *.axis.json engine matches hosted default', () => {
+    expect(defaultChartDocument().engine).toBe('server');
+    const root = resolve(__dirname, '../..');
+    const rels = [
+      'fixtures/orb.axis.json',
+      'fixtures/sample.axis.json',
+      'examples/sma.axis.json',
+      'examples/strategy.axis.json',
+    ];
+    for (const rel of rels) {
+      const parsed = parseChartDocument(readFileSync(resolve(root, rel), 'utf8'));
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(parsed.doc.engine).toBe('server');
+    }
+  });
+
   test('normalize tolerates empty schema and empty panes list', () => {
     const doc = normalizeChartDocument({
       schema: '',

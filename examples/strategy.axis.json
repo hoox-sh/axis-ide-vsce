@@ -10,5 +10,5 @@
   "panes": [{ "id": "price", "kind": "price" }],
   "scripts": [{ "id": "strategy", "uri": "./strategy.pine", "inputs": {} }],
   "drawings": [],
-  "engine": "pyodide"
+  "engine": "server"
 }

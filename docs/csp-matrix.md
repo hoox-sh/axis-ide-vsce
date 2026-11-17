@@ -3,7 +3,7 @@
 Audit against design KD-6 / CSP matrix (Task 25 + Task 27). **Do not widen runtime CSP
 without updating this doc** (and README).
 
-HTML is host-generated (`src/editors/chart-html.ts`) with `webview.cspSource` — never hard-coded `vscode-resource:` / `https:`. (Chart webview only in lightweight core.)
+HTML is host-generated. The chart shell is `src/editors/chart-html.ts` (`webview.cspSource`, never a hard-coded `vscode-resource:` / `https:`). The activity-bar desk is `src/host/desk.ts` (`renderDeskHtml`) and loads no extension resources. The start screen is `src/host/start-run.ts` (`renderStartHtml`): one nonce script, no extension resources.
 
 Optional Pyodide widen is gated by **`axis.engine.allowPyodide`** (default **true**, Wave 1).
 Runtime helper: `buildChartCspDirectives(cspSource, allowPyodide)` in
@@ -17,24 +17,27 @@ boots from that read-only copy; the jsDelivr fallback
 only after a `1+1` smoke **and** a pynescript Runtime smoke (trusted wheel via
 micropip).
 
-## Enforced (chart primary; minimal core webviews) — default
+## Enforced (chart primary + AXIS desk + start screen) — default
 
-| Directive | Chart (`axis.chart`) | All other webviews (none in lightweight core) |
-| --- | --- | --- |
-| `default-src` | `'none'` | `'none'` |
-| `base-uri` | `'none'` | `'none'` |
-| `form-action` | `'none'` | `'none'` |
-| `script-src` | `${webview.cspSource}` | `${webview.cspSource}` |
-| `style-src` | `${webview.cspSource} 'unsafe-inline'` | `${webview.cspSource} 'unsafe-inline'` |
-| `img-src` | `${webview.cspSource} data: blob:` | `${webview.cspSource} data: blob:` |
-| `connect-src` | `'none'` | `'none'` |
-| `worker-src` | _(omitted)_ | _(omitted)_ |
-| Inline `<script>` | **Forbidden** (src= only) | **Forbidden** (src= only) |
+| Directive | Chart (`axis.chart`) | Desk (`axis.desk`) | Start (`axis.start`) |
+| --- | --- | --- | --- |
+| `default-src` | `'none'` | `'none'` | `'none'` |
+| `base-uri` | `'none'` | `'none'` | `'none'` |
+| `form-action` | `'none'` | `'none'` | `'none'` |
+| `script-src` | `${webview.cspSource}` | `'none'` | `'nonce-<random>'` |
+| `style-src` | `${webview.cspSource} 'unsafe-inline'` | `'nonce-<random>'` | `'nonce-<random>'` |
+| `img-src` | `${webview.cspSource} data: blob:` | `'none'` | `'none'` |
+| `connect-src` | `'none'` | `'none'` | `'none'` |
+| `worker-src` | _(omitted)_ | _(omitted)_ | _(omitted)_ |
+| Inline `<script>` | **Forbidden** (src= only) | **Forbidden** (no script at all) | **One** nonce script |
 
-`style-src 'unsafe-inline'` covers VS Code theme CSS variables and the shared
-`--axis-*` design-token layer. Scripts and styles load via `asWebviewUri` from
-`dist/webview/chart/` under `localResourceRoots`. Lightweight Charts is
-bundled into the chart `main.js` (no CDN).
+The desk's buttons are `command:` links from a fixed allowlist in `DESK_ACTIONS`. Snapshot text (symbol, script name, engine) is escaped and never becomes a command id. `enableScripts` is false. `enableCommandUris` is that allowlist, not `true`.
+
+The start screen's script only posts `{ type: 'choose', id }` or `{ type: 'back' }`. Card ids are checked against `hosted`, `local`, and `editor`. Step text is escaped. `enableScripts` is true. `enableCommandUris` stays off. `localResourceRoots` is empty.
+
+The chart keeps `style-src 'unsafe-inline'` because the chart runtime sets element styles. Its stylesheet still loads via `asWebviewUri` from `dist/webview/chart/` under `localResourceRoots`. Lightweight Charts is bundled into the chart `main.js` (no CDN).
+
+The desk and the start screen inline one `<style nonce>` block and do not use `'unsafe-inline'`. They load no extension files. The start screen is the only webview whose `script-src` is a nonce instead of `${webview.cspSource}`. Neither view sets `retainContextWhenHidden`. The extension repaints the document from host state when the view is shown again.
 
 ## vs AXIS PWA (`public/_headers`)
 

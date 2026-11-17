@@ -135,6 +135,16 @@
   font-size: 11px;
 }
 
+select.chart-inputs__value {
+  max-width: 16em;
+}
+
+input[type='color'].chart-inputs__value {
+  min-width: 2.2em;
+  max-width: 2.6em;
+  padding: 1px 2px;
+}
+
 .chart-inputs__value:focus-visible {
   outline: none;
   box-shadow: var(

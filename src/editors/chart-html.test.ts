@@ -40,7 +40,10 @@ describe('chart CSP HTML builder', () => {
     expect(html).not.toContain('script-src *');
     expect(html).not.toContain("'wasm-unsafe-eval'");
     expect(html).not.toContain('worker-src');
-    expect(html).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
+    expect(
+      html,
+      "chart CSP keeps 'unsafe-inline' for element styles from the chart runtime",
+    ).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
     expect(html).toContain(`img-src ${CSP_SOURCE} data: blob:`);
     expect(html).toContain("default-src 'none'");
     expect(html).toContain("base-uri 'none'");
@@ -75,7 +78,11 @@ describe('chart CSP HTML builder', () => {
     expect(html).toContain('id="chart-toggle-strategy"');
     expect(html).toContain('id="chart-inputs"');
     expect(html).toContain('id="chart-inputs-apply"');
-    expect(html).toContain('>Apply</button>');
+    expect(html).toContain('class="axis-icon__label">Apply</span>');
+    expect(html).toContain('class="chart-toolbar__icon"');
+    expect(html).toContain('stroke="currentColor"');
+    expect(html).toContain('aria-label="Trendline"');
+    expect(html).toContain('aria-label="Export CSV"');
     expect(html).not.toContain('Apply &amp; Run');
     expect(html).toContain('id="chart-run-status"');
     expect(html).toContain('id="chart-debug-start"');
@@ -121,6 +128,10 @@ describe('chart CSP HTML builder', () => {
     );
     expect(csp).not.toContain('wasm-unsafe-eval');
     expect(csp).not.toContain('worker-src');
+    expect(
+      csp,
+      "chart CSP keeps 'unsafe-inline' for element styles from the chart runtime",
+    ).toContain("'unsafe-inline'");
   });
 
   test('allowPyodide widens script-src, connect-src (webview + CDN), and worker-src blob:', () => {
@@ -130,6 +141,10 @@ describe('chart CSP HTML builder', () => {
     expect(csp).toContain(`worker-src blob: ${CSP_SOURCE}`);
     expect(csp).toContain(`connect-src ${CSP_SOURCE} https://cdn.jsdelivr.net`);
     expect(csp).not.toContain("connect-src 'none'");
+    expect(
+      csp,
+      "chart CSP keeps 'unsafe-inline' for element styles from the chart runtime",
+    ).toContain(`style-src ${CSP_SOURCE} 'unsafe-inline'`);
 
     const html = buildChartWebviewHtml({
       cspSource: CSP_SOURCE,

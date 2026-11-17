@@ -80,8 +80,10 @@
     "onCommand:axis.engine.status",
     "onCommand:axis.engine.setup",
     "onCommand:axis.engine.menu",
+    "onCommand:axis.start",
     "onCommand:axis.profiler.show",
     "onCommand:axis.profiler.toggle",
+    "onView:axis.desk",
     "onDebug:axis-bar",
     "workspaceContains:**/*.axis.json"
   ],
@@ -99,7 +101,33 @@
         "priority": "default"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "axis",
+          "title": "AXIS",
+          "icon": "media/axis-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "axis": [
+        {
+          "type": "webview",
+          "id": "axis.desk",
+          "name": "Chart",
+          "contextualTitle": "AXIS Chart",
+          "visibility": "visible"
+        }
+      ]
+    },
     "commands": [
+      {
+        "command": "axis.start",
+        "title": "Choose How to Run",
+        "category": "AXIS",
+        "icon": "$(rocket)"
+      },
       {
         "command": "axis.openChart",
         "title": "Open Chart",
@@ -303,6 +331,33 @@
           "group": "axis@2"
         }
       ],
+      "view/title": [
+        {
+          "command": "axis.runScript",
+          "when": "view == axis.desk && !axis.run.running",
+          "group": "navigation@1"
+        },
+        {
+          "command": "axis.stopRun",
+          "when": "view == axis.desk && axis.run.running",
+          "group": "navigation@1"
+        },
+        {
+          "command": "axis.start",
+          "when": "view == axis.desk",
+          "group": "navigation@0"
+        },
+        {
+          "command": "axis.openChart",
+          "when": "view == axis.desk",
+          "group": "navigation@2"
+        },
+        {
+          "command": "axis.pickData",
+          "when": "view == axis.desk",
+          "group": "navigation@3"
+        }
+      ],
       "explorer/context": [
         {
           "command": "axis.openChart",
@@ -360,12 +415,12 @@
       {
         "id": "axis.firstPlot",
         "title": "AXIS: first plot",
-        "description": "Open the example study, run it locally, and optionally install the full engine. Source stays on this machine (uploaded=0).",
+        "description": "Open the example study, confirm bars (Sample/CSV), and run it. Choose hosted (pynescript.online), this computer, or the in-editor subset.",
         "steps": [
           {
             "id": "axis.firstPlot.open",
             "title": "Open the fixture",
-            "description": "Opens `orb.pine` and the sibling chart.\n[Open fixture](command:axis.openWalkthroughFixture)",
+            "description": "Opens `orb.pine` and the sibling chart (`barsPath` → `sample-bars.csv`). Sample candles are on by default; use **AXIS: Pick Data** for Sample or CSV, or open `examples/`.\n[Open fixture](command:axis.openWalkthroughFixture)",
             "media": {
               "markdown": "media/walkthrough-first-plot.md"
             }
@@ -373,7 +428,7 @@
           {
             "id": "axis.firstPlot.run",
             "title": "Run Script",
-            "description": "Press Ctrl+Enter (Cmd+Enter on macOS) or **AXIS: Run Script**. The AXIS Run channel logs `uploaded=0`. If Pyodide cannot start, a local subset still plots this example and shows its inputs.\n[Run Script](command:axis.runScript)",
+            "description": "Confirm bars (Sample default, Pick Data, or the fixture CSV), then press Ctrl+Enter (Cmd+Enter on macOS) or **AXIS: Run Script**. The default engine sends the script to pynescript.online. No API key. **AXIS: Choose How to Run** can switch to this computer, or to the in-editor subset (`uploaded=0`).\n[Run Script](command:axis.runScript)",
             "media": {
               "markdown": "media/walkthrough-first-plot.md"
             }
@@ -381,7 +436,7 @@
           {
             "id": "axis.firstPlot.local",
             "title": "Optional: full local engine",
-            "description": "Pyodide is a bars-in calculator. For Numba `compile`, sessions, and `optimize`, install the managed local backend. It ships its own wheel and can download a pinned Python 3.12 when needed.\n[Install Local Engine](command:axis.engine.setup)",
+            "description": "Install the engine on this computer when the script should stay here. It runs the full PYNE runtime (Numba, sessions, optimize). The in-editor engine is only a subset.\n[Install Local Engine](command:axis.engine.setup)",
             "media": {
               "markdown": "media/walkthrough-local-engine.md"
             },
@@ -483,8 +538,8 @@
           },
           "axis.chart.useMockBars": {
             "type": "boolean",
-            "default": false,
-            "markdownDescription": "When true, chart sessions and runs use deterministic mock/fixture bars (opt-in). Default **false** fetches real OHLCV from `axis.datafeed.url` (local axis-datafeed sidecar, default `http://127.0.0.1:5003`)."
+            "default": true,
+            "markdownDescription": "When true (default), chart sessions and runs use deterministic Sample/mock candles so a Marketplace install paints and runs without a sidecar or `ccxt`. Set false to fetch real OHLCV from `#axis.datafeed.source#` (sidecar at `#axis.datafeed.url#`, or venue via ccxt when installed)."
           },
           "axis.datafeed.url": {
             "type": "string",
@@ -494,18 +549,22 @@
           "axis.datafeed.source": {
             "type": "string",
             "enum": ["sidecar", "venue"],
-            "default": "venue",
-            "markdownDescription": "OHLCV history source. 'sidecar' (default) fetches from the local axis-datafeed sidecar at `axis.datafeed.url`. 'venue' fetches live/historical OHLCV directly from a venue via ccxt (default binance) without the sidecar. Venue fetching requires `ccxt` (`bun add ccxt`) to be installed; without it the chart reports `ccxt not available` and leaves the canvas empty."
+            "default": "sidecar",
+            "enumDescriptions": [
+              "Local axis-datafeed sidecar at axis.datafeed.url (default when Sample candles are off).",
+              "Opt-in live/historical OHLCV via ccxt (default exchange binance). Marketplace VSIX does not ship ccxt; without it AXIS falls back to Sample candles."
+            ],
+            "markdownDescription": "OHLCV history source when `#axis.chart.useMockBars#` is false. `sidecar` (default) fetches from the local axis-datafeed sidecar at `#axis.datafeed.url#` — the desk and Pick Data label this **Local feed**. `venue` is opt-in live/historical OHLCV via ccxt (default binance) when `ccxt` is installed in the extension host — labeled **Venue** on the desk; the Marketplace VSIX does not ship ccxt — without it AXIS falls back to Sample candles instead of leaving the chart empty."
           },
           "axis.statusbar.enabled": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "Show the AXIS IDE statusbar item (HOOX logo) with a click popup of AXIS commands. Turn off to hide the item."
+            "markdownDescription": "Show the AXIS status-bar button (symbol, timeframe, and run state). Click it to open the AXIS side panel. Turn off to hide the button. The command menu stays on **AXIS: Show AXIS Menu**."
           },
           "axis.profiler.enabled": {
             "type": "boolean",
             "default": true,
-            "markdownDescription": "Time run stages (engine, paint, delta, step) and show in the AXIS statusbar popup."
+            "markdownDescription": "Time run stages (engine, paint, delta, step). **AXIS: Show Last Run Profile** shows the last one. The status-bar button opens the AXIS side panel."
           },
           "axis.debug.adapter": {
             "type": "string",
@@ -530,7 +589,7 @@
     "watch": "node esbuild.host.mjs --watch",
     "watch:webview": "vite build --config webview/chart/vite.config.ts --watch",
     "compile-tests": "tsc -p tsconfig.tests.json",
-    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --no-rewrite-relative-links --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
+    "package": "node -e \"const v=require('./package.json').version; require('child_process').execSync('npx --yes @vscode/vsce package --no-dependencies --no-git-tag-version --out axis-ide-'+v+'.vsix',{stdio:'inherit'})\"",
     "test:unit": "bun test --isolate",
     "test:coverage": "bun test --isolate --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=coverage",
     "test:coverage:gate": "bun run test:coverage && bun scripts/check-coverage.mjs",

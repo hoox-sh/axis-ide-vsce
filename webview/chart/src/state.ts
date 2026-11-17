@@ -139,6 +139,91 @@ export interface ChartInputDef {
   type: string;
   value: unknown;
   defval?: unknown;
+  /** Allowed values for `input.enum`, `input.string(..., options=)`, and source. */
+  options?: string[];
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+export type InputWidget =
+  | { kind: 'check' }
+  | { kind: 'number'; step: string; min?: number; max?: number }
+  | { kind: 'select'; options: string[] }
+  | { kind: 'color' }
+  | { kind: 'text' };
+
+const SOURCE_OPTIONS = ['open', 'high', 'low', 'close', 'volume'] as const;
+
+function optionList(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') continue;
+    const text = String(item).trim();
+    if (text) out.push(text);
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+function finiteBound(raw: unknown): number | undefined {
+  if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+  if (typeof raw === 'string' && raw.trim() && Number.isFinite(Number(raw))) return Number(raw);
+  return undefined;
+}
+
+function withCurrent(options: readonly string[], value: unknown): string[] {
+  const text =
+    typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+      ? String(value)
+      : '';
+  if (!text || options.includes(text)) return [...options];
+  return [...options, text];
+}
+
+/** `#rgb` / `#rrggbb` for `<input type="color">`. Anything else is not a color widget. */
+export function inputColorValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim();
+  const short = /^#([0-9a-fA-F]{3})$/.exec(text);
+  if (short?.[1]) {
+    const [r, g, b] = short[1].split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  const full = /^#([0-9a-fA-F]{6})$/.exec(text);
+  if (full?.[1]) return `#${full[1].toLowerCase()}`;
+  return undefined;
+}
+
+/** Which control the input pane should paint for one declaration. */
+export function inputWidget(def: ChartInputDef): InputWidget {
+  const type = def.type.toLowerCase();
+  const options = def.options ?? [];
+  if (type === 'bool' || type === 'boolean') return { kind: 'check' };
+  if (type === 'source') {
+    return { kind: 'select', options: withCurrent(options.length > 0 ? options : SOURCE_OPTIONS, def.value) };
+  }
+  if ((type === 'enum' || type === 'options' || options.length > 0) && options.length > 0) {
+    return { kind: 'select', options: withCurrent(options, def.value) };
+  }
+  if (type === 'color' || type === 'colour') {
+    return inputColorValue(def.value) ? { kind: 'color' } : { kind: 'text' };
+  }
+  if (type === 'int' || type === 'integer' || type === 'float' || type === 'number' || type === 'double') {
+    const step =
+      def.step !== undefined && def.step > 0
+        ? String(def.step)
+        : type === 'int' || type === 'integer'
+          ? '1'
+          : 'any';
+    return {
+      kind: 'number',
+      step,
+      ...(def.min !== undefined ? { min: def.min } : {}),
+      ...(def.max !== undefined ? { max: def.max } : {}),
+    };
+  }
+  return { kind: 'text' };
 }
 
 export interface ChartViewState {
@@ -546,12 +631,21 @@ export function normalizeInputs(raw: unknown): ChartInputDef[] {
         if (!isPlainObject(entry)) continue;
         const title = String(entry.title ?? entry.id ?? '').trim();
         if (!title) continue;
-        out.push({
+        const def: ChartInputDef = {
           title,
           type: String(entry.type ?? 'any'),
           value: entry.value ?? entry.defval ?? entry.default,
           defval: entry.defval ?? entry.default,
-        });
+        };
+        const options = optionList(entry.options ?? entry.enum ?? entry.choices ?? entry.values);
+        if (options) def.options = options;
+        const min = finiteBound(entry.min ?? entry.minval);
+        const max = finiteBound(entry.max ?? entry.maxval);
+        const step = finiteBound(entry.step);
+        if (min !== undefined) def.min = min;
+        if (max !== undefined) def.max = max;
+        if (step !== undefined && step > 0) def.step = step;
+        out.push(def);
       }
       return out;
     }
