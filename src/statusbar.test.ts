@@ -18,6 +18,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { StatusBarItem, Uri } from 'vscode';
+import { DESK_FOCUS_COMMAND } from './host/desk';
 import type { StatusbarHost } from './statusbar';
 import {
   AxisStatusbar,
@@ -27,6 +28,7 @@ import {
   STATUSBAR_COMMAND_POPUP,
   STATUSBAR_PRIORITY,
   STATUSBAR_SETTING,
+  STATUSBAR_TEXT,
   STATUSBAR_TITLE,
   STATUSBAR_TOOLTIP,
 } from './statusbar';
@@ -39,6 +41,7 @@ const fakeUri = {
 
 function makeItem() {
   return {
+    text: '',
     tooltip: '',
     name: '',
     iconPath: undefined as unknown as Uri,
@@ -106,10 +109,12 @@ describe('AxisStatusbar', () => {
       alignment: STATUSBAR_ALIGNMENT,
       priority: STATUSBAR_PRIORITY,
     });
+    expect(item.text).toBe(STATUSBAR_TEXT);
     expect(item.tooltip).toBe(STATUSBAR_TOOLTIP);
     expect(item.name).toBe(STATUSBAR_ACCESSIBLE_NAME);
     expect(item.iconPath).toBeDefined();
-    expect(item.command).toBe(STATUSBAR_COMMAND_POPUP);
+    expect(item.command).toBe(DESK_FOCUS_COMMAND);
+    expect(STATUSBAR_COMMAND_POPUP).toBe('axis.statusbar.showPopup');
     expect(item.shown).toBe(true);
     expect(item.hidden).toBe(false);
   });
@@ -164,6 +169,29 @@ describe('AxisStatusbar', () => {
     expect(runs).toEqual(['axis.runScript']);
   });
 
+  test('setSession paints the symbol and survives a later show', () => {
+    const { host, item } = makeHost();
+    const sb = new AxisStatusbar(host, fakeUri);
+    sb.setSession('  ', '  ');
+    sb.setSession('$(sync~spin) BTC/USDT · 1m', 'AXIS chart. BTC/USDT.');
+    sb.showIfEnabled();
+    expect(item.text).toBe('$(sync~spin) BTC/USDT · 1m');
+    expect(item.tooltip).toBe('AXIS chart. BTC/USDT.');
+    expect(item.command).toBe(DESK_FOCUS_COMMAND);
+    sb.setSession('ETH/USDT · 5m', 'updated');
+    expect(item.text).toBe('ETH/USDT · 5m');
+    expect(item.tooltip).toBe('updated');
+  });
+
+  test('setSession after dispose does not rewrite the item', () => {
+    const { host, item } = makeHost();
+    const sb = new AxisStatusbar(host, fakeUri);
+    sb.showIfEnabled();
+    sb.dispose();
+    sb.setSession('ETH/USDT', 'gone');
+    expect(item.text).toBe(STATUSBAR_TEXT);
+  });
+
   test('showPopup with no pick runs nothing', async () => {
     const { host, runs } = makeHost();
     const sb = new AxisStatusbar(host, fakeUri);
@@ -183,6 +211,7 @@ describe('AxisStatusbar', () => {
 
   test('POPUP_ITEMS map labels to existing AXIS command ids', () => {
     expect(POPUP_ITEMS).toEqual([
+      { label: 'Choose How to Run', command: 'axis.start' },
       { label: 'Run Script', command: 'axis.runScript' },
       { label: 'Stop Run', command: 'axis.stopRun' },
       { label: 'Open Chart', command: 'axis.openChart' },

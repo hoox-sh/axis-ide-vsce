@@ -37,6 +37,8 @@ import { decodeHostMessage, PROTOCOL_VERSION } from './protocol';
 import {
   applyChartHostMessage,
   initialChartState,
+  inputColorValue,
+  inputWidget,
   type ChartViewState,
   type UserDrawing,
 } from './state';
@@ -450,24 +452,49 @@ function inputScalar(value: unknown): string {
   return '';
 }
 
-function inputControl(def: ChartViewState['inputs'][number], id: string): HTMLInputElement {
+function stampControl(el: HTMLElement, def: ChartViewState['inputs'][number], id: string): void {
+  el.id = id;
+  el.classList.add('chart-inputs__value');
+  el.dataset.inputTitle = def.title;
+  el.dataset.inputType = def.type;
+  el.setAttribute('aria-label', def.title);
+}
+
+function inputControl(def: ChartViewState['inputs'][number], id: string): HTMLElement {
+  const widget = inputWidget(def);
+  if (widget.kind === 'select') {
+    const select = document.createElement('select');
+    stampControl(select, def, id);
+    const current = inputScalar(def.value);
+    for (const option of widget.options) {
+      const node = document.createElement('option');
+      node.value = option;
+      node.textContent = option;
+      if (option === current) node.selected = true;
+      select.append(node);
+    }
+    return select;
+  }
   const input = document.createElement('input');
-  input.id = id;
-  input.className = 'chart-inputs__value';
-  input.dataset.inputTitle = def.title;
-  input.setAttribute('aria-label', def.title);
+  stampControl(input, def, id);
   input.autocomplete = 'off';
-  const t = def.type.toLowerCase();
-  if (t === 'bool' || t === 'boolean') {
+  if (widget.kind === 'check') {
     input.type = 'checkbox';
     input.classList.add('chart-inputs__check');
     input.checked = Boolean(def.value);
     return input;
   }
-  if (t === 'int' || t === 'integer' || t === 'float' || t === 'number') {
+  if (widget.kind === 'number') {
     input.type = 'number';
-    input.step = t === 'int' || t === 'integer' ? '1' : 'any';
+    input.step = widget.step;
+    if (widget.min !== undefined) input.min = String(widget.min);
+    if (widget.max !== undefined) input.max = String(widget.max);
     input.value = inputScalar(def.value);
+    return input;
+  }
+  if (widget.kind === 'color') {
+    input.type = 'color';
+    input.value = inputColorValue(def.value) ?? '#000000';
     return input;
   }
   input.type = 'text';
@@ -497,7 +524,12 @@ function renderInputs(): void {
   const open = !panel.hidden;
   toggle.setAttribute('aria-pressed', open ? 'true' : 'false');
   toggle.classList.toggle('is-active', open);
-  const fp = defs.map((d) => `${d.title}\u0000${d.type}\u0000${inputScalar(d.value)}`).join('\n');
+  const fp = defs
+    .map(
+      (d) =>
+        `${d.title}\u0000${d.type}\u0000${inputScalar(d.value)}\u0000${(d.options ?? []).join(',')}\u0000${d.min ?? ''}\u0000${d.max ?? ''}\u0000${d.step ?? ''}`,
+    )
+    .join('\n');
   if (fp !== lastInputsFp) {
     lastInputsFp = fp;
     fields.replaceChildren();
@@ -516,19 +548,39 @@ function renderInputs(): void {
   syncApplyBusy();
 }
 
+function readControlValue(el: HTMLElement): unknown {
+  const type = (el.dataset.inputType ?? '').toLowerCase();
+  if (el instanceof HTMLSelectElement) {
+    if (type === 'int' || type === 'integer') {
+      const n = Number(el.value);
+      return Number.isFinite(n) ? Math.trunc(n) : el.value;
+    }
+    if (type === 'float' || type === 'number' || type === 'double') {
+      const n = Number(el.value);
+      return Number.isFinite(n) ? n : el.value;
+    }
+    return el.value;
+  }
+  if (!(el instanceof HTMLInputElement)) return undefined;
+  if (el.type === 'checkbox') return el.checked;
+  if (el.type === 'number') {
+    const n = Number(el.value);
+    if (!Number.isFinite(n)) return el.value;
+    return type === 'int' || type === 'integer' ? Math.trunc(n) : n;
+  }
+  return el.value;
+}
+
 function collectInputValues(): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const fields = document.getElementById('chart-inputs-fields');
   if (!fields) return out;
-  for (const el of Array.from(fields.querySelectorAll('input[data-input-title]'))) {
-    if (!(el instanceof HTMLInputElement)) continue;
+  for (const el of Array.from(fields.querySelectorAll('[data-input-title]'))) {
+    if (!(el instanceof HTMLElement)) continue;
     const title = el.dataset.inputTitle;
     if (!title) continue;
-    if (el.type === 'checkbox') out[title] = el.checked;
-    else if (el.type === 'number') {
-      const n = Number(el.value);
-      out[title] = Number.isFinite(n) ? n : el.value;
-    } else out[title] = el.value;
+    const value = readControlValue(el);
+    if (value !== undefined) out[title] = value;
   }
   return out;
 }

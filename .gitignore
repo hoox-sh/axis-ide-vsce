@@ -65,6 +65,4 @@ DESIGN.md
 .agent_sync*.md
 
 # OpenOrchestrate runtime state
-.openorchestrate/state.db
-.openorchestrate/state.db-*
-.openorchestrate/logs/
+.oo/

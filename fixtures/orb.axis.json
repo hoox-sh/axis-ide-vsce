@@ -10,6 +10,7 @@
   "panes": [{ "id": "price", "kind": "price" }],
   "scripts": [{ "path": "orb.pine" }],
   "drawings": [],
-  "engine": "pyodide",
-  "source": "orb.pine"
+  "engine": "server",
+  "source": "orb.pine",
+  "barsPath": "sample-bars.csv"
 }

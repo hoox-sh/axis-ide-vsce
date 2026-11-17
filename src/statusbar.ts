@@ -26,6 +26,7 @@
  */
 
 import type { Disposable, StatusBarItem, Uri } from 'vscode';
+import { DESK_FOCUS_COMMAND } from './host/desk';
 
 export const STATUSBAR_SECTION = 'axis';
 export const STATUSBAR_SETTING = 'axis.statusbar.enabled';
@@ -34,7 +35,8 @@ export const STATUSBAR_COMMAND_TOGGLE = 'axis.statusbar.toggle';
 export const STATUSBAR_COMMAND_POPUP = 'axis.statusbar.showPopup';
 
 export const STATUSBAR_TITLE = 'AXIS IDE';
-export const STATUSBAR_TOOLTIP = 'AXIS IDE — HOOX';
+export const STATUSBAR_TOOLTIP = 'AXIS IDE — open the chart panel';
+export const STATUSBAR_TEXT = 'AXIS';
 export const STATUSBAR_ACCESSIBLE_NAME = 'AXIS IDE statusbar';
 
 /** StatusBarAlignment.Right (the host passes the real vscode enum). */
@@ -42,6 +44,7 @@ export const STATUSBAR_ALIGNMENT = 1;
 export const STATUSBAR_PRIORITY = 100;
 
 export const POPUP_ITEMS = [
+  { label: 'Choose How to Run', command: 'axis.start' },
   { label: 'Run Script', command: 'axis.runScript' },
   { label: 'Stop Run', command: 'axis.stopRun' },
   { label: 'Open Chart', command: 'axis.openChart' },
@@ -80,6 +83,8 @@ export class AxisStatusbar {
   private item: StatusBarItem | undefined;
   private disposed = false;
   private enabled = false;
+  private sessionText = STATUSBAR_TEXT;
+  private sessionTooltip = STATUSBAR_TOOLTIP;
 
   constructor(
     private readonly host: StatusbarHost,
@@ -115,6 +120,15 @@ export class AxisStatusbar {
     await this.setStatusbarEnabled(!this.enabled);
   }
 
+  /** Symbol, timeframe, and run state. Click still opens the side panel. */
+  setSession(text: string, tooltip: string): void {
+    if (this.disposed) return;
+    this.sessionText = text.trim() || STATUSBAR_TEXT;
+    this.sessionTooltip = tooltip.trim() || STATUSBAR_TOOLTIP;
+    if (!this.item) return;
+    this.applyItem(this.item);
+  }
+
   async showPopup(): Promise<void> {
     if (this.disposed) return;
     const pick = await this.host.pick(POPUP_ITEMS, { title: STATUSBAR_TITLE });
@@ -122,18 +136,24 @@ export class AxisStatusbar {
     await this.host.runCommand(pick.command);
   }
 
-  private showItem(): void {
-    if (this.item) {
-      this.item.show();
-      return;
-    }
-    const item = this.host.createItem(STATUSBAR_ALIGNMENT, STATUSBAR_PRIORITY);
-    item.tooltip = STATUSBAR_TOOLTIP;
+  private applyItem(item: StatusBarItem): void {
+    item.text = this.sessionText;
+    item.tooltip = this.sessionTooltip;
     item.name = STATUSBAR_ACCESSIBLE_NAME;
     // `StatusBarItem.iconPath` (HOOX logo) is supported by the VS Code engine
     // for ^1.95 but missing from the bundled @types/vscode — set via cast.
     (item as { iconPath?: Uri }).iconPath = this.iconPath;
-    item.command = STATUSBAR_COMMAND_POPUP;
+    item.command = DESK_FOCUS_COMMAND;
+  }
+
+  private showItem(): void {
+    if (this.item) {
+      this.applyItem(this.item);
+      this.item.show();
+      return;
+    }
+    const item = this.host.createItem(STATUSBAR_ALIGNMENT, STATUSBAR_PRIORITY);
+    this.applyItem(item);
     item.show();
     this.item = item;
   }

@@ -38,6 +38,11 @@ import { pairFormSymbol } from './series-key';
 export const CCXT_NOT_AVAILABLE =
   'ccxt is not installed — run `bun add ccxt` to enable venue OHLCV fetching.';
 
+/** True when venue fetch failed because ccxt is absent (packaged VSIX / no install). */
+export function isCcxtUnavailable(error: string | undefined): boolean {
+  return error === CCXT_NOT_AVAILABLE;
+}
+
 export const DEFAULT_CCXT_EXCHANGE = 'binance';
 
 export interface CcxtHistoricalRequest {

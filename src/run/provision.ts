@@ -59,6 +59,8 @@ export type ProvisionOptions = {
   /** `process.platform` (host) or an explicit value in tests. */
   platform: string;
   log?: (line: string) => void;
+  /** Optional progress for the start screen. Never required. */
+  onStep?: (step: ProvisionStep, state: 'run' | 'ok' | 'bad', detail?: string) => void;
 };
 
 export type ProvisionStep = 'python' | 'venv' | 'pip' | 'verify';
@@ -113,7 +115,10 @@ export function isSupportedPython(version: PythonVersion): boolean {
   );
 }
 
-function failure(step: ProvisionStep, result: ProvisionCommandResult): ProvisionResult {
+function failure(
+  step: ProvisionStep,
+  result: ProvisionCommandResult,
+): Extract<ProvisionResult, { ok: false }> {
   const detail = (result.stderr || result.stdout || '').trim();
   return {
     ok: false,
@@ -132,12 +137,15 @@ export async function provisionLocalEngine(opts: ProvisionOptions): Promise<Prov
   try {
     if (await opts.exists(consoleScript)) {
       opts.log?.(`local engine already provisioned: ${consoleScript}`);
+      opts.onStep?.('python', 'ok', 'already installed');
       return { ok: true, command: consoleScript, venvDir: opts.venvDir };
     }
+    opts.onStep?.('python', 'run');
 
     const probe = await opts.run(opts.python, ['--version']);
     const version = parsePythonVersion(`${probe.stdout ?? ''} ${probe.stderr ?? ''}`);
     if (!version) {
+      opts.onStep?.('python', 'bad', `could not read a Python version from ${opts.python}`);
       return {
         ok: false,
         step: 'python',
@@ -145,20 +153,30 @@ export async function provisionLocalEngine(opts: ProvisionOptions): Promise<Prov
       };
     }
     if (!isSupportedPython(version)) {
+      const error = `${opts.python} is Python ${version.major}.${version.minor}; use 3.10–3.13 (set axis.engine.local.python).`;
+      opts.onStep?.('python', 'bad', error);
       return {
         ok: false,
         step: 'python',
-        error: `${opts.python} is Python ${version.major}.${version.minor}; use 3.10–3.13 (set axis.engine.local.python).`,
+        error,
       };
     }
+    opts.onStep?.('python', 'ok', `${version.major}.${version.minor}`);
     opts.log?.(`using Python ${version.major}.${version.minor} (${opts.python})`);
 
     opts.log?.(`creating local engine venv: ${opts.venvDir}`);
     step = 'venv';
+    opts.onStep?.('venv', 'run');
     const venv = await opts.run(opts.python, ['-m', 'venv', opts.venvDir]);
-    if (venv.code !== 0) return failure('venv', venv);
+    if (venv.code !== 0) {
+      const failed = failure('venv', venv);
+      opts.onStep?.('venv', 'bad', failed.error);
+      return failed;
+    }
+    opts.onStep?.('venv', 'ok');
 
     step = 'pip';
+    opts.onStep?.('pip', 'run');
     const pip = venvPip(opts.venvDir, opts.platform, opts.joinPath);
     // A pip upgrade is best-effort: old pip can still install the wheel.
     const upgraded = await opts.run(pip, ['install', '--upgrade', 'pip']);
@@ -169,16 +187,25 @@ export async function provisionLocalEngine(opts: ProvisionOptions): Promise<Prov
     const spec = (opts.packageSpec ?? '').trim() || LOCAL_ENGINE_PACKAGE;
     opts.log?.(`installing ${spec}`);
     const installed = await opts.run(pip, ['install', spec]);
-    if (installed.code !== 0) return failure('pip', installed);
+    if (installed.code !== 0) {
+      const failed = failure('pip', installed);
+      opts.onStep?.('pip', 'bad', failed.error);
+      return failed;
+    }
+    opts.onStep?.('pip', 'ok');
 
     step = 'verify';
+    opts.onStep?.('verify', 'run');
     if (!(await opts.exists(consoleScript))) {
+      const error = `installed ${spec} but ${consoleScript} is missing`;
+      opts.onStep?.('verify', 'bad', error);
       return {
         ok: false,
         step: 'verify',
-        error: `installed ${spec} but ${consoleScript} is missing`,
+        error,
       };
     }
+    opts.onStep?.('verify', 'ok');
 
     opts.log?.(`local engine provisioned: ${consoleScript}`);
     return { ok: true, command: consoleScript, venvDir: opts.venvDir };

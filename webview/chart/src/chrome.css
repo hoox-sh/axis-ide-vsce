@@ -19,7 +19,14 @@
 
 #chart-toolbar .chart-toolbar__btn {
   height: 24px;
+  gap: 5px;
   border-color: var(--axis-border, var(--vscode-panel-border, rgba(128, 128, 128, 0.35)));
+}
+
+#chart-toolbar .chart-toolbar__icon {
+  width: 14px;
+  height: 14px;
+  color: inherit;
 }
 
 #chart-toolbar .chart-toolbar__btn:hover {

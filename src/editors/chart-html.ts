@@ -16,6 +16,7 @@
 //
 // SPDX-License-Identifier: AGPL-3.0-only
 
+import { axisIconLabel } from '../host/icons';
 import { PYODIDE_CDN_INDEX, PYODIDE_CDN_ORIGIN } from '../host/pyodide-profile';
 
 /** Inputs for the chart webview HTML shell (URIs already passed through asWebviewUri). */
@@ -66,6 +67,7 @@ export function buildChartCspDirectives(cspSource: string, allowPyodide = false)
     "base-uri 'none'",
     "form-action 'none'",
     scriptSrc,
+    // Chart runtime sets element styles (tables, debug cursor, Lightweight Charts).
     `style-src ${src} 'unsafe-inline'`,
     // blob: reserved for canvas/LWC exports (design CSP matrix).
     `img-src ${src} data: blob:`,
@@ -79,7 +81,8 @@ export function buildChartCspDirectives(cspSource: string, allowPyodide = false)
 
 /**
  * Build CSP + HTML for the chart custom editor webview.
- * No inline scripts (KD-6 / design CSP matrix). Styles may use 'unsafe-inline' for theme vars.
+ * No inline scripts (KD-6 / design CSP matrix). style-src keeps 'unsafe-inline'
+ * because the chart runtime sets element styles (not theme CSS variables).
  */
 export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
   const cspSource = String(opts.cspSource ?? '');
@@ -120,13 +123,13 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
           <path d="m 1148.68,892.158 91.71,-0.025 84.61,84.679 -0.01,91.668 c -30.37,0.36 -61.52,0.06 -91.94,0.09 l -84.38,-84.377 z"/>
         </g>
       </svg>
-      <button type="button" id="tool-trendline" class="chart-toolbar__btn" data-tool="trendline" aria-pressed="false" title="Trendline">Trendline</button>
-      <button type="button" id="tool-layers" class="chart-toolbar__btn" data-chrome="layers" aria-pressed="false" title="Layers">Layers</button>
-      <button type="button" id="tool-data" class="chart-toolbar__btn" data-chrome="data" aria-pressed="false" title="Data window">Data</button>
-      <button type="button" id="tool-legend" class="chart-toolbar__btn" data-chrome="legend" aria-pressed="true" title="Legend">Legend</button>
-      <button type="button" id="tool-fullscreen" class="chart-toolbar__btn" data-chrome="fullscreen" aria-pressed="false" title="Fullscreen">Full</button>
-      <button type="button" id="tool-open-source" class="chart-toolbar__btn" data-chrome="open-source" title="Open source">Source</button>
-      <button type="button" id="tool-live-safe" class="chart-toolbar__btn" data-chrome="live-safe" aria-pressed="false" hidden title="Hide plots when static lookahead grep fired (not a live-safe proof)">Live-safe</button>
+      <button type="button" id="tool-trendline" class="chart-toolbar__btn" data-tool="trendline" aria-pressed="false" title="Trendline" aria-label="Trendline">${axisIconLabel('trendline', 'Trendline', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="tool-layers" class="chart-toolbar__btn" data-chrome="layers" aria-pressed="false" title="Layers" aria-label="Layers">${axisIconLabel('layers', 'Layers', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="tool-data" class="chart-toolbar__btn" data-chrome="data" aria-pressed="false" title="Data window" aria-label="Data window">${axisIconLabel('data', 'Data', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="tool-legend" class="chart-toolbar__btn" data-chrome="legend" aria-pressed="true" title="Legend" aria-label="Legend">${axisIconLabel('legend', 'Legend', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="tool-fullscreen" class="chart-toolbar__btn" data-chrome="fullscreen" aria-pressed="false" title="Fullscreen" aria-label="Fullscreen">${axisIconLabel('fullscreen', 'Full', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="tool-open-source" class="chart-toolbar__btn" data-chrome="open-source" title="Open source" aria-label="Open source">${axisIconLabel('source', 'Source', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="tool-live-safe" class="chart-toolbar__btn" data-chrome="live-safe" aria-pressed="false" hidden title="Hide plots when static lookahead grep fired (not a live-safe proof)" aria-label="Live-safe">${axisIconLabel('live-safe', 'Live-safe', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
       <div id="chart-hud" class="chart-plugins" aria-label="Chart HUD">
         <span id="chart-plot-count" class="chart-plugins__chip" hidden></span>
         <span id="chart-window-chip" class="chart-plugins__chip" hidden></span>
@@ -135,12 +138,12 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
       </div>
       <span id="chart-run-status" class="chart-run-status" role="status" hidden></span>
       <div id="chart-debug" class="chart-debug" role="group" aria-label="Bar step">
-        <button type="button" id="chart-debug-start" class="chart-toolbar__btn" data-chrome="debug-start" title="Start on the first bar" aria-label="Start on the first bar">Start</button>
-        <button type="button" id="chart-debug-step" class="chart-toolbar__btn" data-chrome="debug-step" title="Step one bar" aria-label="Step one bar">Step</button>
+        <button type="button" id="chart-debug-start" class="chart-toolbar__btn" data-chrome="debug-start" title="Start on the first bar" aria-label="Start on the first bar">${axisIconLabel('debug-start', 'Start', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+        <button type="button" id="chart-debug-step" class="chart-toolbar__btn" data-chrome="debug-step" title="Step one bar" aria-label="Step one bar">${axisIconLabel('debug-step', 'Step', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
         <span id="chart-debug-readout" class="chart-debug__readout" hidden></span>
       </div>
-      <button type="button" id="chart-toggle-inputs" class="chart-toolbar__btn" data-chrome="inputs" aria-pressed="false" hidden>Inputs</button>
-      <button type="button" id="chart-toggle-strategy" class="chart-toolbar__btn" data-chrome="strategy" aria-pressed="false" hidden>Strategy</button>
+      <button type="button" id="chart-toggle-inputs" class="chart-toolbar__btn" data-chrome="inputs" aria-pressed="false" hidden title="Inputs" aria-label="Inputs">${axisIconLabel('inputs', 'Inputs', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
+      <button type="button" id="chart-toggle-strategy" class="chart-toolbar__btn" data-chrome="strategy" aria-pressed="false" hidden title="Strategy" aria-label="Strategy">${axisIconLabel('strategy', 'Strategy', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
     </div>
     <div id="chart-legend" class="chart-legend" aria-label="Legend">
       <span id="chart-legend-title" class="chart-legend__title">AXIS</span>
@@ -167,14 +170,14 @@ export function buildChartWebviewHtml(opts: ChartHtmlOptions): string {
     <div id="chart-inputs" class="chart-panel chart-inputs" hidden>
       <div id="chart-inputs-fields" class="chart-inputs__fields"></div>
       <div class="chart-inputs__actions">
-        <button type="button" id="chart-inputs-apply" class="chart-toolbar__btn" title="Apply these values and run">Apply</button>
+        <button type="button" id="chart-inputs-apply" class="chart-toolbar__btn" title="Apply these values and run" aria-label="Apply these values and run">${axisIconLabel('apply', 'Apply', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
       </div>
     </div>
     <div id="chart-strategy" class="chart-panel" hidden>
       <header class="chart-strategy__head">
         <p class="chart-strategy__name">Strategy</p>
         <p id="chart-strategy-stats" class="chart-panel__stats chart-strategy__net" aria-live="polite">—</p>
-        <button type="button" id="chart-strategy-csv" class="chart-toolbar__btn">CSV</button>
+        <button type="button" id="chart-strategy-csv" class="chart-toolbar__btn" title="Export CSV" aria-label="Export CSV">${axisIconLabel('csv', 'CSV', { size: 14, iconClass: 'chart-toolbar__icon' })}</button>
       </header>
       <div id="chart-strategy-equity" class="chart-strategy__equity" hidden></div>
       <div id="chart-strategy-metrics" class="chart-strategy__metrics"></div>

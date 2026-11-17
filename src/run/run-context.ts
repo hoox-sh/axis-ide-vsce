@@ -18,9 +18,9 @@
 
 /**
  * Resolve bars + seriesKey for a run from an optional sibling chart doc (PR-06b).
- * When `useMockBars` is true (default), generate fixture bars.
- * When false, fetch venue history via HistoryClient — failures return `{ ok:false }`
- * so the run path does not POST empty data.
+ * Bars come from {@link resolveHistoryBars} — same priority as chart history paint
+ * (CSV → mock/Sample → venue/ccxt → sidecar). Missing ccxt falls back to Sample.
+ * Other fetch failures return `{ ok:false }` so the run path does not POST empty data.
  */
 
 import {
@@ -33,17 +33,20 @@ import {
   CHART_HANDSHAKE_SEQ,
   CHART_HISTORY_SEQ,
   buildChartSession,
-  resolveMockBarCount,
+  buildSeriesKey,
 } from '../host/chart-session';
-import {
-  fetchHistorical,
-  type HistoryFetchLike,
-} from '../host/history-client';
-import {
-  loadOhlcvCsvFile,
-  resolveBarsFilePath,
-} from '../host/csv-bars';
+import type {
+  CcxtLoader,
+  CcxtHistoricalRequest,
+  CcxtHistoricalResult,
+  CcxtModule,
+} from '../host/ccxt-client';
+import type { HistoryFetchLike } from '../host/history-client';
 import type { OhlcvBar } from '../host/mock-bars';
+import {
+  resolveHistoryBars,
+  type BarsSource,
+} from '../host/resolve-bars';
 import { DEFAULT_ENGINE_ENDPOINT, mapToWorkerTimeframe } from './engine-http';
 import type { RunMode } from './orchestrator';
 
@@ -96,19 +99,31 @@ export function barWindowFromVisibleRange(
   return { fromBar: from, toBar: to };
 }
 
+export type FetchCcxtHistoricalFn = (
+  req: CcxtHistoricalRequest,
+  ccxtModule?: CcxtModule,
+  loadCcxt?: CcxtLoader,
+) => Promise<CcxtHistoricalResult>;
+
 export interface RunContextSettings {
   historyBarsSetting?: number;
   engineId?: string;
   /** Active plugin engine id when `engineId` is omitted/empty. Default `'server'`. */
   activeEngineId?: string;
   endpoint?: string;
-  /** `axis.chart.useMockBars` — product default false; omitted here keeps mock for callers without settings. */
+  /** `axis.chart.useMockBars` — product default true; omitted here keeps Sample/mock for callers without settings. */
   useMockBars?: boolean;
   /** `axis.datafeed.url`. */
   datafeedUrl?: string;
+  /** `axis.datafeed.source` when mock is off. Default sidecar. */
+  datafeedSource?: 'sidecar' | 'venue';
   /** `axis.engine.allowRemoteEndpoint` — also gates datafeed. */
   allowRemote?: boolean;
   fetchImpl?: HistoryFetchLike;
+  /** Test seam for venue (ccxt) fetch. */
+  fetchCcxt?: FetchCcxtHistoricalFn;
+  /** Test seam that forces the missing-ccxt path. */
+  loadCcxt?: CcxtLoader;
   signal?: AbortSignal;
   /** Directory of the sibling `*.axis.json` (relative `barsPath`). */
   chartDir?: string;
@@ -126,7 +141,7 @@ export interface ResolvedRunContext {
   endpoint: string;
   mode: RunMode;
   /**
-   * Last chart.full seq for this path (handshake=1 mock; history paint=2).
+   * Last `chart.full` seq for this path (handshake=1 mock; history paint=2).
    * Run must paint seq > this.
    */
   seq: number;
@@ -139,6 +154,8 @@ export interface ResolvedRunContext {
   fromBar?: number;
   /** Inclusive envelope end (visible range or full window). */
   toBar?: number;
+  /** Shared resolver source label (tests / diagnostics). */
+  barsSource?: BarsSource;
 }
 
 export type ResolveRunContextResult =
@@ -169,6 +186,12 @@ function finishRunContext(ctx: ResolvedRunContext): ResolvedRunContext {
   return { ...withDocInputs(ctx), ...runWindowFields(ctx.doc.interval, ctx.bars.length, lastViewport) };
 }
 
+function seqForSource(source: BarsSource): number {
+  return source === 'mock' || source === 'venue-sample-fallback'
+    ? CHART_HANDSHAKE_SEQ
+    : CHART_HISTORY_SEQ;
+}
+
 function fallbackMockContext(): ResolvedRunContext {
   const doc = defaultChartDocument();
   const session = buildChartSession({ doc, useMockBars: true });
@@ -181,6 +204,7 @@ function fallbackMockContext(): ResolvedRunContext {
     mode: 'auto',
     seq: session.full.seq,
     useMockBars: true,
+    barsSource: 'mock',
   });
 }
 
@@ -207,101 +231,43 @@ export async function resolveRunContext(
     const endpoint =
       (settings?.endpoint && settings.endpoint.trim()) || DEFAULT_ENGINE_ENDPOINT;
 
-    const barsPath = typeof doc.barsPath === 'string' ? doc.barsPath.trim() : '';
-    if (barsPath) {
-      const roots = [settings?.chartDir, settings?.workspaceRoot].filter(
-        (r): r is string => typeof r === 'string' && Boolean(r.trim()),
-      );
-      const resolved = resolveBarsFilePath(barsPath, roots);
-      if (!resolved.ok) return { ok: false, error: resolved.error };
-      const read =
-        settings?.readText ??
-        (async (p: string) => {
-          const fs = await import('node:fs/promises');
-          return fs.readFile(p, 'utf8');
-        });
-      const csv = await loadOhlcvCsvFile(resolved.fsPath, read);
-      if (!csv.ok) return { ok: false, error: csv.error };
-      const session = buildChartSession({
-        doc,
-        useMockBars: false,
-        historyBarsSetting: settings?.historyBarsSetting,
-      });
-      return {
-        ok: true,
-        ctx: finishRunContext({
-          doc,
-          bars: csv.bars,
-          seriesKey: session.seriesKey,
-          engineId,
-          endpoint,
-          mode: 'auto',
-          seq: CHART_HISTORY_SEQ,
-          useMockBars: false,
-        }),
-      };
-    }
+    const seriesKey = buildSeriesKey(doc);
+    const pathRoots = [settings?.chartDir, settings?.workspaceRoot].filter(
+      (r): r is string => typeof r === 'string' && Boolean(r.trim()),
+    );
 
-    const useMockBars = settings?.useMockBars !== false;
-    if (useMockBars) {
-      const session = buildChartSession({
-        doc,
-        useMockBars: true,
-        historyBarsSetting: settings?.historyBarsSetting,
-      });
-      return {
-        ok: true,
-        ctx: finishRunContext({
-          doc,
-          bars: session.bars,
-          seriesKey: session.seriesKey,
-          engineId,
-          endpoint,
-          mode: 'auto',
-          seq: session.full.seq || CHART_HANDSHAKE_SEQ,
-          useMockBars: true,
-        }),
-      };
-    }
-
-    // Real history — do not fall back to mock when the user asked for venue bars.
-    const session = buildChartSession({
+    const resolved = await resolveHistoryBars({
       doc,
-      useMockBars: false,
+      useMockBars: settings?.useMockBars,
+      datafeedSource: settings?.datafeedSource,
       historyBarsSetting: settings?.historyBarsSetting,
-    });
-    const limit = resolveMockBarCount(doc.historyBars, settings?.historyBarsSetting);
-    const history = await fetchHistorical({
-      exchange: doc.exchange || 'binance',
-      symbol: doc.symbol,
-      timeframe: doc.interval || '1m',
-      limit,
-      baseUrl: settings?.datafeedUrl,
+      datafeedUrl: settings?.datafeedUrl,
       allowRemote: settings?.allowRemote,
+      pathRoots,
+      mockSeed: seriesKey,
+      readText: settings?.readText,
       fetchImpl: settings?.fetchImpl,
+      fetchCcxt: settings?.fetchCcxt,
+      loadCcxt: settings?.loadCcxt,
       signal: settings?.signal,
     });
-    if (!history.ok) {
-      return { ok: false, error: history.error, reason: history.reason };
+
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error, reason: resolved.reason };
     }
-    if (!history.bars.length) {
-      return {
-        ok: false,
-        error:
-          'AXIS history: datafeed returned no bars. Check exchange/symbol/interval or enable axis.chart.useMockBars.',
-      };
-    }
+
     return {
       ok: true,
       ctx: finishRunContext({
         doc,
-        bars: history.bars,
-        seriesKey: session.seriesKey,
+        bars: resolved.bars,
+        seriesKey,
         engineId,
         endpoint,
         mode: 'auto',
-        seq: CHART_HISTORY_SEQ,
-        useMockBars: false,
+        seq: seqForSource(resolved.source),
+        useMockBars: resolved.useMockBars,
+        barsSource: resolved.source,
       }),
     };
   } catch (e) {

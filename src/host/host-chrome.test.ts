@@ -59,7 +59,11 @@ describe('host chrome manifest (P0 Stop / when / output / P1 capabilities)', () 
       (c) => c.command === 'axis.showRunOutput',
     );
     expect(show?.title).toBe('Show Run Output');
-    expect(pkg.contributes?.views).toBeUndefined();
+    const views = pkg.contributes?.views as
+      | Record<string, Array<{ id?: string }>>
+      | undefined;
+    expect(Object.keys(views ?? {})).toEqual(['axis']);
+    expect(views?.axis?.map((view) => view.id)).toEqual(['axis.desk']);
     const dap = pkg.contributes?.debuggers ?? [];
     expect(dap.map((d) => d.type)).toEqual(['axis-bar']);
     expect(dap.some((d) => d.type === 'pyne')).toBe(false);

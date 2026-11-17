@@ -42,6 +42,8 @@ import {
   mergeBarTail,
   normalizeBars,
   normalizeEngineDrawings,
+  inputColorValue,
+  inputWidget,
   normalizeInputs,
   normalizePlotLines,
   normalizeStrategy,
@@ -586,6 +588,50 @@ describe('chart.delta merge + seq gap → requestReload', () => {
       { title: 'On', type: 'boolean', value: true },
     ]);
     expect(normalizeInputs([])).toEqual([]);
+    expect(
+      normalizeInputs([
+        {
+          title: 'Mode',
+          type: 'string',
+          value: 'sma',
+          options: ['sma', 'ema'],
+          minval: 1,
+          maxval: '9',
+          step: 1,
+        },
+        { title: 'Skip', type: 'enum' },
+        { id: 'OnlyId', type: 'int', value: 3, min: 'nope', step: 0 },
+      ]),
+    ).toEqual([
+      { title: 'Mode', type: 'string', value: 'sma', defval: undefined, options: ['sma', 'ema'], min: 1, max: 9, step: 1 },
+      { title: 'Skip', type: 'enum', value: undefined, defval: undefined },
+      { title: 'OnlyId', type: 'int', value: 3, defval: undefined },
+    ]);
+    expect(inputWidget({ title: 'On', type: 'bool', value: true })).toEqual({ kind: 'check' });
+    expect(inputWidget({ title: 'Src', type: 'source', value: 'close' }).kind).toBe('select');
+    expect(inputWidget({ title: 'Src', type: 'source', value: 'hl2', options: ['close'] })).toEqual({
+      kind: 'select',
+      options: ['close', 'hl2'],
+    });
+    expect(inputWidget({ title: 'Mode', type: 'enum', value: 'sma', options: ['sma', 'ema'] })).toEqual({
+      kind: 'select',
+      options: ['sma', 'ema'],
+    });
+    expect(inputWidget({ title: 'Mode', type: 'enum', value: 'sma' })).toEqual({ kind: 'text' });
+    expect(inputWidget({ title: 'Ink', type: 'color', value: '#abc' })).toEqual({ kind: 'color' });
+    expect(inputWidget({ title: 'Ink', type: 'color', value: 'blue' })).toEqual({ kind: 'text' });
+    expect(inputColorValue('#ABC')).toBe('#aabbcc');
+    expect(inputColorValue('#112233')).toBe('#112233');
+    expect(inputColorValue('blue')).toBeUndefined();
+    expect(inputColorValue(1)).toBeUndefined();
+    expect(inputWidget({ title: 'Length', type: 'int', value: 14, min: 1, max: 50, step: 2 })).toEqual({
+      kind: 'number',
+      step: '2',
+      min: 1,
+      max: 50,
+    });
+    expect(inputWidget({ title: 'Mult', type: 'float', value: 1.5 })).toEqual({ kind: 'number', step: 'any' });
+    expect(inputWidget({ title: 'Name', type: 'string', value: 'x' })).toEqual({ kind: 'text' });
     expect(normalizeStrategy({ trades: [{ id: 'x' }] })).toBeUndefined();
     expect(normalizeStrategy({ trades: [{ id: 'x', kind: 'entry' }], equity: [1, 2] })?.stats.entries).toBe(1);
   });

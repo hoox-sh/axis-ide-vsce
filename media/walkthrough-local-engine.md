@@ -1,6 +1,6 @@
 # Full local engine (optional)
 
-Pyodide is a bars-in calculator. For the complete PYNE runtime — Numba `compile`, persistent sessions, `optimize`, and batch — install the managed local backend.
+Install the managed local backend when the script should stay on this machine. It runs the full PYNE runtime — Numba `compile`, persistent sessions, `optimize`, and batch. The in-editor engine is only a subset.
 
 1. Run **AXIS: Install Local Engine** (or use the button in this step).
 2. AXIS creates a venv under `globalStorage/pyne-engine` and installs the `hoox-pyne-backend` wheel that ships with the extension.

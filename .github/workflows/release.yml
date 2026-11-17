@@ -1,10 +1,12 @@
 # Copyright (C) 2024-2026 jango_blockchained
 # SPDX-License-Identifier: AGPL-3.0-only
 
-# AXIS IDE release — on v* tags:
-#   1. build the IDE + pack VSIX,
-#   2. attach them to the GitHub Release,
-#   3. publish to Marketplace / Open VSX when VSCE_PAT / OVSX_PAT exist.
+# AXIS IDE release:
+#   1. build the IDE + pack VSIX (v* tags and workflow_dispatch),
+#   2. on a tag, attach them to the GitHub Release,
+#   3. on a tag, publish to the Marketplace with Trusted Publishing (OIDC),
+#      and to Open VSX when OVSX_PAT exists.
+# A workflow_dispatch that is not a tag only builds. It does not publish.
 #
 # Publish order is IDE first, then pack (see PUBLISH.md).
 
@@ -17,6 +19,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 concurrency:
   group: release-${{ github.ref }}
@@ -28,7 +31,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      VSCE_PAT: ${{ secrets.VSCE_PAT }}
       OVSX_PAT: ${{ secrets.OVSX_PAT }}
     steps:
       - name: Checkout
@@ -84,21 +86,26 @@ jobs:
 
       # Idempotent publish: skip when the exact version already exists on the
       # target (re-running a tag must not fail on the unchanged pack VSIX).
+      # Tag refs only — a manual workflow_dispatch must not publish.
+      # Each `vsce publish --oidc` requests its own GitHub OIDC token. A token
+      # is exchanged once and is not a PAT. Requires a Marketplace Trusted
+      # Publishing policy whose workflow file is release.yml and whose
+      # environment is empty. See PUBLISH.md.
       - name: Publish IDE to VS Marketplace
-        if: env.VSCE_PAT != ''
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           VER="${{ steps.versions.outputs.ide }}"
-          if npx --yes @vscode/vsce show hoox-sh.axis-ide --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
+          if npx --yes @vscode/vsce@4.1.1 show hoox-sh.axis-ide --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
             echo "hoox-sh.axis-ide $VER already on the Marketplace — skipping."
           else
-            npx --yes @vscode/vsce publish \
-              --pat "$VSCE_PAT" \
+            npx --yes @vscode/vsce@4.1.1 publish \
+              --oidc \
               --packagePath "axis-ide-$VER.vsix" \
               --no-dependencies
           fi
 
       - name: Publish IDE to Open VSX
-        if: env.OVSX_PAT != ''
+        if: startsWith(github.ref, 'refs/tags/') && env.OVSX_PAT != ''
         run: |
           VER="${{ steps.versions.outputs.ide }}"
           if curl -fsSL "https://open-vsx.org/api/hoox-sh/axis-ide/$VER" >/dev/null 2>&1; then
@@ -111,7 +118,7 @@ jobs:
 
       # Pack after IDE so extensionPack members resolve on each gallery.
       - name: Publish pack to Open VSX
-        if: env.OVSX_PAT != ''
+        if: startsWith(github.ref, 'refs/tags/') && env.OVSX_PAT != ''
         run: |
           VER="${{ steps.versions.outputs.pack }}"
           if curl -fsSL "https://open-vsx.org/api/hoox-sh/axis-pack/$VER" >/dev/null 2>&1; then
@@ -123,14 +130,14 @@ jobs:
           fi
 
       - name: Publish pack to VS Marketplace
-        if: env.VSCE_PAT != ''
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           VER="${{ steps.versions.outputs.pack }}"
-          if npx --yes @vscode/vsce show hoox-sh.axis-pack --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
+          if npx --yes @vscode/vsce@4.1.1 show hoox-sh.axis-pack --json 2>/dev/null | grep -q "\"version\": \"$VER\""; then
             echo "hoox-sh.axis-pack $VER already on the Marketplace — skipping."
           else
-            npx --yes @vscode/vsce publish \
-              --pat "$VSCE_PAT" \
+            npx --yes @vscode/vsce@4.1.1 publish \
+              --oidc \
               --packagePath "pack/axis-pack-$VER.vsix" \
               --no-dependencies
           fi

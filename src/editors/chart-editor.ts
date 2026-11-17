@@ -39,16 +39,13 @@ import {
   workspace,
 } from 'vscode';
 import {
+  CHART_HANDSHAKE_SEQ,
   CHART_HISTORY_SEQ,
   buildChartSession,
-  resolveMockBarCount,
 } from '../host/chart-session';
-import {
-  DEFAULT_DATAFEED_URL,
-  fetchHistorical,
-} from '../host/history-client';
-import { fetchCcxtHistorical } from '../host/ccxt-client';
+import { DEFAULT_DATAFEED_URL } from '../host/history-client';
 import { logError, logProtocolReject, logWarn } from '../host/logger';
+import { resolveHistoryBars } from '../host/resolve-bars';
 import { encode, HOST_TO_VIEW } from '../protocol';
 import { getLastChartFull, notifyChart, subscribeChartNotify } from '../run/chart-bus';
 import { type Profiler } from '../run/profiler';
@@ -61,10 +58,6 @@ import {
   serializeChartDocument,
 } from './chart-document';
 import { appendDrawingToDoc } from './chart-drawings';
-import {
-  loadOhlcvCsvFile,
-  resolveBarsFilePath,
-} from '../host/csv-bars';
 import {
   ALLOW_PYODIDE_DEFAULT,
   isPyodideAllowed,
@@ -368,19 +361,19 @@ interface ChartHostSettings {
 
 /** Read chart + datafeed settings (never throws). */
 function readChartHostSettings(): ChartHostSettings {
-  let useMockBars = false;
+  let useMockBars = true;
   let historyBarsSetting: number | undefined;
   let datafeedUrl = DEFAULT_DATAFEED_URL;
   let allowRemote = false;
   let datafeedSource: 'sidecar' | 'venue' = 'sidecar';
   try {
     const cfg = workspace.getConfiguration('axis.chart');
-    // Mock bars are opt-in; HistoryClient is the dogfood default.
-    useMockBars = cfg.get<boolean>('useMockBars', false) === true;
+    // Sample/mock is the Marketplace default; venue/sidecar are opt-in.
+    useMockBars = cfg.get<boolean>('useMockBars', true) !== false;
     const hb = cfg.get<number>('historyBars');
     if (typeof hb === 'number' && Number.isFinite(hb)) historyBarsSetting = hb;
   } catch {
-    useMockBars = false;
+    useMockBars = true;
   }
   try {
     const df = workspace.getConfiguration('axis.datafeed');
@@ -437,127 +430,60 @@ async function paintHistoryAfterHandshake(
 ): Promise<void> {
   const settings = readChartHostSettings();
   const doc = document.documentData;
+  // Mock (no CSV) already painted in handshake — skip shared fetch.
   const barsPath = typeof doc.barsPath === 'string' ? doc.barsPath.trim() : '';
-  if (barsPath) {
-    const roots: string[] = [];
-    if (document.uri.scheme === 'file' && document.uri.fsPath) {
-      roots.push(dirname(document.uri.fsPath));
-    }
-    for (const folder of workspace.workspaceFolders ?? []) {
-      if (folder.uri.scheme === 'file') roots.push(folder.uri.fsPath);
-    }
-    const resolved = resolveBarsFilePath(barsPath, roots);
-    if (!resolved.ok) {
-      logError(resolved.error);
-      try {
-        void webview.postMessage(
-          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: resolved.error }),
-        );
-      } catch {
-        // disposing
-      }
-      return;
-    }
-    const csv = await loadOhlcvCsvFile(resolved.fsPath, async (p) => {
-      const fs = await import('node:fs/promises');
-      return fs.readFile(p, 'utf8');
-    });
-    if (isDisposed() || signal.aborted) return;
-    if (!csv.ok) {
-      logError(csv.error);
-      try {
-        void webview.postMessage(
-          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: csv.error }),
-        );
-      } catch {
-        // disposing
-      }
-      return;
-    }
-    try {
-      const postCsv = () =>
-        void webview.postMessage(
-          encode(HOST_TO_VIEW.ChartFull, {
-            bars: csv.bars,
-            seq: CHART_HISTORY_SEQ,
-          }),
-        );
-      if (profiler) profiler.timePaint(postCsv); else postCsv();
-      if (!isDisposed()) replayLastRunFull(webview, seriesKey);
-    } catch {
-      // disposing
-    }
-    return;
+  if (!barsPath && settings.useMockBars) return;
+
+  const roots: string[] = [];
+  if (document.uri.scheme === 'file' && document.uri.fsPath) {
+    roots.push(dirname(document.uri.fsPath));
   }
-  if (settings.useMockBars) return;
-  const limit = resolveMockBarCount(doc.historyBars, settings.historyBarsSetting);
-  if (settings.datafeedSource === 'venue') {
-    const venue = await fetchCcxtHistorical({
-      exchange: doc.exchange || 'binance',
-      symbol: doc.symbol,
-      timeframe: doc.interval || '1m',
-      limit,
-      signal,
-    });
-    if (isDisposed() || signal.aborted) return;
-    if (!venue.ok) {
-      logError(venue.error);
-      try {
-        void webview.postMessage(
-          encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message: venue.error }),
-        );
-      } catch {
-        // disposing
-      }
-      return;
-    }
-    try {
-      const postVenue = () =>
-        void webview.postMessage(
-          encode(HOST_TO_VIEW.ChartFull, {
-            bars: venue.bars,
-            seq: CHART_HISTORY_SEQ,
-          }),
-        );
-      if (profiler) profiler.timePaint(postVenue); else postVenue();
-      // Replay run paint only after history so a lower history seq cannot clobber it.
-      if (!isDisposed()) replayLastRunFull(webview, seriesKey);
-    } catch {
-      // panel may be disposing
-    }
-    return;
+  for (const folder of workspace.workspaceFolders ?? []) {
+    if (folder.uri.scheme === 'file') roots.push(folder.uri.fsPath);
   }
-  const history = await fetchHistorical({
-    exchange: doc.exchange || 'binance',
-    symbol: doc.symbol,
-    timeframe: doc.interval || '1m',
-    limit,
-    baseUrl: settings.datafeedUrl,
+
+  const resolved = await resolveHistoryBars({
+    doc,
+    // CSV wins inside the shared resolver even when mock is on.
+    useMockBars: barsPath ? false : settings.useMockBars,
+    datafeedSource: settings.datafeedSource,
+    historyBarsSetting: settings.historyBarsSetting,
+    datafeedUrl: settings.datafeedUrl,
     allowRemote: settings.allowRemote,
+    pathRoots: roots,
+    mockSeed: seriesKey,
     signal,
   });
   if (isDisposed() || signal.aborted) return;
-  if (!history.ok) {
-    const message = history.error;
-    logError(message);
+  if (!resolved.ok) {
+    logError(resolved.error);
     try {
       void webview.postMessage(
-        encode(HOST_TO_VIEW.HostError, { code: 'HISTORY_FETCH', message }),
+        encode(HOST_TO_VIEW.HostError, {
+          code: 'HISTORY_FETCH',
+          message: resolved.error,
+        }),
       );
     } catch {
       // disposing
     }
     return;
   }
+
+  const seq =
+    resolved.source === 'mock' || resolved.source === 'venue-sample-fallback'
+      ? CHART_HANDSHAKE_SEQ
+      : CHART_HISTORY_SEQ;
   try {
-    const postHistory = () =>
+    const postBars = () =>
       void webview.postMessage(
         encode(HOST_TO_VIEW.ChartFull, {
-          bars: history.bars,
-          seq: CHART_HISTORY_SEQ,
+          bars: resolved.bars,
+          seq,
         }),
       );
-    if (profiler) profiler.timePaint(postHistory); else postHistory();
+    if (profiler) profiler.timePaint(postBars);
+    else postBars();
     // Replay run paint only after history so a lower history seq cannot clobber it.
     if (!isDisposed()) replayLastRunFull(webview, seriesKey);
   } catch {
